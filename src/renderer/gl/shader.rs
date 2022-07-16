@@ -1,4 +1,5 @@
 use std::ptr;
+use std::fs;
 use std::ffi::CString;
 use gl::types::*;
 
@@ -9,9 +10,17 @@ pub struct ShaderProgram {
 
 impl ShaderProgram {
     /// Create a new shader program from a vertex and fragment shader source
-    pub fn new_from_vf(vert: &str, frag: &str) -> ShaderProgram {
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, vert);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, frag);
+    pub fn new_from_vf(path: &str) -> ShaderProgram {
+        let raw_source = fs::read_to_string(path).unwrap();
+
+        const VS_HEADER: &str = "#define BUILDING_VERTEX_SHADER";
+        const FS_HEADER: &str = "#define BUILDING_FRAGMENT_SHADER";
+
+        let vert_source = Self::append_after_version(&raw_source, VS_HEADER);
+        let frag_source = Self::append_after_version(&raw_source, FS_HEADER);
+
+        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vert_source);
+        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &frag_source);
 
         let shaders = vec![vertex_shader, fragment_shader];
 
@@ -58,7 +67,11 @@ impl ShaderProgram {
                 info_log.set_len(length as usize);
                 let message = std::str::from_utf8(&info_log).unwrap();
 
-                println!("Fragment shader failed to compile:\n{message}");
+                println!("Fragment shader failed to compile:\n{message}\n\nShader source:\n");
+
+                for (i, line) in shader_source.lines().enumerate() {
+                    println!("[{i}] {line}");
+                }
             }
 
             shader
@@ -103,6 +116,25 @@ impl ShaderProgram {
 
             shader_program
         }
+    }
+
+    /// Append the given string to the shader source, after the #version directive
+    fn append_after_version(source: &str, append: &str) -> String {
+        let mut updated_source = String::new();
+        let mut version_directive_found = false;
+
+        for line in source.lines() {
+            updated_source.push_str(line);
+            updated_source.push('\n');
+
+            if !version_directive_found && line.contains("#version") {
+                version_directive_found = true;
+                updated_source.push_str(append);
+                updated_source.push('\n');
+            }
+        }
+
+        updated_source
     }
 }
 
