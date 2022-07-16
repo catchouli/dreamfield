@@ -14,6 +14,20 @@ pub struct VertexAttrib {
 }
 
 impl Mesh {
+    /// Create a new Mesh from a vertex buffer (non-indexed)
+    pub fn new_basic(vertex_buffer: &[f32], buffer_layout: &[VertexAttrib]) -> Mesh {
+        // Create and bind a vao
+        let vao = Mesh::create_vao();
+
+        // Create and bind buffers
+        Mesh::create_vbo(vertex_buffer);
+
+        // Set up buffer layout
+        Mesh::set_buffer_layout(buffer_layout);
+
+        Mesh { vao }
+    }
+
     /// Create a new Mesh from a vertex buffer and an index buffer
     pub fn new_indexed(vertex_buffer: &[f32], index_buffer: &[i32], buffer_layout: &[VertexAttrib]) -> Mesh {
         // Create and bind a vao
@@ -27,6 +41,14 @@ impl Mesh {
         Mesh::set_buffer_layout(buffer_layout);
 
         Mesh { vao }
+    }
+
+    /// Draw the mesh non-indexed
+    pub fn draw_arrays(&self, element_type: u32, first: i32, count: i32) {
+        unsafe {
+            gl::BindVertexArray(self.vao);
+            gl::DrawArrays(element_type, first, count);
+        }
     }
 
     /// Draw the mesh indexed

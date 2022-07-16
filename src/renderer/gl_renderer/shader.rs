@@ -34,6 +34,16 @@ impl ShaderProgram {
         self.id
     }
 
+    /// Get a uniform location
+    pub fn get_loc(&self, uniform_name: &str) -> i32 {
+        unsafe {
+            let c_str = CString::new(uniform_name).unwrap();
+            let loc = gl::GetUniformLocation(self.id, c_str.as_ptr());
+
+            loc
+        }
+    }
+
     /// Bind the shader program
     pub fn use_program(&self) {
         unsafe { gl::UseProgram(self.id) };

@@ -1,18 +1,22 @@
-mod shader;
-mod mesh;
-mod texture;
+pub mod shader;
+pub mod mesh;
+pub mod texture;
+pub mod gltf_model;
 
 use std::ffi::CString;
+use cgmath::{SquareMatrix, Matrix4, vec3, Deg, perspective};
 
-use shader::ShaderProgram;
-use mesh::{Mesh, VertexAttrib};
-use texture::Texture;
+use shader::*;
+use mesh::*;
+use texture::*;
+use gltf_model::*;
 
 /// The GL renderer
 pub struct GLRenderer {
     full_screen_rect: Mesh,
     sky_rectangle_shader: ShaderProgram,
-    sky_texture: Texture
+    sky_texture: Texture,
+    suzanne: GltfModel
 }
 
 impl GLRenderer {
@@ -41,10 +45,14 @@ impl GLRenderer {
         // Load textures
         let sky_texture = Texture::new_from_file("resources/textures/cloud.jpg", Texture::NEAREST_WRAP);
 
+        // Load suzanne
+        let suzanne = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
+
         GLRenderer {
            full_screen_rect,
            sky_rectangle_shader,
-           sky_texture
+           sky_texture,
+           suzanne
         }
     }
 
@@ -61,7 +69,18 @@ impl GLRenderer {
             let time_location = gl::GetUniformLocation(self.sky_rectangle_shader.id(), uni_time.as_ptr());
             gl::Uniform1f(time_location, game_state.time);
 
-            self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+            // Set up matrices
+            let view: Matrix4<f32> = Matrix4::from_translation(vec3(0.0, 0.0, -1.0 - game_state.time*0.1));
+            let proj: Matrix4<f32> = perspective(Deg(90.0), 1.0, 0.1, 100.0);
+            let model: Matrix4<f32> = SquareMatrix::identity();
+
+            gl::UniformMatrix4fv(self.sky_rectangle_shader.get_loc("uni_proj"), 1, gl::FALSE, &proj[0][0]);
+            gl::UniformMatrix4fv(self.sky_rectangle_shader.get_loc("uni_view"), 1, gl::FALSE, &view[0][0]);
+            gl::UniformMatrix4fv(self.sky_rectangle_shader.get_loc("uni_model"), 1, gl::FALSE, &model[0][0]);
+
+            //self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+
+            self.suzanne.render();
         }
     }
 }
