@@ -3,8 +3,7 @@ pub mod mesh;
 pub mod texture;
 pub mod gltf_model;
 
-use std::ffi::CString;
-use cgmath::{SquareMatrix, Matrix4, vec3, Deg, perspective};
+use cgmath::{Matrix, SquareMatrix, Matrix4, Matrix3, vec3, Deg, Rad, perspective};
 
 use shader::*;
 use mesh::*;
@@ -78,15 +77,24 @@ impl GLRenderer {
             // Set up matrices
             let view: Matrix4<f32> = Matrix4::from_translation(vec3(0.0, 0.0, -2.0 - game_state.time.sin()));
             let proj: Matrix4<f32> = perspective(Deg(90.0), 1.0, 0.1, 100.0);
-            let model: Matrix4<f32> = SquareMatrix::identity();
+            let model: Matrix4<f32> = Matrix4::from_angle_y(Rad(game_state.time));
+            let normal = Self::model_to_normal(model);
 
             gl::Uniform1f(self.glfw_model_shader.get_loc("uni_time"), game_state.time);
             gl::UniformMatrix4fv(self.glfw_model_shader.get_loc("uni_proj"), 1, gl::FALSE, &proj[0][0]);
             gl::UniformMatrix4fv(self.glfw_model_shader.get_loc("uni_view"), 1, gl::FALSE, &view[0][0]);
             gl::UniformMatrix4fv(self.glfw_model_shader.get_loc("uni_model"), 1, gl::FALSE, &model[0][0]);
+            gl::UniformMatrix3fv(self.glfw_model_shader.get_loc("uni_normal"), 1, gl::FALSE, &normal[0][0]);
 
             self.suzanne.render();
         }
+    }
+
+    /// Get normal matrix from a model matrix
+    fn model_to_normal(model: Matrix4<f32>) -> Matrix3<f32> {
+        // https://learnopengl.com/Lighting/Basic-lighting
+        let v = model.invert().unwrap().transpose();
+        Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
     }
 }
 
