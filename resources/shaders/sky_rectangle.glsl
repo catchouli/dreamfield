@@ -18,8 +18,6 @@ void main() {
 
 #ifdef BUILDING_FRAGMENT_SHADER
 
-uniform vec4 uni_color;
-
 uniform sampler2D tex_skybox;
 
 in vec2 var_uv;

@@ -35,9 +35,10 @@ impl Window {
         Window { glfw, window, events }
     }
 
+    /// Poll all events and return them as a list
     pub fn poll_events(&mut self) -> Vec<glfw::WindowEvent> {
         self.glfw.poll_events();
-        vec![]
+        glfw::flush_messages(&self.events).map(|(_, event)| event).collect()
     }
 
     /// Set debug log level, 0 means no debugging
