@@ -265,10 +265,10 @@ impl GltfModel {
         if let Some(mesh) = node.mesh() {
             // Create UBO
             let mut ubo_model = UniformBuffer::<ModelParams>::new();
-            ubo_model.data.mat_model = world_transform.invert().unwrap().to_std140();
+            ubo_model.data.mat_model = world_transform.to_std140();
             ubo_model.data.mat_normal = {
                 // https://learnopengl.com/Lighting/Basic-lighting
-                let v = world_transform.transpose();
+                let v = world_transform.invert().unwrap().transpose();
                 Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
             }.to_std140();
             ubo_model.upload();
