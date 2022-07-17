@@ -2,14 +2,14 @@
 
 #define M_PI 3.1415926535897932384626433832795
 
-layout (std140) uniform GlobalRenderParams
+layout (std140) uniform GlobalParams
 {
     float sim_time;
     mat4 mat_proj;
     mat4 mat_view;
 };
 
-layout (std140) uniform ModelRenderParams
+layout (std140) uniform ModelParams
 {
     mat4 mat_model;
     mat3 mat_normal;
@@ -42,7 +42,7 @@ void main() {
     const float vert_fov = M_PI / 2.0;
 
     // Scale uv from -1 to 1 and put 0 in center, and then use it to calculate a ray direction
-    vec2 uv = var_uv * 2.0 - 1.0;
+    vec2 uv = vec2(1.0 - var_uv.x, var_uv.y) * 2.0 - 1.0;
     vec3 rd = mat3(mat_view) * normalize(vec3(uv.xy * vec2(tan(0.5 * horz_fov), tan(0.5 * vert_fov)), 1.0));
 
     // Equirectangular projection

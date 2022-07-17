@@ -2,6 +2,11 @@ use strum_macros::{EnumIter, Display};
 
 #[derive(EnumIter, Display)]
 pub enum UniformBlockBinding {
-    GlobalRenderParams = 0,
-    ModelRenderParams = 1
+    GlobalParams = 0,
+    ModelParams = 1,
+    MaterialParams = 2
+}
+
+pub enum TextureSlot {
+    BaseColor = 0
 }

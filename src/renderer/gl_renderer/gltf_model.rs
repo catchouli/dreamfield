@@ -2,14 +2,25 @@ use gl::types::*;
 use gltf::Semantic;
 use gltf::image::Format;
 use super::texture::Texture;
+use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
+use super::bindings;
+use cgmath::{SquareMatrix, Matrix, Matrix3, Matrix4};
+use super::to_std140::ToStd140;
 
 /// A gltf model
 pub struct GltfModel {
     path: String,
-    doc: gltf::Document,
     buffers: Vec<u32>,
     textures: Vec<Texture>,
-    meshes: Vec<GltfMesh>
+    meshes: Vec<GltfMesh>,
+    drawables: Vec<GltfDrawable>,
+    materials: Vec<UniformBuffer<MaterialParams>>,
+    default_material: UniformBuffer<MaterialParams>
+}
+
+struct GltfDrawable {
+    ubo_model: UniformBuffer<ModelParams>,
+    mesh: usize
 }
 
 struct GltfMesh {
@@ -20,6 +31,7 @@ struct GltfMeshPrimitive {
     vao: u32,
     offset: i32,
     length: i32,
+    material_index: Option<usize>,
     base_color_texture: Option<usize>
 }
 
@@ -51,37 +63,68 @@ impl GltfModel {
         // Load all meshes
         let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
 
+        // Load all materials
+        let materials = doc.materials().map(|mat| Self::load_material(&mat)).collect();
+
+        // Build list of drawables
+        let drawables = {
+            let mut drawables: Vec<GltfDrawable> = Vec::new();
+            for scene in doc.scenes() {
+                for node in scene.nodes() {
+                    Self::build_drawables_recursive(&node, &mut drawables, &Matrix4::identity());
+                }
+            }
+            drawables
+        };
+
+        // Create default material
+        let default_material = UniformBuffer::<MaterialParams>::new();
+
         Ok(GltfModel {
             path: path.to_string(),
-            doc,
             buffers,
             textures,
-            meshes
+            meshes,
+            drawables,
+            materials,
+            default_material
         })
     }
 
     /// Render a model
     pub fn render(&self) {
-        unsafe {
-            // Render all prims
-            let prims = self.meshes.iter().flat_map(|mesh| &mesh.primitives);
-            for gl_primitive in prims {
+        // Render all prims
+        for drawable in &self.drawables {
+            let mesh = &self.meshes[drawable.mesh];
+
+            // Bind drawable model ubo
+            drawable.ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
+
+            // Draw
+            for primitive in &mesh.primitives {
+                // Bind material ubo
+                primitive.material_index
+                    .map(|mat| &self.materials[mat])
+                    .unwrap_or(&self.default_material)
+                    .bind(bindings::UniformBlockBinding::MaterialParams);
+
                 // Bind textures, or unbind if None
-                if let Some(base_color_texture_index) = gl_primitive.base_color_texture {
-                    self.textures[base_color_texture_index].bind(0);
+                if let Some(base_color_texture_index) = primitive.base_color_texture {
+                    self.textures[base_color_texture_index].bind(bindings::TextureSlot::BaseColor);
                 }
                 else {
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, 0);
+                    Texture::unbind(bindings::TextureSlot::BaseColor);
                 }
 
-                // Bind vao and draw elements
-                // TODO: support non-indexed
-                gl::BindVertexArray(gl_primitive.vao);
-                gl::DrawElements(gl::TRIANGLES,
-                                 gl_primitive.length,
-                                 gl::UNSIGNED_SHORT,
-                                 gl_primitive.offset as *const GLvoid);
+                unsafe {
+                    // Bind vao and draw elements
+                    // TODO: support non-indexed
+                    gl::BindVertexArray(primitive.vao);
+                    gl::DrawElements(gl::TRIANGLES,
+                                     primitive.length,
+                                     gl::UNSIGNED_SHORT,
+                                     primitive.offset as *const GLvoid);
+                }
             }
         }
     }
@@ -151,11 +194,11 @@ impl GltfModel {
                 .base_color_texture()
                 .map(|tex_info| tex_info.texture().index());
 
-            // Create model params for primitive
-            // TODO:
+            // Get material index
+            let material_index = prim.material().index();
 
             GltfMeshPrimitive {
-                vao, offset, length, base_color_texture
+                vao, offset, length, base_color_texture, material_index
             }
         }).collect();
 
@@ -210,6 +253,45 @@ impl GltfModel {
             Format::R16G16B16 => gl::RGB16,
             Format::R16G16B16A16 => gl::RGBA16,
         }
+    }
+
+    /// Build the list of drawables recursively
+    fn build_drawables_recursive(node: &gltf::Node, out: &mut Vec<GltfDrawable>, parent_world_transform: &Matrix4<f32>) {
+        // Calculate world transform
+        let local_transform = cgmath::Matrix4::from(node.transform().matrix());
+        let world_transform = parent_world_transform * local_transform;
+
+        // Add drawable if this node has a mesh
+        if let Some(mesh) = node.mesh() {
+            // Create UBO
+            let mut ubo_model = UniformBuffer::<ModelParams>::new();
+            ubo_model.data.mat_model = world_transform.invert().unwrap().to_std140();
+            ubo_model.data.mat_normal = {
+                // https://learnopengl.com/Lighting/Basic-lighting
+                let v = world_transform.transpose();
+                Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
+            }.to_std140();
+            ubo_model.upload();
+
+            // Create drawable
+            out.push(GltfDrawable {
+                ubo_model,
+                mesh: mesh.index()
+            });
+        }
+
+        // Recurse into children
+        for child in node.children() {
+            Self::build_drawables_recursive(&child, out, &world_transform);
+        }
+    }
+
+    /// Load material to a ubo
+    fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
+        let mut ubo = UniformBuffer::<MaterialParams>::new();
+        ubo.data.has_base_color_texture = mat.pbr_metallic_roughness().base_color_texture().is_some().to_std140();
+        ubo.upload();
+        ubo
     }
 }
 

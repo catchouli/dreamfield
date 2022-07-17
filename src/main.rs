@@ -8,10 +8,10 @@ use game_state::GameState;
 use renderer::gl_renderer::GLRenderer;
 
 /// The width of the window
-const WINDOW_WIDTH: u32 = 1024;
+const WINDOW_WIDTH: u32 = 1024 * 2;
 
 /// The height of the window
-const WINDOW_HEIGHT: u32 = 768;
+const WINDOW_HEIGHT: u32 = 768 * 2;
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 60;

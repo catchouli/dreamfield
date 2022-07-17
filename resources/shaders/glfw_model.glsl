@@ -2,17 +2,22 @@
 
 #define M_PI 3.1415926535897932384626433832795
 
-layout (std140) uniform GlobalRenderParams
+layout (std140) uniform GlobalParams
 {
     float sim_time;
     mat4 mat_proj;
     mat4 mat_view;
 };
 
-layout (std140) uniform ModelRenderParams
+layout (std140) uniform ModelParams
 {
     mat4 mat_model;
     mat3 mat_normal;
+};
+
+layout (std140) uniform MaterialParams
+{
+    bool has_base_color_texture;
 };
 
 #ifdef BUILDING_VERTEX_SHADER
@@ -42,10 +47,10 @@ in vec2 var_uv;
 out vec4 out_frag_color;
 
 void main() {
-    vec4 tex = texture(tex_base_color, var_uv);
+    vec3 base_color = has_base_color_texture ? texture(tex_base_color, var_uv).xyz : vec3(1.0);
     vec3 sun_dir = vec3(0.0, 0.0, 1.0);
-    float dot = dot(sun_dir, var_nrm);
-    out_frag_color = tex * vec4(dot, dot, dot, 1.0);
+    float diffuse_strength = dot(sun_dir, var_nrm);
+    out_frag_color = vec4(diffuse_strength * base_color, 1.0);
 }
 
 #endif

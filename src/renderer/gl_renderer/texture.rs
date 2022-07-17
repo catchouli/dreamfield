@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::error::Error;
 use gl::types::*;
+use super::bindings;
 
 /// A texture
 pub struct Texture {
@@ -63,10 +64,18 @@ impl Texture {
     }
 
     /// Bind texture
-    pub fn bind(&self, slot: u32) {
+    pub fn bind(&self, slot: bindings::TextureSlot) {
         unsafe {
-            gl::ActiveTexture(gl::TEXTURE0 + slot);
+            gl::ActiveTexture(gl::TEXTURE0 + slot as u32);
             gl::BindTexture(gl::TEXTURE_2D, self.id)
+        }
+    }
+
+    // Unbind texture
+    pub fn unbind(slot: bindings::TextureSlot) {
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0 + slot as u32);
+            gl::BindTexture(gl::TEXTURE_2D, 0)
         }
     }
 }

@@ -2,6 +2,12 @@ pub trait ToStd140<T> {
     fn to_std140(&self) -> T;
 }
 
+impl ToStd140<std140::boolean> for bool {
+    fn to_std140(&self) -> std140::boolean {
+        std140::boolean::from(*self)
+    }
+}
+
 impl ToStd140<std140::float> for f32 {
     fn to_std140(&self) -> std140::float {
         std140::float(*self)

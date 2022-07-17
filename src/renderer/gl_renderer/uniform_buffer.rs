@@ -1,4 +1,6 @@
 use super::bindings;
+use super::to_std140::ToStd140;
+use cgmath::{SquareMatrix, Matrix3, Matrix4};
 
 /// Uniform buffer wrapper
 pub struct UniformBuffer<T: Default> {
@@ -49,3 +51,52 @@ impl<T: Default> Drop for UniformBuffer<T> {
         unsafe { gl::DeleteBuffers(1, &self.ubo) }
     }
 }
+
+/// Base render params
+#[std140::repr_std140]
+pub struct GlobalParams {
+    pub sim_time: std140::float,
+    pub mat_proj: std140::mat4x4,
+    pub mat_view: std140::mat4x4
+}
+
+impl Default for GlobalParams {
+    fn default() -> Self {
+        GlobalParams {
+            sim_time: (0.0).to_std140(),
+            mat_proj: cgmath::Matrix4::identity().to_std140(),
+            mat_view: Matrix4::identity().to_std140()
+        }
+    }
+}
+
+/// Object render params
+#[std140::repr_std140]
+pub struct ModelParams {
+    pub mat_model: std140::mat4x4,
+    pub mat_normal: std140::mat3x3
+}
+
+impl Default for ModelParams {
+    fn default() -> Self {
+        ModelParams {
+            mat_model: Matrix4::identity().to_std140(),
+            mat_normal: Matrix3::identity().to_std140()
+        }
+    }
+}
+
+/// Material render params
+#[std140::repr_std140]
+pub struct MaterialParams {
+    pub has_base_color_texture: std140::boolean
+}
+
+impl Default for MaterialParams {
+    fn default() -> Self {
+        MaterialParams {
+            has_base_color_texture: false.to_std140()
+        }
+    }
+}
+
