@@ -44,7 +44,8 @@ impl GLRenderer {
             ]);
 
         // Load textures
-        let sky_texture = Texture::new_from_file("resources/textures/cloud.jpg", Texture::NEAREST_WRAP);
+        let sky_texture = Texture::new_from_file("resources/textures/cloud.jpg", Texture::NEAREST_WRAP)
+            .expect("Failed to load sky texture");
 
         // Load suzanne
         let suzanne = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();

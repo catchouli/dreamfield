@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::error::Error;
 use gl::types::*;
 
 /// A texture
@@ -23,8 +24,8 @@ impl Texture {
     };
 
     /// Load a new texture from a file
-    pub fn new_from_file(path: &str, params: TextureParams) -> Texture {
-        let img = image::open(&Path::new(path)).expect("Failed to load texture");
+    pub fn new_from_file(path: &str, params: TextureParams) -> Result<Texture, Box<dyn Error>> {
+        let img = image::open(&Path::new(path))?;
         let width = img.width() as i32;
         let height = img.height() as i32;
         let data = img.into_bytes();
@@ -34,7 +35,7 @@ impl Texture {
 
     /// Load a new texture from a buffer
     pub fn new_from_buf(buf: &[u8], width: i32, height: i32, source_format: u32, dest_format: u32,
-                        params: TextureParams) -> Texture
+                        params: TextureParams) -> Result<Texture, Box<dyn Error>>
     {
         unsafe {
             let mut texture = 0;
@@ -57,7 +58,7 @@ impl Texture {
                            gl::UNSIGNED_BYTE,
                            &buf[0] as *const u8 as *const GLvoid);
 
-            Texture { id: texture }
+            Ok(Texture { id: texture })
         }
     }
 

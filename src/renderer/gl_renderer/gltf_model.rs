@@ -1,9 +1,11 @@
 use gl::types::*;
 use gltf::Semantic;
+use gltf::image::Format;
 use super::texture::Texture;
 
 /// A gltf model
 pub struct GltfModel {
+    path: String,
     doc: gltf::Document,
     buffers: Vec<u32>,
     textures: Vec<Texture>,
@@ -23,10 +25,10 @@ struct GltfMeshPrimitive {
 impl GltfModel {
     /// Load a model from a gltf file
     pub fn load_gltf(path: &str) -> Result<GltfModel, gltf::Error> {
-        let (doc, buffer_data, _image_data) = gltf::import(path)?;
+        println!("Loading GltfModel {path}");
+        let (doc, buffer_data, image_data) = gltf::import(path)?;
 
         // Load all buffers
-        println!("Creating buffers for GltfModel");
         let buffers: Vec<u32> = unsafe {
             let mut buffers = vec![0; buffer_data.len()];
             gl::GenBuffers(buffer_data.len() as i32, buffers.as_mut_ptr());
@@ -43,13 +45,13 @@ impl GltfModel {
         };
 
         // Load all textures
-        // TODO: finish this
-        let textures: Vec<Texture> = Vec::new();
+        let textures = image_data.iter().map(|data| Self::load_gltf_image(data)).collect();
 
         // Load all meshes
         let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
 
         Ok(GltfModel {
+            path: path.to_string(),
             doc,
             buffers,
             textures,
@@ -68,6 +70,15 @@ impl GltfModel {
                     let gl_mesh = &self.meshes[mesh.index()];
 
                     for primitive in mesh.primitives() {
+                        // Bind texture
+                        let mat = primitive.material();
+                        let pbr = mat.pbr_metallic_roughness();
+                        if let Some(tex_info) = pbr.base_color_texture() {
+                            let tex = tex_info.texture();
+                            let tex_index = tex.index();
+                            self.textures[tex_index].bind(0);
+                        }
+
                         // Get our primitive
                         let gl_primitive = &gl_mesh.primitives[primitive.index()];
 
@@ -107,7 +118,13 @@ impl GltfModel {
                 unsafe { gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, buffers[buffer_index]) }
 
                 // Return the offset and length
-                (buffer_view.offset() as i32, buffer_view.length() as i32)
+                // TODO: the length is divided by 2 because the index type is short, but we should
+                // check first and make sure we draw using the right type and do this calculation
+                // correctly.
+                let offset = buffer_view.offset() as i32;
+                let length = (buffer_view.length() / 2) as i32;
+
+                (offset, length)
             }).unwrap();
 
             // Bind buffers
@@ -116,7 +133,6 @@ impl GltfModel {
                 let buffer_view = accessor.view().unwrap();
                 let buffer = buffer_view.buffer();
                 let buffer_index = buffer.index();
-
 
                 let attrib_index = Self::attribute_index(&prim_type);
                 let attrib_size = Self::attribute_size(&prim_type);
@@ -172,6 +188,28 @@ impl GltfModel {
             Semantic::Weights(_) => 7
         }
     }
+
+    /// Load a gltf image data
+    fn load_gltf_image(data: &gltf::image::Data) -> Texture {
+        Texture::new_from_buf(&data.pixels, data.width as i32, data.height as i32, Self::source_format(data.format),
+            gl::RGBA, Texture::NEAREST_WRAP).expect("Failed to load gltf texture")
+    }
+
+    /// Get gl format from gltf::image::Format
+    fn source_format(format: gltf::image::Format) -> u32 {
+        match format {
+            Format::R8 => gl::RED,
+            Format::R8G8 => gl::RG,
+            Format::R8G8B8 => gl::RGB,
+            Format::R8G8B8A8 => gl::RGBA,
+            Format::B8G8R8 => gl::BGR,
+            Format::B8G8R8A8 => gl::BGRA,
+            Format::R16 => gl::R16,
+            Format::R16G16 => gl::RG16,
+            Format::R16G16B16 => gl::RGB16,
+            Format::R16G16B16A16 => gl::RGBA16,
+        }
+    }
 }
 
 impl Drop for GltfModel {
@@ -180,7 +218,7 @@ impl Drop for GltfModel {
         // Collect VAOs and buffers, and then delete them
         let vaos: Vec<u32> = self.meshes.iter().flat_map(|mesh| mesh.primitives.iter().map(|prim| prim.vao)).collect();
 
-        println!("Deleting {} VAOs and {} buffers", vaos.len(), self.buffers.len());
+        println!("Deleting {} VAOs and {} buffers for texture {}", vaos.len(), self.buffers.len(), self.path);
 
         unsafe {
             gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());
