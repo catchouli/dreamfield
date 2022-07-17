@@ -25,7 +25,7 @@ fn main() {
     let mut window = Window::new_with_context(WINDOW_WIDTH, WINDOW_HEIGHT, "Dreamfield", gl::DEBUG_SEVERITY_LOW - 500);
 
     // Create renderer
-    let renderer = GLRenderer::new();
+    let mut renderer = GLRenderer::new();
 
     // The game state
     let mut game_state = GameState::new();

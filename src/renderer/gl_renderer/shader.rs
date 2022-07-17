@@ -2,6 +2,8 @@ use std::ptr;
 use std::fs;
 use std::ffi::CString;
 use gl::types::*;
+use super::bindings;
+use strum::IntoEnumIterator;
 
 /// A shader program
 pub struct ShaderProgram {
@@ -11,22 +13,30 @@ pub struct ShaderProgram {
 impl ShaderProgram {
     /// Create a new shader program from a vertex and fragment shader source
     pub fn new_from_vf(path: &str) -> ShaderProgram {
+        // Load in raw shader source
         let raw_source = fs::read_to_string(path).unwrap();
 
+        // Append the define for building vertex or fragment shader
         const VS_HEADER: &str = "#define BUILDING_VERTEX_SHADER";
         const FS_HEADER: &str = "#define BUILDING_FRAGMENT_SHADER";
 
         let vert_source = Self::append_after_version(&raw_source, VS_HEADER);
         let frag_source = Self::append_after_version(&raw_source, FS_HEADER);
 
+        // Build shaders
         let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vert_source);
         let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &frag_source);
 
-        let shaders = vec![vertex_shader, fragment_shader];
+        // Link shader program
+        let shader_program = ShaderProgram::link_program(&vec![vertex_shader, fragment_shader]);
 
-        let shader_program = ShaderProgram::link_program(&shaders);
+        // Create ShaderProgram instance
+        let program = ShaderProgram { id: shader_program };
 
-        ShaderProgram { id: shader_program }
+        // Set standard uniform block bindings
+        program.set_standard_uniform_block_bindings();
+
+        program
     }
 
     /// Get the gl id of the shader
@@ -36,11 +46,25 @@ impl ShaderProgram {
 
     /// Get a uniform location
     pub fn get_loc(&self, uniform_name: &str) -> i32 {
-        unsafe {
-            let c_str = CString::new(uniform_name).unwrap();
-            let loc = gl::GetUniformLocation(self.id, c_str.as_ptr());
+        let c_str = CString::new(uniform_name).unwrap();
+        unsafe { gl::GetUniformLocation(self.id, c_str.as_ptr()) }
+    }
 
-            loc
+    /// Set all the standard uniform block bindings
+    fn set_standard_uniform_block_bindings(&self) {
+        for binding in bindings::UniformBlockBinding::iter() {
+            self.set_uniform_block_binding(&binding.to_string(), binding as u32);
+        }
+    }
+
+    /// Set the binding for a uniform block
+    fn set_uniform_block_binding(&self, uniform_block_name: &str, binding: u32) {
+        let c_str = CString::new(uniform_block_name).unwrap();
+        unsafe {
+            let uniform_block_index = gl::GetUniformBlockIndex(self.id, c_str.as_ptr());
+            if uniform_block_index != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(self.id, uniform_block_index, binding);
+            }
         }
     }
 

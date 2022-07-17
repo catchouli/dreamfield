@@ -2,6 +2,19 @@
 
 #define M_PI 3.1415926535897932384626433832795
 
+layout (std140) uniform GlobalRenderParams
+{
+    float sim_time;
+    mat4 mat_proj;
+    mat4 mat_view;
+};
+
+layout (std140) uniform ModelRenderParams
+{
+    mat4 mat_model;
+    mat3 mat_normal;
+};
+
 #ifdef BUILDING_VERTEX_SHADER
 
 layout (location = 0) in vec3 in_pos;
@@ -20,8 +33,6 @@ void main() {
 
 uniform sampler2D tex_skybox;
 
-uniform mat4 uni_view;
-
 in vec2 var_uv;
 
 out vec4 out_frag_color;
@@ -32,7 +43,7 @@ void main() {
 
     // Scale uv from -1 to 1 and put 0 in center, and then use it to calculate a ray direction
     vec2 uv = var_uv * 2.0 - 1.0;
-    vec3 rd = mat3(uni_view) * normalize(vec3(uv.xy * vec2(tan(0.5 * horz_fov), tan(0.5 * vert_fov)), 1.0));
+    vec3 rd = mat3(mat_view) * normalize(vec3(uv.xy * vec2(tan(0.5 * horz_fov), tan(0.5 * vert_fov)), 1.0));
 
     // Equirectangular projection
     vec2 tex_coord = vec2(atan(rd.z, rd.x) + M_PI, acos(-rd.y)) / vec2(2.0 * M_PI, M_PI);
