@@ -19,7 +19,8 @@ struct GltfMesh {
 struct GltfMeshPrimitive {
     vao: u32,
     offset: i32,
-    length: i32
+    length: i32,
+    base_color_texture: Option<usize>
 }
 
 impl GltfModel {
@@ -62,35 +63,25 @@ impl GltfModel {
     /// Render a model
     pub fn render(&self) {
         unsafe {
-            // TODO: render hierarchy
-            // TODO: materials
-            for object in self.doc.nodes() {
-                if let Some(mesh) = object.mesh() {
-                    // Get our mesh
-                    let gl_mesh = &self.meshes[mesh.index()];
-
-                    for primitive in mesh.primitives() {
-                        // Bind texture
-                        let mat = primitive.material();
-                        let pbr = mat.pbr_metallic_roughness();
-                        if let Some(tex_info) = pbr.base_color_texture() {
-                            let tex = tex_info.texture();
-                            let tex_index = tex.index();
-                            self.textures[tex_index].bind(0);
-                        }
-
-                        // Get our primitive
-                        let gl_primitive = &gl_mesh.primitives[primitive.index()];
-
-                        // Bind vao and draw elements
-                        // TODO: support non-indexed
-                        gl::BindVertexArray(gl_primitive.vao);
-                        gl::DrawElements(gl::TRIANGLES,
-                                         gl_primitive.length,
-                                         gl::UNSIGNED_SHORT,
-                                         gl_primitive.offset as *const GLvoid);
-                    }
+            // Render all prims
+            let prims = self.meshes.iter().flat_map(|mesh| &mesh.primitives);
+            for gl_primitive in prims {
+                // Bind textures, or unbind if None
+                if let Some(base_color_texture_index) = gl_primitive.base_color_texture {
+                    self.textures[base_color_texture_index].bind(0);
                 }
+                else {
+                    gl::ActiveTexture(gl::TEXTURE0);
+                    gl::BindTexture(gl::TEXTURE_2D, 0);
+                }
+
+                // Bind vao and draw elements
+                // TODO: support non-indexed
+                gl::BindVertexArray(gl_primitive.vao);
+                gl::DrawElements(gl::TRIANGLES,
+                                 gl_primitive.length,
+                                 gl::UNSIGNED_SHORT,
+                                 gl_primitive.offset as *const GLvoid);
             }
         }
     }
@@ -153,8 +144,18 @@ impl GltfModel {
                 }
             }
 
+            // Look up the textures to use, so we don't have to do this again to render
+            let base_color_texture = prim
+                .material()
+                .pbr_metallic_roughness()
+                .base_color_texture()
+                .map(|tex_info| tex_info.texture().index());
+
+            // Create model params for primitive
+            // TODO:
+
             GltfMeshPrimitive {
-                vao, offset, length
+                vao, offset, length, base_color_texture
             }
         }).collect();
 
