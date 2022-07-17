@@ -65,20 +65,24 @@ impl GLRenderer {
             gl::ClearColor(0.06, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
+            // Set up matrices
+            // TODO: build proper camera
+            let cam: Matrix4<f32> = Matrix4::from_translation(vec3(0.0, 0.0, 2.0 + game_state.time.sin())) * Matrix4::from_angle_x(Rad(game_state.time.sin() * 0.25));
+            let view = cam.invert().unwrap();
+            let proj: Matrix4<f32> = perspective(Deg(90.0), 1.0, 0.1, 100.0);
+
             // Draw background
             gl::Disable(gl::DEPTH_TEST);
             self.sky_texture.bind(0);
             self.sky_rectangle_shader.use_program();
+            gl::UniformMatrix4fv(self.sky_rectangle_shader.get_loc("uni_view"), 1, gl::FALSE, &view[0][0]);
             self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
             gl::Enable(gl::DEPTH_TEST);
 
             // Draw suzanne
             self.glfw_model_shader.use_program();
 
-            // Set up matrices
-            let view: Matrix4<f32> = Matrix4::from_translation(vec3(0.0, 0.0, -2.0 - game_state.time.sin()));
-            let proj: Matrix4<f32> = perspective(Deg(90.0), 1.0, 0.1, 100.0);
-            let model: Matrix4<f32> = Matrix4::from_angle_y(Rad(game_state.time));
+            let model: Matrix4<f32> = Matrix4::identity();//Matrix4::from_angle_y(Rad(game_state.time));
             let normal = Self::model_to_normal(model);
 
             gl::Uniform1f(self.glfw_model_shader.get_loc("uni_time"), game_state.time);
