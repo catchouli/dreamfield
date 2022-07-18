@@ -1,11 +1,11 @@
 use gl::types::*;
 use gltf::Semantic;
 use gltf::image::Format;
+use gltf::accessor::DataType;
 use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
 use super::bindings;
 use cgmath::{SquareMatrix, Matrix, Matrix3, Matrix4};
-use super::to_std140::ToStd140;
 
 /// A gltf model
 pub struct GltfModel {
@@ -29,10 +29,10 @@ struct GltfMesh {
 
 struct GltfMeshPrimitive {
     vao: u32,
-    offset: i32,
-    length: i32,
+    indexed_offset_length: Option<(i32, i32)>,
     material_index: Option<usize>,
-    base_color_texture: Option<usize>
+    base_color_texture: Option<usize>,
+    primitive_count: Option<i32>
 }
 
 impl GltfModel {
@@ -114,14 +114,25 @@ impl GltfModel {
                     self.textures[base_color_texture_index].bind(bindings::TextureSlot::BaseColor);
                 }
 
-                unsafe {
-                    // Bind vao and draw elements
-                    // TODO: support non-indexed
-                    gl::BindVertexArray(primitive.vao);
-                    gl::DrawElements(gl::TRIANGLES,
-                                     primitive.length,
-                                     gl::UNSIGNED_SHORT,
-                                     primitive.offset as *const GLvoid);
+                // Indexed draw
+                if let Some((offset, length)) = primitive.indexed_offset_length {
+                    unsafe {
+                        gl::BindVertexArray(primitive.vao);
+                        gl::DrawElements(gl::TRIANGLES,
+                                         length,
+                                         gl::UNSIGNED_SHORT,
+                                         offset as *const GLvoid);
+                    }
+                }
+                // Non-indexed
+                else if let Some(count) = primitive.primitive_count {
+                    unsafe {
+                        gl::BindVertexArray(primitive.vao);
+                        gl::DrawArrays(gl::TRIANGLES, 0, count);
+                    }
+                }
+                else {
+                    println!("No index data or primitive count for model");
                 }
             }
         }
@@ -140,8 +151,7 @@ impl GltfModel {
             };
 
             // Bind element buffer, and get offset and length to render
-            // TODO: support non-indexed
-            let (offset, length) = prim.indices().map(|accessor| {
+            let indexed_offset_length = prim.indices().map(|accessor| {
                 // Note: we're not handling sparse accessors, hence the unwrap
                 let buffer_view = accessor.view().unwrap();
                 let buffer_index = buffer_view.buffer().index();
@@ -149,15 +159,15 @@ impl GltfModel {
                 // Bind the right buffer
                 unsafe { gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, buffers[buffer_index]) }
 
-                // Return the offset and length
-                // TODO: the length is divided by 2 because the index type is short, but we should
-                // check first and make sure we draw using the right type and do this calculation
-                // correctly.
+                // Get the data type size in bytes
+                let data_type_size = Self::data_type_size(accessor.data_type());
+
+                // Return the offset and length in elements
                 let offset = buffer_view.offset() as i32;
-                let length = (buffer_view.length() / 2) as i32;
+                let length = (buffer_view.length() / data_type_size) as i32;
 
                 (offset, length)
-            }).unwrap();
+            });
 
             // Bind buffers
             for (prim_type, accessor) in prim.attributes() {
@@ -168,8 +178,10 @@ impl GltfModel {
 
                 let attrib_index = Self::attribute_index(&prim_type);
                 let attrib_size = Self::attribute_size(&prim_type);
-                let attrib_type = gl::FLOAT;
                 let attrib_stride = buffer_view.stride().unwrap_or(0) as i32;
+
+                // Assuming that it's always gl::FLOAT but I might be wrong
+                let attrib_type = gl::FLOAT;
 
                 let offset = buffer_view.offset();
 
@@ -185,6 +197,35 @@ impl GltfModel {
                 }
             }
 
+            // Figure out primitive count for non-indexed drawing, I don't know how else to do this
+            // but maybe the information is in the gltf model somewhere. We divide the buffer view
+            // length for each primitive by the size in bytes to figure out the number of
+            // primitives, and if they're mismatched we log a warning and choose the smallest one.
+            let primitive_count: Option<i32> = prim.attributes()
+                .flat_map(|(name, accessor)| accessor.view().map(|view| (name, view)))
+                .fold(None, |prev: Option<(Semantic, i32)>, (name, view)| {
+                    // Calculate attribute count
+                    let attrib_size = Self::attribute_size(&name);
+                    let attrib_size_bytes = attrib_size * (std::mem::size_of::<f32>() as i32);
+                    let attrib_count = (view.length() as i32) / attrib_size_bytes;
+
+                    // If it's a different size to the previous, warn and use the smaller one
+                    if let Some((prev_name, prev_count)) = prev {
+                        if attrib_count != prev_count {
+                            println!("Attribute count mismatch: {}={}, {}={}. Using smallest.",
+                                     prev_name.to_string(),
+                                     prev_count,
+                                     name.to_string(),
+                                     attrib_count);
+                        }
+                        Some((prev_name, std::cmp::min(prev_count, attrib_count)))
+                    }
+                    else {
+                        Some((name, attrib_count))
+                    }
+                })
+                .map(|(_, count)| count);
+
             // Look up the textures to use, so we don't have to do this again to render
             let base_color_texture = prim
                 .material()
@@ -196,7 +237,7 @@ impl GltfModel {
             let material_index = prim.material().index();
 
             GltfMeshPrimitive {
-                vao, offset, length, base_color_texture, material_index
+                vao, indexed_offset_length, base_color_texture, material_index, primitive_count
             }
         }).collect();
 
@@ -269,6 +310,18 @@ impl GltfModel {
         }
     }
 
+    /// Get the size of a data type
+    fn data_type_size(data_type: gltf::accessor::DataType) -> usize {
+        match data_type {
+            DataType::I8 => 1,
+            DataType::U8 => 1,
+            DataType::I16 => 2,
+            DataType::U16 => 2,
+            DataType::U32 => 4,
+            DataType::F32 => 4
+        }
+    }
+
     /// Build the list of drawables recursively
     fn build_drawables_recursive(node: &gltf::Node, out: &mut Vec<GltfDrawable>, parent_world_transform: &Matrix4<f32>) {
         // Calculate world transform
@@ -279,13 +332,13 @@ impl GltfModel {
         if let Some(mesh) = node.mesh() {
             // Create UBO
             let mut ubo_model = UniformBuffer::<ModelParams>::new();
-            ubo_model.data.mat_model = world_transform.to_std140();
-            ubo_model.data.mat_normal = {
+            ubo_model.set_mat_model(&world_transform);
+            ubo_model.set_mat_normal(&{
                 // https://learnopengl.com/Lighting/Basic-lighting
                 let v = world_transform.invert().unwrap().transpose();
                 Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
-            }.to_std140();
-            ubo_model.upload();
+            });
+            ubo_model.upload_changed();
 
             // Create drawable
             out.push(GltfDrawable {
@@ -303,8 +356,8 @@ impl GltfModel {
     /// Load material to a ubo
     fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
         let mut ubo = UniformBuffer::<MaterialParams>::new();
-        ubo.data.has_base_color_texture = mat.pbr_metallic_roughness().base_color_texture().is_some().to_std140();
-        ubo.upload();
+        ubo.set_has_base_color_texture(&mat.pbr_metallic_roughness().base_color_texture().is_some());
+        ubo.upload_changed();
         ubo
     }
 }

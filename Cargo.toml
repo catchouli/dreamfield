@@ -17,3 +17,6 @@ gltf = "1.0"
 std140 = "0.2.5"
 strum = "0.24.1"
 strum_macros = "0.24.1"
+rangemap = "1.0.3"
+dreamfield_macros = { path = "dreamfield_macros" }
+dreamfield_traits = { path = "dreamfield_traits" }

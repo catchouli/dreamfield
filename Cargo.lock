@@ -197,17 +197,34 @@ name = "dreamfield"
 version = "0.1.0"
 dependencies = [
  "cgmath",
+ "dreamfield_macros",
+ "dreamfield_traits",
  "gl",
  "glfw",
  "gltf",
  "image 0.24.2",
  "num",
  "rand",
+ "rangemap",
  "std140",
  "strum",
  "strum_macros",
  "tobj",
 ]
+
+[[package]]
+name = "dreamfield_macros"
+version = "0.1.0"
+dependencies = [
+ "dreamfield_traits",
+ "quote",
+ "std140",
+ "syn",
+]
+
+[[package]]
+name = "dreamfield_traits"
+version = "0.1.0"
 
 [[package]]
 name = "either"
@@ -767,6 +784,12 @@ checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
 dependencies = [
  "getrandom",
 ]
+
+[[package]]
+name = "rangemap"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea2d559b3970fe7aa56ce7432a3702ff4b20a57b543ae08b4850ee629353ea6"
 
 [[package]]
 name = "raw-window-handle"

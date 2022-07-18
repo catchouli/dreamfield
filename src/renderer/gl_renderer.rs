@@ -13,7 +13,6 @@ use mesh::*;
 use texture::*;
 use uniform_buffer::*;
 use gltf_model::*;
-use to_std140::*;
 
 /// The GL renderer
 pub struct GLRenderer {
@@ -22,6 +21,7 @@ pub struct GLRenderer {
     glfw_model_shader: ShaderProgram,
     sky_texture: Texture,
     suzanne: GltfModel,
+    triangle: GltfModel,
     ubo_global: UniformBuffer<GlobalParams>
 }
 
@@ -61,6 +61,7 @@ impl GLRenderer {
 
         // Load suzanne
         let suzanne = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
+        let triangle = GltfModel::load_gltf("resources/models/TriangleWithoutIndices.gltf").unwrap();
 
         GLRenderer {
            full_screen_rect,
@@ -68,6 +69,7 @@ impl GLRenderer {
            glfw_model_shader,
            sky_texture,
            suzanne,
+           triangle,
            ubo_global
         }
     }
@@ -85,10 +87,10 @@ impl GLRenderer {
             * Matrix4::from_translation(vec3(0.0, 0.0, 7.0));
         let mat_view = mat_cam.invert().unwrap();
 
-        self.ubo_global.data.sim_time = game_state.time.to_std140();
-        self.ubo_global.data.mat_proj = mat_proj.to_std140();
-        self.ubo_global.data.mat_view = mat_view.to_std140();
-        self.ubo_global.upload();
+        self.ubo_global.set_sim_time(&game_state.time);
+        self.ubo_global.set_mat_proj(&mat_proj);
+        self.ubo_global.set_mat_view(&mat_view);
+        self.ubo_global.upload_changed();
 
         // Draw background
         unsafe { gl::Disable(gl::DEPTH_TEST) }
@@ -100,6 +102,7 @@ impl GLRenderer {
         // Draw glfw models
         self.glfw_model_shader.use_program();
         self.suzanne.render();
+        self.triangle.render();
     }
 }
 

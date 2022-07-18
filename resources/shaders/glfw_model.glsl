@@ -30,9 +30,12 @@ out vec3 var_nrm;
 out vec2 var_uv;
 
 void main() {
+    mat4 model = mat_model;
+    model[3][1] += sin(sim_time);
+
     var_nrm = mat_normal * in_nrm;
     var_uv = in_uv;
-    gl_Position = mat_proj * mat_view * mat_model * vec4(in_pos.x, in_pos.y, in_pos.z, 1.0);
+    gl_Position = mat_proj * mat_view * model * vec4(in_pos.x, in_pos.y, in_pos.z, 1.0);
 }
 
 #endif
