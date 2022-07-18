@@ -63,6 +63,11 @@ impl Texture {
         }
     }
 
+    /// Generate mipmaps
+    pub fn gen_mipmaps(&self) {
+        unsafe { gl::GenerateTextureMipmap(self.id) }
+    }
+
     /// Bind texture
     pub fn bind(&self, slot: bindings::TextureSlot) {
         unsafe {

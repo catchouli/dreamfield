@@ -1,7 +1,7 @@
 use gl::types::*;
 use gltf::Semantic;
 use gltf::image::Format;
-use super::texture::Texture;
+use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
 use super::bindings;
 use cgmath::{SquareMatrix, Matrix, Matrix3, Matrix4};
@@ -37,6 +37,7 @@ struct GltfMeshPrimitive {
 
 impl GltfModel {
     /// Load a model from a gltf file
+    /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
     pub fn load_gltf(path: &str) -> Result<GltfModel, gltf::Error> {
         println!("Loading GltfModel {path}");
         let (doc, buffer_data, image_data) = gltf::import(path)?;
@@ -58,7 +59,7 @@ impl GltfModel {
         };
 
         // Load all textures
-        let textures = image_data.iter().map(|data| Self::load_gltf_image(data)).collect();
+        let textures = doc.textures().map(|tex| Self::load_gltf_texture(&tex, &image_data)).collect();
 
         // Load all meshes
         let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
@@ -111,9 +112,6 @@ impl GltfModel {
                 // Bind textures, or unbind if None
                 if let Some(base_color_texture_index) = primitive.base_color_texture {
                     self.textures[base_color_texture_index].bind(bindings::TextureSlot::BaseColor);
-                }
-                else {
-                    Texture::unbind(bindings::TextureSlot::BaseColor);
                 }
 
                 unsafe {
@@ -233,10 +231,26 @@ impl GltfModel {
         }
     }
 
-    /// Load a gltf image data
-    fn load_gltf_image(data: &gltf::image::Data) -> Texture {
-        Texture::new_from_buf(&data.pixels, data.width as i32, data.height as i32, Self::source_format(data.format),
-            gl::RGBA, Texture::NEAREST_WRAP).expect("Failed to load gltf texture")
+    /// Load a gltf texture
+    fn load_gltf_texture(tex: &gltf::Texture, image_data: &[gltf::image::Data]) -> Texture {
+        let data = &image_data[tex.source().index()];
+        let sampler = tex.sampler();
+
+        // Load texture
+        let tex_params = TextureParams {
+            horz_wrap: sampler.wrap_s().as_gl_enum(),
+            vert_wrap: sampler.wrap_t().as_gl_enum(),
+            min_filter: sampler.min_filter().map(|f| f.as_gl_enum()).unwrap_or(gl::NEAREST),
+            mag_filter: sampler.mag_filter().map(|f| f.as_gl_enum()).unwrap_or(gl::NEAREST)
+        };
+
+        let tex = Texture::new_from_buf(&data.pixels, data.width as i32, data.height as i32,
+            Self::source_format(data.format), gl::RGBA, tex_params).expect("Failed to load gltf texture");
+
+        // Generate mipmaps - the mag_filter is often one which needs them
+        tex.gen_mipmaps();
+
+        tex
     }
 
     /// Get gl format from gltf::image::Format
