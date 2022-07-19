@@ -15,17 +15,25 @@ impl ShaderProgram {
     pub fn new_from_vf(path: &str) -> ShaderProgram {
         // Load in raw shader source
         let raw_source = fs::read_to_string(path).unwrap();
+        let (version, remainder) = Self::split_version_directive(&raw_source);
 
-        // Append the define for building vertex or fragment shader
-        const VS_HEADER: &str = "#define BUILDING_VERTEX_SHADER";
-        const FS_HEADER: &str = "#define BUILDING_FRAGMENT_SHADER";
+        let vs_source = format!("{}\n{}", version, {
+            let mut context = gpp::Context::new();
+            context.macros.insert("BUILDING_VERTEX_SHADER".to_string(), "1".to_string());
+            gpp::process_str(&remainder, &mut context)
+                .expect("failed to preprocess vertex shader")
+        });
 
-        let vert_source = Self::append_after_version(&raw_source, VS_HEADER);
-        let frag_source = Self::append_after_version(&raw_source, FS_HEADER);
+        let fs_source = format!("{}\n{}", version, {
+            let mut context = gpp::Context::new();
+            context.macros.insert("BUILDING_FRAGMENT_SHADER".to_string(), "1".to_string());
+            gpp::process_str(&remainder, &mut context)
+                .expect("failed to preprocess fragment shader")
+        });
 
         // Build shaders
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vert_source);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &frag_source);
+        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vs_source);
+        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fs_source);
 
         // Link shader program
         let shader_program = ShaderProgram::link_program(&vec![vertex_shader, fragment_shader]);
@@ -152,23 +160,28 @@ impl ShaderProgram {
         }
     }
 
-    /// Append the given string to the shader source, after the #version directive
-    fn append_after_version(source: &str, append: &str) -> String {
-        let mut updated_source = String::new();
-        let mut version_directive_found = false;
+    /// Split a shader source at the version directive
+    fn split_version_directive(source: &str) -> (String, String) {
+        let mut version_directive = String::new();
+        let mut remainder = String::new();
 
+        let mut version_directive_found = false;
         for line in source.lines() {
-            updated_source.push_str(line);
-            updated_source.push('\n');
+            if !version_directive_found {
+                version_directive.push_str(line);
+                version_directive.push('\n');
+            }
+            else {
+                remainder.push_str(line);
+                remainder.push('\n');
+            }
 
             if !version_directive_found && line.contains("#version") {
                 version_directive_found = true;
-                updated_source.push_str(append);
-                updated_source.push('\n');
             }
         }
 
-        updated_source
+        (version_directive, remainder)
     }
 }
 

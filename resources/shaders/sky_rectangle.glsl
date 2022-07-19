@@ -1,19 +1,7 @@
 #version 330 core
 
+#include resources/shaders/include/uniforms.glsl
 #define M_PI 3.1415926535897932384626433832795
-
-layout (std140) uniform GlobalParams
-{
-    float sim_time;
-    mat4 mat_proj;
-    mat4 mat_view;
-};
-
-layout (std140) uniform ModelParams
-{
-    mat4 mat_model;
-    mat3 mat_normal;
-};
 
 #ifdef BUILDING_VERTEX_SHADER
 
