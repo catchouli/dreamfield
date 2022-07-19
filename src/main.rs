@@ -1,13 +1,13 @@
 pub mod renderer;
 pub mod system;
-pub mod game_state;
+pub mod sim;
+
+use std::collections::VecDeque;
 
 use glfw::{Action, Context, Key};
 use system::glfw_system::Window;
-use game_state::GameState;
+use sim::{GameState, input::{InputEvent, InputName}};
 use renderer::gl_renderer::GLRenderer;
-use renderer::camera::FpsCamera;
-use cgmath::vec3;
 
 use crate::renderer::camera::Camera;
 
@@ -23,15 +23,6 @@ const FIXED_UPDATE: i32 = 60;
 /// The fixed update target tim
 const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 
-/// The camera look speed
-const CAM_LOOK_SPEED: f32 = 1.0;
-
-/// The camera move speed
-const CAM_MOVE_SPEED: f32 = 0.1;
-
-/// The camera fast move speed
-const CAM_MOVE_SPEED_FAST: f32 = 0.5;
-
 // Entry point
 fn main() {
     // Create window
@@ -42,13 +33,9 @@ fn main() {
     let mut renderer = GLRenderer::new(win_width, win_height);
 
     // The input state
-    let mut key_state: Vec<bool> = vec![false; glfw::ffi::KEY_LAST as usize];
-
+    let mut input_events = VecDeque::<InputEvent>::new();
     // The game state
     let mut game_state = GameState::new();
-
-    // The camera
-    let mut camera = FpsCamera::new_with_pos_rot(vec3(0.0, 0.0, 10.0), 0.0, 0.0, CAM_LOOK_SPEED);
 
     // Fixed timestep - https://gafferongames.com/post/fix_your_timestep/
     let mut current_time = window.glfw.get_time();
@@ -58,14 +45,15 @@ fn main() {
     // Mouse movement
     let (mut mouse_x, mut mouse_y) = window.window.get_cursor_pos();
 
-    window.window.set_cursor_mode(glfw::CursorMode::Disabled);
-
     // Start main loop
     while !window.window.should_close() {
         // Handle events
         for event in window.poll_events() {
-            handle_window_event(&mut window, &mut renderer, &mut key_state, event);
+            handle_window_event(&mut window, &mut renderer, event, &mut input_events);
         }
+
+        // Handle mouse movement
+        (mouse_x, mouse_y) = handle_mouse_movement(&window, (mouse_x, mouse_y), &mut input_events);
 
         // Fixed timestep
         let new_time = window.glfw.get_time();
@@ -75,35 +63,8 @@ fn main() {
         accumulator += frame_time;
 
         while accumulator >= FIXED_UPDATE_TIME {
-            // Update game state
-            game_state.time = sim_time as f32;
-
-            // Mouse movement
-            let (old_mouse_x, old_mouse_y) = (mouse_x, mouse_y);
-            (mouse_x, mouse_y) = window.window.get_cursor_pos();
-            let (mouse_dx, mouse_dy) = (mouse_x - old_mouse_x, mouse_y - old_mouse_y);
-            
-            // Update camera
-            let cam_speed = match key_state[Key::LeftShift as usize] {
-                false => CAM_MOVE_SPEED,
-                true => CAM_MOVE_SPEED_FAST,
-            };
-
-            let forward_cam_movement = match (key_state[Key::W as usize], key_state[Key::S as usize]) {
-                (true, false) => cam_speed,
-                (false, true) => -cam_speed,
-                _ => 0.0
-            };
-
-            let right_cam_movement = match (key_state[Key::A as usize], key_state[Key::D as usize]) {
-                (true, false) => -cam_speed,
-                (false, true) => cam_speed,
-                _ => 0.0
-            };
-
-            camera.move_camera(forward_cam_movement, right_cam_movement, 0.0);
-            camera.mouse_move(mouse_dx as f32, mouse_dy as f32);
-            game_state.view_matrix = camera.get_view_matrix();
+            // Simulate game state
+            game_state = game_state.simulate(sim_time, &mut input_events);
 
             // Consume accumulated time
             accumulator -= FIXED_UPDATE_TIME;
@@ -111,14 +72,15 @@ fn main() {
         }
 
         // Render
-        renderer.render(game_state);
+        game_state.camera.update();
+        renderer.render(&mut game_state);
         window.window.swap_buffers();
     }
 }
 
 /// Handle events
-fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, key_state: &mut [bool],
-                       event: glfw::WindowEvent)
+fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: glfw::WindowEvent,
+                       input_events: &mut VecDeque<InputEvent>)
 {
     match event {
         glfw::WindowEvent::FramebufferSize(width, height) => {
@@ -127,18 +89,52 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, key_state
         glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
             window.window.set_should_close(true)
         }
+        glfw::WindowEvent::MouseButton(_, Action::Press, _) => {
+            window.set_mouse_captured(true);
+            input_events.push_back(InputEvent::CursorCaptured(true));
+        }
+        glfw::WindowEvent::Key(Key::LeftAlt, _, Action::Press, _) | glfw::WindowEvent::Focus(false) => {
+            window.set_mouse_captured(false);
+            input_events.push_back(InputEvent::CursorCaptured(false));
+        }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
-            key_state[key as usize] = true;
+            if let Some(game_input) = map_game_inputs_key(key, true) {
+                input_events.push_back(game_input);
+            }
         }
         glfw::WindowEvent::Key(key, _, Action::Release, _) => {
-            key_state[key as usize] = false;
-        }
-        glfw::WindowEvent::MouseButton(_, _, _) => {
-            println!("button 1");
+            if let Some(game_input) = map_game_inputs_key(key, false) {
+                input_events.push_back(game_input);
+            }
         }
         _ => {
-            println!("{:?}", event);
+            println!("Unhandled event: {:?}", event);
         }
     }
 }
 
+/// Map game inputs from the keyboard
+fn map_game_inputs_key(key: Key, pressed: bool) -> Option<InputEvent> {
+    match key {
+        Key::W => Some(InputEvent::GameInput(InputName::CamForwards, pressed)),
+        Key::S => Some(InputEvent::GameInput(InputName::CamBackwards, pressed)),
+        Key::A => Some(InputEvent::GameInput(InputName::CamLeft, pressed)),
+        Key::D => Some(InputEvent::GameInput(InputName::CamRight, pressed)),
+        Key::LeftShift => Some(InputEvent::GameInput(InputName::CamSpeed, pressed)),
+        _ => None
+    }
+}
+
+/// Handle mouse movement
+fn handle_mouse_movement(window: &Window, (old_mouse_x, old_mouse_y): (f64, f64),
+                         input_events: &mut VecDeque<InputEvent>) -> (f64, f64)
+{
+    let (mouse_x, mouse_y) = window.window.get_cursor_pos();
+    let (mouse_dx, mouse_dy) = (mouse_x - old_mouse_x, mouse_y - old_mouse_y);
+
+    if window.is_mouse_captured() && (mouse_dx != 0.0 || mouse_dy != 0.0) {
+        input_events.push_back(InputEvent::CursorMoved(mouse_dx, mouse_dy));
+    }
+
+    (mouse_x, mouse_y)
+}

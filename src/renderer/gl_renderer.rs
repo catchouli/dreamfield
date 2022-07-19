@@ -14,6 +14,8 @@ use texture::*;
 use uniform_buffer::*;
 use gltf_model::*;
 
+use super::camera::Camera;
+
 /// The GL renderer
 pub struct GLRenderer {
     full_screen_rect: Mesh,
@@ -81,14 +83,14 @@ impl GLRenderer {
     }
 
     /// Render the game
-    pub fn render(&mut self, game_state: crate::GameState) {
+    pub fn render(&mut self, game_state: &crate::GameState) {
         unsafe {
             gl::ClearColor(0.06, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        self.ubo_global.set_sim_time(&game_state.time);
-        self.ubo_global.set_mat_view(&game_state.view_matrix);
+        self.ubo_global.set_sim_time(&(game_state.time as f32));
+        self.ubo_global.set_mat_view(&game_state.camera.get_view_matrix());
         self.ubo_global.upload_changed();
 
         // Draw background

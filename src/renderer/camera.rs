@@ -14,10 +14,12 @@ const BASE_CAM_LOOK_SPEED_SCALE: f32 = 0.002;
 
 /// A camera trait for providing something that can be used to obtain a view matrix
 pub trait Camera {
-    fn get_view_matrix(&mut self) -> Matrix4<f32>;
+    fn update(&mut self);
+    fn get_view_matrix(&self) -> Matrix4<f32>;
 }
 
 /// A simple fps camera
+#[derive(Copy, Clone)]
 pub struct FpsCamera {
     look_speed: f32,
     pos: Vector3<f32>,
@@ -27,6 +29,7 @@ pub struct FpsCamera {
     dirty: bool
 }
 
+#[derive(Copy, Clone)]
 struct FpsCameraMatrices {
     cam: Matrix4<f32>,
     view: Matrix4<f32>,
@@ -119,8 +122,14 @@ impl FpsCamera {
 }
 
 impl Camera for FpsCamera {
-    fn get_view_matrix(&mut self) -> Matrix4<f32> {
+    fn update(&mut self) {
         self.update_matrices();
+    }
+
+    fn get_view_matrix(&self) -> Matrix4<f32> {
+        if self.dirty {
+            panic!("Matrices out of date, call camera.update()");
+        }
         self.matrices.view
     }
 }

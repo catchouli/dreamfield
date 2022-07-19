@@ -7,7 +7,8 @@ use glfw::Context;
 pub struct Window {
     pub glfw: glfw::Glfw,
     pub window: glfw::Window,
-    pub events: Receiver<(f64, glfw::WindowEvent)>
+    pub events: Receiver<(f64, glfw::WindowEvent)>,
+    mouse_captured: bool
 }
 
 impl Window {
@@ -24,6 +25,8 @@ impl Window {
 
         window.set_key_polling(true);
         window.set_framebuffer_size_polling(true);
+        window.set_mouse_button_polling(true);
+        window.set_focus_polling(true);
         window.make_current();
 
         // Load all gl functions
@@ -32,13 +35,36 @@ impl Window {
         // Enable debug output
         Self::set_debug_log_level(debug_log_level);
 
-        Window { glfw, window, events }
+        Window {
+            glfw,
+            window,
+            events,
+            mouse_captured: false
+        }
     }
 
     /// Poll all events and return them as a list
     pub fn poll_events(&mut self) -> Vec<glfw::WindowEvent> {
         self.glfw.poll_events();
         glfw::flush_messages(&self.events).map(|(_, event)| event).collect()
+    }
+
+    /// Set mouse captured
+    pub fn set_mouse_captured(&mut self, captured: bool) {
+        if captured && !self.mouse_captured {
+            println!("Capturing cursor");
+            self.window.set_cursor_mode(glfw::CursorMode::Disabled)
+        }
+        else if self.mouse_captured {
+            println!("Releasing cursor");
+            self.window.set_cursor_mode(glfw::CursorMode::Normal)
+        }
+
+        self.mouse_captured = captured;
+    }
+
+    pub fn is_mouse_captured(&self) -> bool {
+        self.mouse_captured
     }
 
     /// Set debug log level, 0 means no debugging
