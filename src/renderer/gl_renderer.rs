@@ -19,11 +19,12 @@ use super::camera::Camera;
 /// The GL renderer
 pub struct GLRenderer {
     full_screen_rect: Mesh,
-    sky_rectangle_shader: ShaderProgram,
-    glfw_model_shader: ShaderProgram,
+    sky_shader: ShaderProgram,
+    pbr_shader: ShaderProgram,
     sky_texture: Texture,
-    suzanne: GltfModel,
-    triangle: GltfModel,
+    suzanne_model: GltfModel,
+    triangle_model: GltfModel,
+    fire_orb_model: GltfModel,
     ubo_global: UniformBuffer<GlobalParams>
 }
 
@@ -31,14 +32,14 @@ impl GLRenderer {
     /// Create a new GLRenderer
     pub fn new(width: i32, height: i32) -> GLRenderer {
         // Create uniform buffers
-        let ubo_global = UniformBuffer::<GlobalParams>::new();
+        let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
-        let ubo_model = UniformBuffer::<ModelParams>::new();
+        let mut ubo_model = UniformBuffer::<ModelParams>::new();
         ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
 
         // Load shaders
-        let sky_rectangle_shader = ShaderProgram::new_from_vf("resources/shaders/sky_rectangle.glsl");
-        let glfw_model_shader = ShaderProgram::new_from_vf("resources/shaders/glfw_model.glsl");
+        let sky_shader = ShaderProgram::new_from_vf("resources/shaders/sky.glsl");
+        let pbr_shader = ShaderProgram::new_from_vf("resources/shaders/pbr.glsl");
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -61,18 +62,20 @@ impl GLRenderer {
         let sky_texture = Texture::new_from_file("resources/textures/cloud.jpg", Texture::NEAREST_WRAP)
             .expect("Failed to load sky texture");
 
-        // Load suzanne
-        let suzanne = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
-        let triangle = GltfModel::load_gltf("resources/models/TriangleWithoutIndices.gltf").unwrap();
+        // Load models
+        let suzanne_model = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
+        let triangle_model = GltfModel::load_gltf("resources/models/TriangleWithoutIndices.gltf").unwrap();
+        let fire_orb_model = GltfModel::load_gltf("resources/models/fire_orb.glb").unwrap();
 
         // Create renderer struct
         let mut renderer = GLRenderer {
            full_screen_rect,
-           sky_rectangle_shader,
-           glfw_model_shader,
+           sky_shader,
+           pbr_shader,
            sky_texture,
-           suzanne,
-           triangle,
+           suzanne_model,
+           triangle_model,
+           fire_orb_model,
            ubo_global
         };
 
@@ -96,14 +99,16 @@ impl GLRenderer {
         // Draw background
         unsafe { gl::Disable(gl::DEPTH_TEST) }
         self.sky_texture.bind(bindings::TextureSlot::BaseColor);
-        self.sky_rectangle_shader.use_program();
+        self.sky_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
         unsafe { gl::Enable(gl::DEPTH_TEST) }
 
         // Draw glfw models
-        self.glfw_model_shader.use_program();
-        self.suzanne.render();
-        self.triangle.render();
+        self.pbr_shader.use_program();
+        self.suzanne_model.render();
+        self.triangle_model.render();
+        self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.time as f32, 0.0)));
+        self.fire_orb_model.render();
     }
 
     /// Update the viewport

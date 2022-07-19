@@ -5,7 +5,7 @@ use gltf::accessor::DataType;
 use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
 use super::bindings;
-use cgmath::{SquareMatrix, Matrix, Matrix3, Matrix4};
+use cgmath::{SquareMatrix, Matrix4};
 
 /// A gltf model
 pub struct GltfModel {
@@ -15,12 +15,14 @@ pub struct GltfModel {
     meshes: Vec<GltfMesh>,
     drawables: Vec<GltfDrawable>,
     materials: Vec<UniformBuffer<MaterialParams>>,
-    default_material: UniformBuffer<MaterialParams>
+    default_material: UniformBuffer<MaterialParams>,
+    transform: Matrix4<f32>
 }
 
 struct GltfDrawable {
     ubo_model: UniformBuffer<ModelParams>,
-    mesh: usize
+    mesh: usize,
+    transform: Matrix4<f32>
 }
 
 struct GltfMesh {
@@ -88,25 +90,28 @@ impl GltfModel {
             meshes,
             drawables,
             materials,
-            default_material
+            default_material,
+            transform: SquareMatrix::identity()
         })
     }
 
     /// Render a model
-    pub fn render(&self) {
+    pub fn render(&mut self) {
         // Render all prims
-        for drawable in &self.drawables {
-            let mesh = &self.meshes[drawable.mesh];
+        for drawable in self.drawables.iter_mut() {
+            let mesh = &mut self.meshes[drawable.mesh];
 
-            // Bind drawable model ubo
+            // Calculate world transform of drawable and bind model mat
+            let model_mat = self.transform * drawable.transform;
+            drawable.ubo_model.set_matrices(&model_mat);
             drawable.ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
 
             // Draw
-            for primitive in &mesh.primitives {
+            for primitive in mesh.primitives.iter_mut() {
                 // Bind material ubo
                 primitive.material_index
-                    .map(|mat| &self.materials[mat])
-                    .unwrap_or(&self.default_material)
+                    .map(|mat| &mut self.materials[mat])
+                    .unwrap_or(&mut self.default_material)
                     .bind(bindings::UniformBlockBinding::MaterialParams);
 
                 // Bind textures, or unbind if None
@@ -136,6 +141,11 @@ impl GltfModel {
                 }
             }
         }
+    }
+
+    /// Set the model's transform
+    pub fn set_transform(&mut self, transform: &Matrix4<f32>) {
+        self.transform = *transform
     }
 
     /// Load a mesh into a vao
@@ -331,19 +341,13 @@ impl GltfModel {
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
             // Create UBO
-            let mut ubo_model = UniformBuffer::<ModelParams>::new();
-            ubo_model.set_mat_model(&world_transform);
-            ubo_model.set_mat_normal(&{
-                // https://learnopengl.com/Lighting/Basic-lighting
-                let v = world_transform.invert().unwrap().transpose();
-                Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
-            });
-            ubo_model.upload_changed();
+            let ubo_model = UniformBuffer::<ModelParams>::new();
 
             // Create drawable
             out.push(GltfDrawable {
                 ubo_model,
-                mesh: mesh.index()
+                mesh: mesh.index(),
+                transform: world_transform
             });
         }
 
@@ -357,7 +361,6 @@ impl GltfModel {
     fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
         let mut ubo = UniformBuffer::<MaterialParams>::new();
         ubo.set_has_base_color_texture(&mat.pbr_metallic_roughness().base_color_texture().is_some());
-        ubo.upload_changed();
         ubo
     }
 }

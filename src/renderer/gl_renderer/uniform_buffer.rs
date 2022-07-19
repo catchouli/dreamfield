@@ -1,6 +1,6 @@
 use super::bindings;
 use super::to_std140::ToStd140;
-use cgmath::{SquareMatrix, Matrix3, Matrix4};
+use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
 use rangemap::RangeSet;
@@ -39,7 +39,8 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
     }
 
     /// Bind this ubo to a binding
-    pub fn bind(&self, binding: bindings::UniformBlockBinding) {
+    pub fn bind(&mut self, binding: bindings::UniformBlockBinding) {
+        self.upload_changed();
         unsafe { gl::BindBufferBase(gl::UNIFORM_BUFFER, binding as u32, self.ubo) }
     }
 
@@ -114,6 +115,18 @@ impl Default for ModelParams {
             mat_model: Matrix4::identity().to_std140(),
             mat_normal: Matrix3::identity().to_std140()
         }
+    }
+}
+
+impl UniformBuffer<ModelParams> {
+    /// Helper function for setting the model matrix and automatically deriving the normal matrix
+    pub fn set_matrices(&mut self, model: &Matrix4<f32>) {
+        self.set_mat_model(model);
+        self.set_mat_normal(&{
+            // https://learnopengl.com/Lighting/Basic-lighting
+            let v = model.invert().unwrap().transpose();
+            Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
+        });
     }
 }
 

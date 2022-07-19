@@ -90,12 +90,16 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
             window.window.set_should_close(true)
         }
         glfw::WindowEvent::MouseButton(_, Action::Press, _) => {
-            window.set_mouse_captured(true);
-            input_events.push_back(InputEvent::CursorCaptured(true));
+            if !window.is_mouse_captured() {
+                window.set_mouse_captured(true);
+                input_events.push_back(InputEvent::CursorCaptured(true));
+            }
         }
         glfw::WindowEvent::Key(Key::LeftAlt, _, Action::Press, _) | glfw::WindowEvent::Focus(false) => {
-            window.set_mouse_captured(false);
-            input_events.push_back(InputEvent::CursorCaptured(false));
+            if window.is_mouse_captured() {
+                window.set_mouse_captured(false);
+                input_events.push_back(InputEvent::CursorCaptured(false));
+            }
         }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
             if let Some(game_input) = map_game_inputs_key(key, true) {
@@ -107,9 +111,7 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
                 input_events.push_back(game_input);
             }
         }
-        _ => {
-            println!("Unhandled event: {:?}", event);
-        }
+        _ => {}
     }
 }
 
