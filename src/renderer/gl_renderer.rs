@@ -5,6 +5,7 @@ pub mod uniform_buffer;
 pub mod gltf_model;
 pub mod to_std140;
 pub mod bindings;
+pub mod resources;
 
 use cgmath::*;
 
@@ -38,8 +39,8 @@ impl GLRenderer {
         ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
 
         // Load shaders
-        let sky_shader = ShaderProgram::new_from_vf("resources/shaders/sky.glsl");
-        let pbr_shader = ShaderProgram::new_from_vf("resources/shaders/pbr.glsl");
+        let sky_shader = ShaderProgram::new_from_vf(resources::SHADER_SKY);
+        let pbr_shader = ShaderProgram::new_from_vf(resources::SHADER_PBR);
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -59,13 +60,13 @@ impl GLRenderer {
             ]);
 
         // Load textures
-        let sky_texture = Texture::new_from_file("resources/textures/cloud.jpg", Texture::NEAREST_WRAP)
+        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, Texture::NEAREST_WRAP)
             .expect("Failed to load sky texture");
 
         // Load models
-        let suzanne_model = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
-        let triangle_model = GltfModel::load_gltf("resources/models/TriangleWithoutIndices.gltf").unwrap();
-        let fire_orb_model = GltfModel::load_gltf("resources/models/fire_orb.glb").unwrap();
+        let suzanne_model = GltfModel::load_gltf(resources::MODEL_SUZANNE).unwrap();
+        let triangle_model = GltfModel::load_gltf(resources::MODEL_TRIANGLE).unwrap();
+        let fire_orb_model = GltfModel::load_gltf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Create renderer struct
         let mut renderer = GLRenderer {

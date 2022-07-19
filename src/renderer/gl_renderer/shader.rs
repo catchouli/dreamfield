@@ -1,5 +1,4 @@
 use std::ptr;
-use std::fs;
 use std::ffi::CString;
 use gl::types::*;
 use super::bindings;
@@ -12,28 +11,10 @@ pub struct ShaderProgram {
 
 impl ShaderProgram {
     /// Create a new shader program from a vertex and fragment shader source
-    pub fn new_from_vf(path: &str) -> ShaderProgram {
-        // Load in raw shader source
-        let raw_source = fs::read_to_string(path).unwrap();
-        let (version, remainder) = Self::split_version_directive(&raw_source);
-
-        let vs_source = format!("{}\n{}", version, {
-            let mut context = gpp::Context::new();
-            context.macros.insert("BUILDING_VERTEX_SHADER".to_string(), "1".to_string());
-            gpp::process_str(&remainder, &mut context)
-                .expect("failed to preprocess vertex shader")
-        });
-
-        let fs_source = format!("{}\n{}", version, {
-            let mut context = gpp::Context::new();
-            context.macros.insert("BUILDING_FRAGMENT_SHADER".to_string(), "1".to_string());
-            gpp::process_str(&remainder, &mut context)
-                .expect("failed to preprocess fragment shader")
-        });
-
+    pub fn new_from_vf((vertex, fragment): (&str, &str)) -> ShaderProgram {
         // Build shaders
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vs_source);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fs_source);
+        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vertex);
+        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fragment);
 
         // Link shader program
         let shader_program = ShaderProgram::link_program(&vec![vertex_shader, fragment_shader]);
@@ -158,30 +139,6 @@ impl ShaderProgram {
 
             shader_program
         }
-    }
-
-    /// Split a shader source at the version directive
-    fn split_version_directive(source: &str) -> (String, String) {
-        let mut version_directive = String::new();
-        let mut remainder = String::new();
-
-        let mut version_directive_found = false;
-        for line in source.lines() {
-            if !version_directive_found {
-                version_directive.push_str(line);
-                version_directive.push('\n');
-            }
-            else {
-                remainder.push_str(line);
-                remainder.push('\n');
-            }
-
-            if !version_directive_found && line.contains("#version") {
-                version_directive_found = true;
-            }
-        }
-
-        (version_directive, remainder)
     }
 }
 

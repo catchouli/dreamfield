@@ -9,7 +9,6 @@ use cgmath::{SquareMatrix, Matrix4};
 
 /// A gltf model
 pub struct GltfModel {
-    path: String,
     buffers: Vec<u32>,
     textures: Vec<Texture>,
     meshes: Vec<GltfMesh>,
@@ -40,9 +39,8 @@ struct GltfMeshPrimitive {
 impl GltfModel {
     /// Load a model from a gltf file
     /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
-    pub fn load_gltf(path: &str) -> Result<GltfModel, gltf::Error> {
-        println!("Loading GltfModel {path}");
-        let (doc, buffer_data, image_data) = gltf::import(path)?;
+    pub fn load_gltf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
+        let (doc, buffer_data, image_data) = gltf::import_slice(data)?;
 
         // Load all buffers
         let buffers: Vec<u32> = unsafe {
@@ -84,7 +82,6 @@ impl GltfModel {
         let default_material = UniformBuffer::<MaterialParams>::new();
 
         Ok(GltfModel {
-            path: path.to_string(),
             buffers,
             textures,
             meshes,
@@ -371,7 +368,7 @@ impl Drop for GltfModel {
         // Collect VAOs and buffers, and then delete them
         let vaos: Vec<u32> = self.meshes.iter().flat_map(|mesh| mesh.primitives.iter().map(|prim| prim.vao)).collect();
 
-        println!("Deleting {} VAOs and {} buffers for texture {}", vaos.len(), self.buffers.len(), self.path);
+        println!("Deleting {} VAOs and {} buffers from GltfModel", vaos.len(), self.buffers.len());
 
         unsafe {
             gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());

@@ -10,4 +10,5 @@ proc-macro = true
 syn = "1.0.98"
 quote = "1.0.20"
 std140 = "0.2.5"
+gpp = "0.6.2"
 dreamfield_traits = { path = "../dreamfield_traits" }

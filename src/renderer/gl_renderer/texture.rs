@@ -1,6 +1,8 @@
+use std::io::Cursor;
 use std::path::Path;
 use std::error::Error;
 use gl::types::*;
+use image::io::Reader;
 use super::bindings;
 
 /// A texture
@@ -27,6 +29,16 @@ impl Texture {
     /// Load a new texture from a file
     pub fn new_from_file(path: &str, params: TextureParams) -> Result<Texture, Box<dyn Error>> {
         let img = image::open(&Path::new(path))?;
+        let width = img.width() as i32;
+        let height = img.height() as i32;
+        let data = img.into_bytes();
+
+        Texture::new_from_buf(&data, width, height, gl::RGB, gl::RGB, params)
+    }
+
+    /// Load a new texture from an image in a buffer
+    pub fn new_from_image_buf(buf: &[u8], params: TextureParams) -> Result<Texture, Box<dyn Error>> {
+        let img = Reader::new(Cursor::new(buf)).with_guessed_format()?.decode()?;
         let width = img.width() as i32;
         let height = img.height() as i32;
         let data = img.into_bytes();

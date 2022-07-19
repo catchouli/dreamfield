@@ -218,6 +218,7 @@ name = "dreamfield_macros"
 version = "0.1.0"
 dependencies = [
  "dreamfield_traits",
+ "gpp",
  "quote",
  "std140",
  "syn",
