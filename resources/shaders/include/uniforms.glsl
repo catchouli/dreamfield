@@ -3,6 +3,7 @@ layout (std140) uniform GlobalParams
     float sim_time;
     mat4 mat_proj;
     mat4 mat_view;
+    float vp_aspect;
 };
 
 layout (std140) uniform ModelParams

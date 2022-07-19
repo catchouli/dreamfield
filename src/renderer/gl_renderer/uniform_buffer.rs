@@ -85,15 +85,17 @@ impl<T: Default + UniformSetters> Drop for UniformBuffer<T> {
 pub struct GlobalParams {
     pub sim_time: std140::float,
     pub mat_proj: std140::mat4x4,
-    pub mat_view: std140::mat4x4
+    pub mat_view: std140::mat4x4,
+    pub vp_aspect: std140::float
 }
 
 impl Default for GlobalParams {
     fn default() -> Self {
         GlobalParams {
             sim_time: (0.0).to_std140(),
-            mat_proj: cgmath::Matrix4::identity().to_std140(),
-            mat_view: Matrix4::identity().to_std140()
+            mat_proj: Matrix4::identity().to_std140(),
+            mat_view: Matrix4::identity().to_std140(),
+            vp_aspect: (1.0).to_std140()
         }
     }
 }

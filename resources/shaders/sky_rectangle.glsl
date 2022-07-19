@@ -25,18 +25,39 @@ in vec2 var_uv;
 
 out vec4 out_frag_color;
 
+vec3 calc_ray_dir() {
+    mat4 view_proj = mat_proj * mat_view;
+    mat4 view_proj_inv = inverse(view_proj);
+
+    vec2 pos = var_uv * 2.0 - 1.0;
+
+    vec4 v = view_proj_inv * vec4(pos, -1.0, 1.0);
+    vec3 start = v.xyz / v.w;
+
+    v = view_proj_inv * vec4(pos, 0.0, 1.0);
+    vec3 end = v.xyz / v.w;
+
+    return normalize(end - start);
+}
+
+vec2 project_equilateral(vec3 ray_dir) {
+    float longitude = ray_dir.x;
+    float latitude = ray_dir.y;
+
+    float x = longitude / M_PI;
+    float y = log((1 + sin(latitude))/(1 - sin(latitude))) / (4.0 * M_PI);
+
+    return vec2(x, y);
+}
+
 void main() {
-    const float horz_fov = M_PI / 2.0;
-    const float vert_fov = M_PI / 2.0;
+    float horz_fov = M_PI / 2.0 * vp_aspect;
+    float vert_fov = M_PI / 2.0;
 
-    // Scale uv from -1 to 1 and put 0 in center, and then use it to calculate a ray direction
-    vec2 uv = vec2(1.0 - var_uv.x, var_uv.y) * 2.0 - 1.0;
-    vec3 rd = mat3(mat_view) * normalize(vec3(uv.xy * vec2(tan(0.5 * horz_fov), tan(0.5 * vert_fov)), 1.0));
+    // Calculate ray dir
+    vec3 ray_dir = calc_ray_dir();
 
-    // Equirectangular projection
-    vec2 tex_coord = vec2(atan(rd.z, rd.x) + M_PI, acos(-rd.y)) / vec2(2.0 * M_PI, M_PI);
-
-    out_frag_color = texture(tex_skybox, tex_coord);
+    out_frag_color = texture(tex_skybox, project_equilateral(ray_dir));
 }
 
 #endif

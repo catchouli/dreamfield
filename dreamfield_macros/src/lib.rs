@@ -37,16 +37,11 @@ pub fn uniform_setters_derive(input: TokenStream) -> TokenStream {
     // Calculate field offsets
     let mut cur_offset: usize = 0;
     let field_offsets: Vec<usize> = fields.iter().map(|field| {
+        let field_offset = cur_offset;
         let field_size = get_field_size_std140(field);
         let field_alignment = get_field_alignment_std140(field);
 
-        if cur_offset % field_alignment != 0 {
-            cur_offset += field_alignment - (cur_offset % field_alignment);
-        }
-
-        let field_offset = cur_offset;
-
-        cur_offset += field_size;
+        cur_offset = align(cur_offset + field_size, field_alignment);
 
         field_offset
     }).collect();
@@ -170,3 +165,12 @@ fn get_type_alignment_std140(ident: &Ident) -> usize {
     }
 }
 
+/// Align to byte alignment
+fn align(offset: usize, alignment: usize) -> usize {
+    if offset % alignment == 0 {
+        offset
+    }
+    else {
+        offset + alignment - (offset % alignment)
+    }
+}

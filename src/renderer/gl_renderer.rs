@@ -27,7 +27,7 @@ pub struct GLRenderer {
 
 impl GLRenderer {
     /// Create a new GLRenderer
-    pub fn new() -> GLRenderer {
+    pub fn new(width: i32, height: i32) -> GLRenderer {
         // Create uniform buffers
         let ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
@@ -41,10 +41,10 @@ impl GLRenderer {
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
             &vec![
-                 1.0,  1.0, 0.0, 0.0, 0.0,  // top right
-                 1.0, -1.0, 0.0, 0.0, 1.0,  // bottom right
-                -1.0, -1.0, 0.0, 1.0, 1.0,  // bottom left
-                -1.0,  1.0, 0.0, 1.0, 0.0,  // top left
+                 1.0,  1.0, 0.0, 1.0, 1.0,  // top right
+                 1.0, -1.0, 0.0, 1.0, 0.0,  // bottom right
+                -1.0, -1.0, 0.0, 0.0, 0.0,  // bottom left
+                -1.0,  1.0, 0.0, 0.0, 1.0,  // top left
             ],
             &vec![
                 0, 1, 3,
@@ -63,7 +63,8 @@ impl GLRenderer {
         let suzanne = GltfModel::load_gltf("resources/models/suzanne.glb").unwrap();
         let triangle = GltfModel::load_gltf("resources/models/TriangleWithoutIndices.gltf").unwrap();
 
-        GLRenderer {
+        // Create renderer struct
+        let mut renderer = GLRenderer {
            full_screen_rect,
            sky_rectangle_shader,
            glfw_model_shader,
@@ -71,7 +72,12 @@ impl GLRenderer {
            suzanne,
            triangle,
            ubo_global
-        }
+        };
+
+        // Set viewport
+        renderer.set_viewport(width, height);
+
+        renderer
     }
 
     /// Render the game
@@ -81,15 +87,8 @@ impl GLRenderer {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        // Set up global render parameters
-        let mat_proj: Matrix4<f32> = perspective(Deg(90.0), 1.0, 0.1, 100.0);
-        let mat_cam: Matrix4<f32> = Matrix4::from_angle_y(Rad(game_state.time.sin() * 0.5))
-            * Matrix4::from_translation(vec3(0.0, 0.0, 7.0));
-        let mat_view = mat_cam.invert().unwrap();
-
         self.ubo_global.set_sim_time(&game_state.time);
-        self.ubo_global.set_mat_proj(&mat_proj);
-        self.ubo_global.set_mat_view(&mat_view);
+        self.ubo_global.set_mat_view(&game_state.view_matrix);
         self.ubo_global.upload_changed();
 
         // Draw background
@@ -103,6 +102,17 @@ impl GLRenderer {
         self.glfw_model_shader.use_program();
         self.suzanne.render();
         self.triangle.render();
+    }
+
+    /// Update the viewport
+    pub fn set_viewport(&mut self, width: i32, height: i32) {
+        println!("Setting viewport to {width} * {height}");
+        unsafe { gl::Viewport(0, 0, width, height) };
+
+        // Update projection matrix and aspect
+        let aspect = width as f32 / height as f32;
+        self.ubo_global.set_mat_proj(&perspective(Deg(60.0), aspect, 0.1, 100.0));
+        self.ubo_global.set_vp_aspect(&aspect);
     }
 }
 
