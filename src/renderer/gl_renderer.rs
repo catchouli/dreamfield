@@ -68,6 +68,14 @@ impl GLRenderer {
         let triangle_model = GltfModel::load_gltf(resources::MODEL_TRIANGLE).unwrap();
         let fire_orb_model = GltfModel::load_gltf(resources::MODEL_FIRE_ORB).unwrap();
 
+        // Look for extra fields
+        for drawable in suzanne_model.drawables().iter() {
+            if let Some(extra) = drawable.extras() {
+                let raw = extra.get();
+                println!("Node {} has extras: {:?}", drawable.name(), raw);
+            }
+        }
+
         // Create renderer struct
         let mut renderer = GLRenderer {
            full_screen_rect,

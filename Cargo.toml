@@ -13,7 +13,7 @@ image = "0.24.2"
 tobj = "3.2.3"
 num = "0.4.0"
 rand = "0.8.5"
-gltf = "1.0"
+gltf = { version = "1.0", features = ["extras"] }
 std140 = "0.2.5"
 strum = "0.24.1"
 strum_macros = "0.24.1"

@@ -2,6 +2,7 @@ use gl::types::*;
 use gltf::Semantic;
 use gltf::image::Format;
 use gltf::accessor::DataType;
+use gltf::json::extras::RawValue;
 use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
 use super::bindings;
@@ -18,10 +19,12 @@ pub struct GltfModel {
     transform: Matrix4<f32>
 }
 
-struct GltfDrawable {
+pub struct GltfDrawable {
+    name: String,
     ubo_model: UniformBuffer<ModelParams>,
     mesh: usize,
-    transform: Matrix4<f32>
+    transform: Matrix4<f32>,
+    extras: Option<Box<RawValue>>
 }
 
 struct GltfMesh {
@@ -145,6 +148,11 @@ impl GltfModel {
         self.transform = *transform
     }
 
+    /// Get the drawables list
+    pub fn drawables(&self) -> &Vec<GltfDrawable> {
+        &self.drawables
+    }
+
     /// Load a mesh into a vao
     fn load_mesh(mesh: &gltf::Mesh, buffers: &[u32]) -> GltfMesh {
         // Create primitive VAOs
@@ -262,7 +270,8 @@ impl GltfModel {
             Semantic::Colors(_) => 3,
             Semantic::TexCoords(_) => 2,
             Semantic::Joints(_) => 0,
-            Semantic::Weights(_) => 0
+            Semantic::Weights(_) => 0,
+            Semantic::Extras(_) => 0
         }
     }
 
@@ -275,7 +284,8 @@ impl GltfModel {
             Semantic::Tangents => 4,
             Semantic::Colors(_) => 5,
             Semantic::Joints(_) => 6,
-            Semantic::Weights(_) => 7
+            Semantic::Weights(_) => 7,
+            Semantic::Extras(_) => 8
         }
     }
 
@@ -342,9 +352,11 @@ impl GltfModel {
 
             // Create drawable
             out.push(GltfDrawable {
+                name: mesh.name().unwrap_or("").to_string(),
                 ubo_model,
                 mesh: mesh.index(),
-                transform: world_transform
+                transform: world_transform,
+                extras: node.extras().clone()
             });
         }
 
@@ -359,6 +371,23 @@ impl GltfModel {
         let mut ubo = UniformBuffer::<MaterialParams>::new();
         ubo.set_has_base_color_texture(&mat.pbr_metallic_roughness().base_color_texture().is_some());
         ubo
+    }
+}
+
+impl GltfDrawable {
+    /// Get the name of the drawable
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the transform for this drawable
+    pub fn get_transform(&self) -> &Matrix4<f32> {
+        &self.transform
+    }
+
+    /// Get the extra fields
+    pub fn extras(&self) -> &Option<Box<RawValue>> {
+        &self.extras
     }
 }
 
