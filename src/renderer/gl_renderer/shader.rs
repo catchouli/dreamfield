@@ -172,3 +172,9 @@ impl ShaderProgram {
     }
 }
 
+impl Drop for ShaderProgram {
+    fn drop(&mut self) {
+        println!("Deleting shader program");
+        unsafe { gl::DeleteProgram(self.id) }
+    }
+}
