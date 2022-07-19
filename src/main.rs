@@ -64,7 +64,7 @@ fn main() {
 
         while accumulator >= FIXED_UPDATE_TIME {
             // Simulate game state
-            game_state = game_state.simulate(sim_time, &mut input_events);
+            game_state.simulate(sim_time, &mut input_events);
 
             // Consume accumulated time
             accumulator -= FIXED_UPDATE_TIME;

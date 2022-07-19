@@ -49,17 +49,22 @@ impl GameState {
         }
     }
 
-    pub fn simulate(&self, sim_time: f64, input_events: &mut VecDeque<InputEvent>) -> GameState
-    {
-        // Create new game state
-        let mut new_state = self.clone();
-        new_state.time = sim_time;
+    /// Simulate the game state
+    pub fn simulate(&mut self, sim_time: f64, input_events: &mut VecDeque<InputEvent>) {
+        // Update time
+        self.time = sim_time;
 
         // Handle input events
         while let Some(event) = input_events.pop_back() {
-            self.handle_input_event(&mut new_state, event);
+            self.handle_input_event(event);
         }
 
+        // Simulate camera
+        self.simulate_camera();
+    }
+
+    /// Simulate the camera
+    fn simulate_camera(&mut self) {
         // Update camera
         if self.input_state.cursor_captured {
             let inputs = &self.input_state.inputs;
@@ -86,25 +91,24 @@ impl GameState {
                 _ => 0.0
             };
 
-            new_state.camera.move_camera(forward_cam_movement, right_cam_movement, 0.0);
-            new_state.camera.update();
+            self.camera.move_camera(forward_cam_movement, right_cam_movement, 0.0);
+            self.camera.update();
         }
-
-        new_state
     }
 
-    fn handle_input_event(&self, new_state: &mut GameState, event: InputEvent) {
+    /// Handle an input event
+    fn handle_input_event(&mut self, event: InputEvent) {
         match event {
             InputEvent::CursorMoved(dx, dy) => {
                 if self.input_state.cursor_captured {
-                    new_state.camera.mouse_move(dx as f32, dy as f32);
+                    self.camera.mouse_move(dx as f32, dy as f32);
                 }
             }
             InputEvent::CursorCaptured(captured) => {
-                new_state.input_state.cursor_captured = captured;
+                self.input_state.cursor_captured = captured;
             }
             InputEvent::GameInput(input_name, is_down) => {
-                new_state.input_state.inputs[input_name as usize] = is_down;
+                self.input_state.inputs[input_name as usize] = is_down;
             }
         }
     }
