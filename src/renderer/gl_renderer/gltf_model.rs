@@ -14,7 +14,7 @@ pub struct GltfModel {
     textures: Vec<Texture>,
     meshes: Vec<GltfMesh>,
     drawables: Vec<GltfDrawable>,
-    materials: Vec<UniformBuffer<MaterialParams>>,
+    materials: UniformBuffer<MaterialParams>,
     default_material: UniformBuffer<MaterialParams>
 }
 
@@ -65,7 +65,11 @@ impl GltfModel {
         let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
 
         // Load all materials
-        let materials = doc.materials().map(|mat| Self::load_material(&mat)).collect();
+        let mut materials = UniformBuffer::<MaterialParams>::new_multi(doc.materials().count());
+        for (i, mat) in doc.materials().enumerate() {
+            materials.set_has_base_color_texture_n(i, &mat.pbr_metallic_roughness().base_color_texture().is_some());
+        }
+        materials.upload_all();
 
         // Build list of drawables
         let drawables = {
@@ -79,7 +83,7 @@ impl GltfModel {
         };
 
         // Create default material
-        let default_material = UniformBuffer::<MaterialParams>::new();
+        let default_material = UniformBuffer::<MaterialParams>::new_single();
 
         Ok(GltfModel {
             path: path.to_string(),
@@ -104,10 +108,14 @@ impl GltfModel {
             // Draw
             for primitive in &mesh.primitives {
                 // Bind material ubo
-                primitive.material_index
-                    .map(|mat| &self.materials[mat])
-                    .unwrap_or(&self.default_material)
-                    .bind(bindings::UniformBlockBinding::MaterialParams);
+                let size = std::mem::size_of::<MaterialParams>();
+                println!("material params size {size}");
+                self.materials.bind_n(1, bindings::UniformBlockBinding::MaterialParams);
+                //self.materials.bind(bindings::UniformBlockBinding::MaterialParams);
+                //primitive.material_index
+                    //.map(|mat| &self.materials[mat])
+                    //.unwrap_or(&self.default_material)
+                    //.bind(bindings::UniformBlockBinding::MaterialParams);
 
                 // Bind textures, or unbind if None
                 if let Some(base_color_texture_index) = primitive.base_color_texture {
@@ -331,7 +339,7 @@ impl GltfModel {
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
             // Create UBO
-            let mut ubo_model = UniformBuffer::<ModelParams>::new();
+            let mut ubo_model = UniformBuffer::<ModelParams>::new_single();
             ubo_model.set_mat_model(&world_transform);
             ubo_model.set_mat_normal(&{
                 // https://learnopengl.com/Lighting/Basic-lighting
@@ -352,14 +360,6 @@ impl GltfModel {
             Self::build_drawables_recursive(&child, out, &world_transform);
         }
     }
-
-    /// Load material to a ubo
-    fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
-        let mut ubo = UniformBuffer::<MaterialParams>::new();
-        ubo.set_has_base_color_texture(&mat.pbr_metallic_roughness().base_color_texture().is_some());
-        ubo.upload_changed();
-        ubo
-    }
 }
 
 impl Drop for GltfModel {
@@ -368,7 +368,7 @@ impl Drop for GltfModel {
         // Collect VAOs and buffers, and then delete them
         let vaos: Vec<u32> = self.meshes.iter().flat_map(|mesh| mesh.primitives.iter().map(|prim| prim.vao)).collect();
 
-        println!("Deleting {} VAOs and {} buffers for texture {}", vaos.len(), self.buffers.len(), self.path);
+        println!("Deleting gltf model {} with {} VAOs and {} buffers", self.path, vaos.len(), self.buffers.len());
 
         unsafe {
             gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());

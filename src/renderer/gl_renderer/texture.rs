@@ -85,3 +85,10 @@ impl Texture {
     }
 }
 
+impl Drop for Texture {
+    // Clean up opengl texture
+    fn drop(&mut self) {
+        println!("Deleting texture {}", self.id);
+        unsafe { gl::DeleteTextures(1, &self.id) }
+    }
+}

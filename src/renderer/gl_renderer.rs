@@ -29,10 +29,8 @@ impl GLRenderer {
     /// Create a new GLRenderer
     pub fn new() -> GLRenderer {
         // Create uniform buffers
-        let ubo_global = UniformBuffer::<GlobalParams>::new();
+        let ubo_global = UniformBuffer::<GlobalParams>::new_single();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
-        let ubo_model = UniformBuffer::<ModelParams>::new();
-        ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
 
         // Load shaders
         let sky_rectangle_shader = ShaderProgram::new_from_vf("resources/shaders/sky_rectangle.glsl");
@@ -87,7 +85,7 @@ impl GLRenderer {
             * Matrix4::from_translation(vec3(0.0, 0.0, 7.0));
         let mat_view = mat_cam.invert().unwrap();
 
-        self.ubo_global.set_sim_time(&game_state.time);
+        self.ubo_global.set_sim_time_n(0, &game_state.time);
         self.ubo_global.set_mat_proj(&mat_proj);
         self.ubo_global.set_mat_view(&mat_view);
         self.ubo_global.upload_changed();

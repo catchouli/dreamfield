@@ -3,7 +3,9 @@ use gl::types::*;
 
 /// A mesh
 pub struct Mesh {
-    vao: u32
+    vao: u32,
+    vbo: u32,
+    ebo: Option<u32>
 }
 
 /// A vertex attribute
@@ -20,12 +22,12 @@ impl Mesh {
         let vao = Mesh::create_vao();
 
         // Create and bind buffers
-        Mesh::create_vbo(vertex_buffer);
+        let vbo = Mesh::create_vbo(vertex_buffer);
 
         // Set up buffer layout
         Mesh::set_buffer_layout(buffer_layout);
 
-        Mesh { vao }
+        Mesh { vao, vbo, ebo: None }
     }
 
     /// Create a new Mesh from a vertex buffer and an index buffer
@@ -34,13 +36,13 @@ impl Mesh {
         let vao = Mesh::create_vao();
 
         // Create and bind buffers
-        Mesh::create_vbo(vertex_buffer);
-        Mesh::create_ebo(index_buffer);
+        let vbo = Mesh::create_vbo(vertex_buffer);
+        let ebo = Mesh::create_ebo(index_buffer);
 
         // Set up buffer layout
         Mesh::set_buffer_layout(buffer_layout);
 
-        Mesh { vao }
+        Mesh { vao, vbo, ebo: Some(ebo) }
     }
 
     /// Draw the mesh non-indexed
@@ -125,3 +127,19 @@ impl Mesh {
     }
 }
 
+impl Drop for Mesh {
+    /// Clean up opengl buffers
+    fn drop(&mut self) {
+        unsafe {
+            let ebo_str = self.ebo.map(|ebo| ebo.to_string()).unwrap_or("None".to_string());
+            println!("Deleting mesh (vao={}, vbo={}, ebo={})", self.vao, self.vbo, ebo_str);
+
+            gl::DeleteVertexArrays(1, &self.vao);
+            gl::DeleteBuffers(1, &self.vbo);
+
+            if let Some(ebo) = &self.ebo {
+                gl::DeleteBuffers(1, ebo);
+            }
+        }
+    }
+}

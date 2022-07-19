@@ -1,8 +1,8 @@
 extern crate proc_macro;
 extern crate syn;
 
-use proc_macro::{TokenStream};
-use quote::{quote};
+use proc_macro::TokenStream;
+use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Ident};
 
 struct UniformField<'a> {
@@ -40,13 +40,9 @@ pub fn uniform_setters_derive(input: TokenStream) -> TokenStream {
         let field_size = get_field_size_std140(field);
         let field_alignment = get_field_alignment_std140(field);
 
-        if cur_offset % field_alignment != 0 {
-            cur_offset += field_alignment - (cur_offset % field_alignment);
-        }
+        let field_offset = align(cur_offset, field_alignment);
 
-        let field_offset = cur_offset;
-
-        cur_offset += field_size;
+        cur_offset = field_offset + field_size;
 
         field_offset
     }).collect();
@@ -54,8 +50,12 @@ pub fn uniform_setters_derive(input: TokenStream) -> TokenStream {
     // Calculate field ends, include padding up to next field so we can combine uploads.
     // We can do that just by taking the next element from field_offsets, and adding the final
     // offset to the end.
-    let mut field_ends: Vec<&usize> = field_offsets.iter().skip(1).collect();
-    field_ends.push(&cur_offset);
+    let mut field_ends: Vec<usize> = field_offsets.iter().skip(1).cloned().collect();
+    field_ends.push(cur_offset);
+
+    // Get first field alignment and calculate element alignment
+    let first_field_alignment = get_field_alignment_std140(fields.first().unwrap());
+    let element_alignment = align(cur_offset, first_field_alignment);
 
     // Generate setter for each field
     for (i, field) in fields.iter().enumerate() {
@@ -70,11 +70,21 @@ pub fn uniform_setters_derive(input: TokenStream) -> TokenStream {
         let setter_name_str = format!("set_{}", &field.ident);
         let setter_name = Ident::new(&setter_name_str, field.ident.span());
 
+        let multi_setter_name_str = format!("set_{}_n", &field.ident);
+        let multi_setter_name = Ident::new(&multi_setter_name_str, field.ident.span());
+
         setters_impl.extend(quote! {
             impl UniformBuffer<#name> {
                 pub fn #setter_name<T: ToStd140<#field_type>>(&mut self, val: &T) {
-                    self.data.#field_name = val.to_std140();
+                    self.data[0].#field_name = val.to_std140();
                     self.modified_ranges.insert(#field_offset..#field_end);
+                }
+
+                pub fn #multi_setter_name<T: ToStd140<#field_type>>(&mut self, idx: usize, val: &T) {
+                    let offset = idx * #element_alignment;
+                    let end = offset - #field_offset + #field_end;
+                    self.data[idx].#field_name = val.to_std140();
+                    self.modified_ranges.insert(offset..end);
                 }
             }
         });
@@ -170,3 +180,12 @@ fn get_type_alignment_std140(ident: &Ident) -> usize {
     }
 }
 
+/// Align to byte alignment
+fn align(offset: usize, alignment: usize) -> usize {
+    if offset % alignment == 0 {
+        offset
+    }
+    else {
+        offset + alignment - (offset % alignment)
+    }
+}
