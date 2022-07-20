@@ -35,8 +35,6 @@ impl GLRenderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
-        let mut ubo_model = UniformBuffer::<ModelParams>::new();
-        ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
 
         // Load shaders
         let sky_shader = ShaderProgram::new_from_vf(resources::SHADER_SKY);
@@ -64,9 +62,9 @@ impl GLRenderer {
             .expect("Failed to load sky texture");
 
         // Load models
-        let suzanne_model = GltfModel::load_gltf(resources::MODEL_SUZANNE).unwrap();
-        let triangle_model = GltfModel::load_gltf(resources::MODEL_TRIANGLE).unwrap();
-        let fire_orb_model = GltfModel::load_gltf(resources::MODEL_FIRE_ORB).unwrap();
+        let suzanne_model = GltfModel::from_buf(resources::MODEL_SUZANNE).unwrap();
+        let triangle_model = GltfModel::from_buf(resources::MODEL_TRIANGLE).unwrap();
+        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Look for extra fields
         for drawable in suzanne_model.drawables().iter() {
@@ -102,7 +100,7 @@ impl GLRenderer {
         }
 
         self.ubo_global.set_sim_time(&(game_state.time as f32));
-        self.ubo_global.set_mat_view(&game_state.camera.get_view_matrix());
+        self.ubo_global.set_mat_view_derive(&game_state.camera.get_view_matrix());
         self.ubo_global.upload_changed();
 
         // Draw background
@@ -114,10 +112,10 @@ impl GLRenderer {
 
         // Draw glfw models
         self.pbr_shader.use_program();
-        self.suzanne_model.render();
-        self.triangle_model.render();
+        self.suzanne_model.render(&mut self.ubo_global);
+        self.triangle_model.render(&mut self.ubo_global);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.time as f32, 0.0)));
-        self.fire_orb_model.render();
+        self.fire_orb_model.render(&mut self.ubo_global);
     }
 
     /// Update the viewport

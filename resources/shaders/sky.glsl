@@ -26,15 +26,12 @@ in vec2 var_uv;
 out vec4 out_frag_color;
 
 vec3 calc_ray_dir() {
-    mat4 view_proj = mat_proj * mat_view;
-    mat4 view_proj_inv = inverse(view_proj);
-
     vec2 pos = var_uv * 2.0 - 1.0;
 
-    vec4 v = view_proj_inv * vec4(pos, -1.0, 1.0);
+    vec4 v = mat_view_proj_inv * vec4(pos, -1.0, 1.0);
     vec3 start = v.xyz / v.w;
 
-    v = view_proj_inv * vec4(pos, 0.0, 1.0);
+    v = mat_view_proj_inv * vec4(pos, 0.0, 1.0);
     vec3 end = v.xyz / v.w;
 
     return normalize(end - start);

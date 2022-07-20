@@ -4,7 +4,7 @@ use gltf::image::Format;
 use gltf::accessor::DataType;
 use gltf::json::extras::RawValue;
 use super::texture::{Texture, TextureParams};
-use super::uniform_buffer::{UniformBuffer, ModelParams, MaterialParams};
+use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::bindings;
 use cgmath::{SquareMatrix, Matrix4};
 
@@ -21,7 +21,6 @@ pub struct GltfModel {
 
 pub struct GltfDrawable {
     name: String,
-    ubo_model: UniformBuffer<ModelParams>,
     mesh: usize,
     transform: Matrix4<f32>,
     extras: Option<Box<RawValue>>
@@ -40,9 +39,9 @@ struct GltfMeshPrimitive {
 }
 
 impl GltfModel {
-    /// Load a model from a gltf file
+    /// Load a model from a gltf file embedded in a buffer
     /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
-    pub fn load_gltf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
+    pub fn from_buf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
         let (doc, buffer_data, image_data) = gltf::import_slice(data)?;
 
         // Load all buffers
@@ -96,15 +95,18 @@ impl GltfModel {
     }
 
     /// Render a model
-    pub fn render(&mut self) {
+    pub fn render(&mut self, ubo_global: &mut UniformBuffer<GlobalParams>) {
+        ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
+
         // Render all prims
         for drawable in self.drawables.iter_mut() {
             let mesh = &mut self.meshes[drawable.mesh];
 
             // Calculate world transform of drawable and bind model mat
             let model_mat = self.transform * drawable.transform;
-            drawable.ubo_model.set_matrices(&model_mat);
-            drawable.ubo_model.bind(bindings::UniformBlockBinding::ModelParams);
+            ubo_global.set_mat_model_derive(&model_mat);
+            //ubo_global.upload_changed();
+            ubo_global.upload_all();
 
             // Draw
             for primitive in mesh.primitives.iter_mut() {
@@ -347,13 +349,9 @@ impl GltfModel {
 
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
-            // Create UBO
-            let ubo_model = UniformBuffer::<ModelParams>::new();
-
             // Create drawable
             out.push(GltfDrawable {
                 name: mesh.name().unwrap_or("").to_string(),
-                ubo_model,
                 mesh: mesh.index(),
                 transform: world_transform,
                 extras: node.extras().clone()

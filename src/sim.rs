@@ -34,7 +34,7 @@ impl GameState {
     /// Create a new, default game state
     pub fn new() -> GameState {
         // Create camera
-        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 0.0, 10.0), 0.0, 0.0, CAM_LOOK_SPEED);
+        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), 0.0, 0.0, CAM_LOOK_SPEED);
 
         // Create input state
         let input_state = InputState {

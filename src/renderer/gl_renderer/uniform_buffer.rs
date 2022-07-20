@@ -1,5 +1,5 @@
 use super::bindings;
-use super::to_std140::ToStd140;
+use super::to_std140::{ToStd140, FromStd140};
 use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
@@ -84,49 +84,60 @@ impl<T: Default + UniformSetters> Drop for UniformBuffer<T> {
 #[std140::repr_std140]
 #[derive(UniformSetters)]
 pub struct GlobalParams {
-    pub sim_time: std140::float,
     pub mat_proj: std140::mat4x4,
     pub mat_view: std140::mat4x4,
+    pub mat_view_proj: std140::mat4x4,
+    pub mat_view_proj_inv: std140::mat4x4,
+    pub mat_model: std140::mat4x4,
+    pub mat_model_view_proj: std140::mat4x4,
+    pub mat_normal: std140::mat3x3,
+    pub sim_time: std140::float,
     pub vp_aspect: std140::float
 }
 
 impl Default for GlobalParams {
     fn default() -> Self {
         GlobalParams {
-            sim_time: (0.0).to_std140(),
             mat_proj: Matrix4::identity().to_std140(),
             mat_view: Matrix4::identity().to_std140(),
+            mat_view_proj: Matrix4::identity().to_std140(),
+            mat_view_proj_inv: Matrix4::identity().to_std140(),
+            mat_model: Matrix4::identity().to_std140(),
+            mat_model_view_proj: Matrix4::identity().to_std140(),
+            mat_normal: Matrix3::identity().to_std140(),
+            sim_time: (0.0).to_std140(),
             vp_aspect: (1.0).to_std140()
         }
     }
 }
 
-/// Object render params
-#[std140::repr_std140]
-#[derive(UniformSetters)]
-pub struct ModelParams {
-    pub mat_model: std140::mat4x4,
-    pub mat_normal: std140::mat3x3
-}
+impl UniformBuffer<GlobalParams> {
+    /// Set the view and projection matrices, and also derive any other matrices as needed. Note
+    /// that the projection matrix must be set first.
+    pub fn set_mat_view_derive(&mut self, view: &Matrix4<f32>) {
+        let proj = self.data.mat_proj.from_std140();
+        let view_proj = proj * view;
+        let view_proj_inv = view_proj.invert().unwrap();
 
-impl Default for ModelParams {
-    fn default() -> Self {
-        ModelParams {
-            mat_model: Matrix4::identity().to_std140(),
-            mat_normal: Matrix3::identity().to_std140()
-        }
+        self.set_mat_view(view);
+        self.set_mat_view_proj(&view_proj);
+        self.set_mat_view_proj_inv(&view_proj_inv);
     }
-}
 
-impl UniformBuffer<ModelParams> {
-    /// Helper function for setting the model matrix and automatically deriving the normal matrix
-    pub fn set_matrices(&mut self, model: &Matrix4<f32>) {
+    /// Set the model matrix, and also derive any other matrices as needed. Note that the
+    /// projection and view matrices must be set first.
+    pub fn set_mat_model_derive(&mut self, model: &Matrix4<f32>) {
+        let proj = self.data.mat_proj.from_std140();
+        let view = self.data.mat_view.from_std140();
+        let model_view_proj = proj * view * model;
+
         self.set_mat_model(model);
         self.set_mat_normal(&{
             // https://learnopengl.com/Lighting/Basic-lighting
             let v = model.invert().unwrap().transpose();
             Matrix3::from_cols(v.x.truncate(), v.y.truncate(), v.z.truncate())
         });
+        self.set_mat_model_view_proj(&model_view_proj);
     }
 }
 

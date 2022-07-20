@@ -1,15 +1,14 @@
 layout (std140) uniform GlobalParams
 {
-    float sim_time;
     mat4 mat_proj;
     mat4 mat_view;
-    float vp_aspect;
-};
-
-layout (std140) uniform ModelParams
-{
+    mat4 mat_view_proj;
+    mat4 mat_view_proj_inv;
     mat4 mat_model;
+    mat4 mat_model_view_proj;
     mat3 mat_normal;
+    float sim_time;
+    float vp_aspect;
 };
 
 layout (std140) uniform MaterialParams
