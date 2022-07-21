@@ -3,10 +3,13 @@ use gltf::Semantic;
 use gltf::image::Format;
 use gltf::accessor::DataType;
 use gltf::json::extras::RawValue;
+use gltf::khr_lights_punctual::Kind;
 use super::texture::{Texture, TextureParams};
-use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
+use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams, LightParams, Light};
 use super::bindings;
-use cgmath::{SquareMatrix, Matrix4};
+use super::lights::LightType;
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4};
+use super::to_std140::*;
 
 /// A gltf model
 pub struct GltfModel {
@@ -14,7 +17,9 @@ pub struct GltfModel {
     textures: Vec<Texture>,
     meshes: Vec<GltfMesh>,
     drawables: Vec<GltfDrawable>,
+    lights: Vec<GltfLight>,
     materials: Vec<UniformBuffer<MaterialParams>>,
+    ubo_lights: Option<UniformBuffer<LightParams>>,
     default_material: UniformBuffer<MaterialParams>,
     transform: Matrix4<f32>
 }
@@ -24,6 +29,17 @@ pub struct GltfDrawable {
     mesh: usize,
     transform: Matrix4<f32>,
     extras: Option<Box<RawValue>>
+}
+
+pub struct GltfLight {
+    light_type: LightType,
+    light_pos: Vector3<f32>,
+    light_dir: Vector3<f32>,
+    color: Vector3<f32>,
+    intensity: f32,
+    range: Option<f32>,
+    inner_cone_angle: Option<f32>,
+    outer_cone_angle: Option<f32>
 }
 
 struct GltfMesh {
@@ -69,15 +85,43 @@ impl GltfModel {
         // Load all materials
         let materials = doc.materials().map(|mat| Self::load_material(&mat)).collect();
 
-        // Build list of drawables
-        let drawables = {
+        // Build scene drawables and lights
+        let (drawables, lights) = {
             let mut drawables: Vec<GltfDrawable> = Vec::new();
+            let mut lights: Vec<GltfLight> = Vec::new();
+
             for scene in doc.scenes() {
                 for node in scene.nodes() {
-                    Self::build_drawables_recursive(&node, &mut drawables, &Matrix4::identity());
+                    Self::build_scene_recursive(&node, &Matrix4::identity(), &mut drawables, &mut lights);
                 }
             }
-            drawables
+
+            (drawables, lights)
+        };
+
+        // Load all lights
+        let ubo_lights = match lights.len() {
+            0 => None,
+            _ => {
+                let mut ubo_lights = UniformBuffer::new();
+
+                for (i, light) in lights.iter().enumerate() {
+                    let light_range = light.range.unwrap_or(0.0);
+                    ubo_lights.set_lights(i, &Light {
+                        enabled: true.to_std140(),
+                        light_pos: light.light_pos.to_std140(),
+                        light_dir: light.light_dir.to_std140(),
+                        light_type: (light.light_type as i32).to_std140(),
+                        color: vec3(light.color.x, light.color.y, light.color.z).to_std140(),
+                        intensity: light.intensity.to_std140(),
+                        range: light_range.to_std140(),
+                        inner_cone_angle: light.inner_cone_angle.unwrap_or(0.0).to_std140(),
+                        outer_cone_angle: light.outer_cone_angle.unwrap_or(0.0).to_std140()
+                    });
+                }
+
+                Some(ubo_lights)
+            }
         };
 
         // Create default material
@@ -88,7 +132,9 @@ impl GltfModel {
             textures,
             meshes,
             drawables,
+            lights,
             materials,
+            ubo_lights,
             default_material,
             transform: SquareMatrix::identity()
         })
@@ -98,6 +144,11 @@ impl GltfModel {
     pub fn render(&mut self, ubo_global: &mut UniformBuffer<GlobalParams>) {
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
+        // Bind lights if the model has any
+        if let Some(ubo_lights) = &mut self.ubo_lights {
+            ubo_lights.bind(bindings::UniformBlockBinding::LightParams);
+        }
+
         // Render all prims
         for drawable in self.drawables.iter_mut() {
             let mesh = &mut self.meshes[drawable.mesh];
@@ -105,8 +156,7 @@ impl GltfModel {
             // Calculate world transform of drawable and bind model mat
             let model_mat = self.transform * drawable.transform;
             ubo_global.set_mat_model_derive(&model_mat);
-            //ubo_global.upload_changed();
-            ubo_global.upload_all();
+            ubo_global.upload_changed();
 
             // Draw
             for primitive in mesh.primitives.iter_mut() {
@@ -342,15 +392,42 @@ impl GltfModel {
     }
 
     /// Build the list of drawables recursively
-    fn build_drawables_recursive(node: &gltf::Node, out: &mut Vec<GltfDrawable>, parent_world_transform: &Matrix4<f32>) {
+    fn build_scene_recursive(node: &gltf::Node, parent_world_transform: &Matrix4<f32>,
+        out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
+    {
+        const WORLD_FORWARD: Vector4<f32> = vec4(0.0, 0.0, -1.0, 0.0);
+
         // Calculate world transform
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
         let world_transform = parent_world_transform * local_transform;
 
+        if let Some(light) = node.light() {
+            let light_pos = vec3(world_transform[3][0], world_transform[3][1], world_transform[3][2]);
+            let light_dir = (world_transform * WORLD_FORWARD).truncate();
+
+            let (light_type, inner_cone_angle, outer_cone_angle) = match light.kind() {
+                Kind::Directional => (LightType::DirectionalLight, None, None),
+                Kind::Point => (LightType::PointLight, None, None),
+                Kind::Spot { inner_cone_angle, outer_cone_angle } =>
+                    (LightType::SpotLight, Some(inner_cone_angle), Some(outer_cone_angle))
+            };
+
+            out_lights.push(GltfLight {
+                light_type,
+                light_pos,
+                light_dir,
+                color: Vector3::from(light.color()),
+                intensity: light.intensity(),
+                range: light.range(),
+                inner_cone_angle,
+                outer_cone_angle
+            });
+        }
+
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
             // Create drawable
-            out.push(GltfDrawable {
+            out_drawables.push(GltfDrawable {
                 name: mesh.name().unwrap_or("").to_string(),
                 mesh: mesh.index(),
                 transform: world_transform,
@@ -360,7 +437,7 @@ impl GltfModel {
 
         // Recurse into children
         for child in node.children() {
-            Self::build_drawables_recursive(&child, out, &world_transform);
+            Self::build_scene_recursive(&child, &world_transform, out_drawables, out_lights);
         }
     }
 

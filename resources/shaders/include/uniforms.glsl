@@ -15,3 +15,30 @@ layout (std140) uniform MaterialParams
 {
     bool has_base_color_texture;
 };
+
+#define LIGHT_COUNT 20
+#define POINT_LIGHT 0
+#define DIRECTIONAL_LIGHT 1
+#define SPOT_LIGHT 2
+
+struct Light
+{
+    bool enabled;
+    int light_type;
+
+    float intensity;
+    float range;
+
+    float inner_cone_angle;
+    float outer_cone_angle;
+
+    vec3 color;
+    vec3 light_dir;
+    vec3 light_pos;
+};
+
+layout (std140) uniform LightParams
+{
+    vec3 ambient_light;
+    Light lights[LIGHT_COUNT];
+};

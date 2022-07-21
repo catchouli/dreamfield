@@ -1,15 +1,17 @@
 use super::bindings;
 use super::to_std140::{ToStd140, FromStd140};
-use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix};
+use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
 use rangemap::RangeSet;
 use gl::types::*;
+use super::lights::LIGHT_COUNT;
 
 /// Uniform buffer wrapper
 pub struct UniformBuffer<T: Default + UniformSetters> {
     ubo: u32,
     data: T,
+    field_offsets: Vec<(usize, usize)>,
     modified_ranges: RangeSet<usize>
 }
 
@@ -27,9 +29,25 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
                            gl::STATIC_DRAW);
         }
 
+        // Calculate field offsets and lengths for uniform setters
+        let field_offsets = {
+            let field_sizes: Vec<usize> = T::calculate_field_offsets();
+
+            let mut cur_offset: usize = 0;
+            let mut vec: Vec<(usize, usize)> = Vec::with_capacity(field_sizes.len());
+
+            for field_size in field_sizes {
+                vec.push((cur_offset, cur_offset + field_size));
+                cur_offset += field_size;
+            }
+
+            vec
+        };
+
         let uniform_buffer = UniformBuffer::<T> {
             ubo,
             data: Default::default(),
+            field_offsets,
             modified_ranges: RangeSet::new()
         };
 
@@ -156,3 +174,53 @@ impl Default for MaterialParams {
     }
 }
 
+/// Light params
+#[std140::repr_std140]
+#[derive(UniformSetters)]
+pub struct LightParams {
+    pub ambient_light: std140::vec3,
+    pub lights: std140::array<Light, 20>
+}
+
+#[std140::repr_std140]
+#[derive(Copy, Clone)]
+pub struct Light {
+    pub enabled: std140::boolean,
+    pub light_type: std140::int,
+
+    pub intensity: std140::float,
+    pub range: std140::float,
+
+    pub inner_cone_angle: std140::float,
+    pub outer_cone_angle: std140::float,
+
+    pub color: std140::vec3,
+    pub light_dir: std140::vec3,
+    pub light_pos: std140::vec3
+}
+
+impl Default for LightParams {
+    fn default() -> Self {
+        let light_default = Default::default();
+        LightParams {
+            ambient_light: vec3(1.0, 1.0, 1.0).to_std140(),
+            lights: [light_default; LIGHT_COUNT].to_std140()
+        }
+    }
+}
+
+impl Default for Light {
+    fn default() -> Self {
+        Light {
+            enabled: false.to_std140(),
+            light_type: 1.to_std140(),
+            light_pos: vec3(0.0, 0.0, 0.0).to_std140(),
+            light_dir: vec3(0.0, 0.0, 0.0).to_std140(),
+            color: vec3(0.0, 0.0, 0.0).to_std140(),
+            intensity: (0.0).to_std140(),
+            range: (0.0).to_std140(),
+            inner_cone_angle: (0.0).to_std140(),
+            outer_cone_angle: (0.0).to_std140()
+        }
+    }
+}

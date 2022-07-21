@@ -21,6 +21,20 @@ impl FromStd140<bool> for std140::boolean {
     }
 }
 
+impl ToStd140<std140::int> for i32 {
+    fn to_std140(&self) -> std140::int {
+        std140::int(*self)
+    }
+}
+
+impl FromStd140<i32> for std140::int {
+    fn from_std140(&self) -> i32 {
+        match self {
+            std140::int(val) => *val
+        }
+    }
+}
+
 impl ToStd140<std140::float> for f32 {
     fn to_std140(&self) -> std140::float {
         std140::float(*self)
@@ -71,15 +85,10 @@ impl ToStd140<std140::mat3x3> for cgmath::Matrix3<f32> {
 
 impl FromStd140<cgmath::Matrix3<f32>> for std140::mat3x3 {
     fn from_std140(&self) -> cgmath::Matrix3<f32> {
-        unsafe {
-            // Bit ugly and unsafe, we can't get the actual values because they're private
-            // annoyingly so we have to transmute it to a regular array type.
-            let arr: [std140::ArrayElementWrapper<std140::vec3>; 3] = std::mem::transmute(*self);
-            cgmath::Matrix3::from_cols(
-                arr[0].element.from_std140(),
-                arr[1].element.from_std140(),
-                arr[2].element.from_std140())
-        }
+        cgmath::Matrix3::from_cols(
+            self.internal[0].element.from_std140(),
+            self.internal[1].element.from_std140(),
+            self.internal[2].element.from_std140())
     }
 }
 
@@ -91,16 +100,16 @@ impl ToStd140<std140::mat4x4> for cgmath::Matrix4<f32> {
 
 impl FromStd140<cgmath::Matrix4<f32>> for std140::mat4x4 {
     fn from_std140(&self) -> cgmath::Matrix4<f32> {
-        unsafe {
-            // Bit ugly and unsafe, we can't get the actual values because they're private
-            // annoyingly so we have to transmute it to a regular array type.
-            let arr: [std140::ArrayElementWrapper<std140::vec4>; 4] = std::mem::transmute(*self);
-            cgmath::Matrix4::from_cols(
-                arr[0].element.from_std140(),
-                arr[1].element.from_std140(),
-                arr[2].element.from_std140(),
-                arr[3].element.from_std140())
-        }
+        cgmath::Matrix4::from_cols(
+            self.internal[0].element.from_std140(),
+            self.internal[1].element.from_std140(),
+            self.internal[2].element.from_std140(),
+            self.internal[3].element.from_std140())
     }
 }
 
+impl<T: std140::Std140Struct + Copy, const N: usize> ToStd140<std140::array<T, N>> for [T; N] {
+    fn to_std140(&self) -> std140::array<T, N> {
+        std140::array::from_wrapped(self.map(|ele| std140::ArrayElementWrapper { element: ele }))
+    }
+}

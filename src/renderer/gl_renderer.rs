@@ -6,6 +6,7 @@ pub mod gltf_model;
 pub mod to_std140;
 pub mod bindings;
 pub mod resources;
+pub mod lights;
 
 use cgmath::*;
 
@@ -23,8 +24,7 @@ pub struct GLRenderer {
     sky_shader: ShaderProgram,
     pbr_shader: ShaderProgram,
     sky_texture: Texture,
-    suzanne_model: GltfModel,
-    triangle_model: GltfModel,
+    demo_scene_model: GltfModel,
     fire_orb_model: GltfModel,
     ubo_global: UniformBuffer<GlobalParams>
 }
@@ -62,12 +62,11 @@ impl GLRenderer {
             .expect("Failed to load sky texture");
 
         // Load models
-        let suzanne_model = GltfModel::from_buf(resources::MODEL_SUZANNE).unwrap();
-        let triangle_model = GltfModel::from_buf(resources::MODEL_TRIANGLE).unwrap();
+        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
         let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Look for extra fields
-        for drawable in suzanne_model.drawables().iter() {
+        for drawable in demo_scene_model.drawables().iter() {
             if let Some(extra) = drawable.extras() {
                 let raw = extra.get();
                 println!("Node {} has extras: {:?}", drawable.name(), raw);
@@ -80,8 +79,7 @@ impl GLRenderer {
            sky_shader,
            pbr_shader,
            sky_texture,
-           suzanne_model,
-           triangle_model,
+           demo_scene_model,
            fire_orb_model,
            ubo_global
         };
@@ -99,6 +97,7 @@ impl GLRenderer {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+        // Update global params
         self.ubo_global.set_sim_time(&(game_state.time as f32));
         self.ubo_global.set_mat_view_derive(&game_state.camera.get_view_matrix());
         self.ubo_global.upload_changed();
@@ -112,8 +111,7 @@ impl GLRenderer {
 
         // Draw glfw models
         self.pbr_shader.use_program();
-        self.suzanne_model.render(&mut self.ubo_global);
-        self.triangle_model.render(&mut self.ubo_global);
+        self.demo_scene_model.render(&mut self.ubo_global);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.time as f32, 0.0)));
         self.fire_orb_model.render(&mut self.ubo_global);
     }

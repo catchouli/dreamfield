@@ -902,8 +902,7 @@ dependencies = [
 [[package]]
 name = "std140"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d52c6ee297f4ee912194106bbc27d065be2d323e1ecf0fb49ab6565494b279a5"
+source = "git+https://github.com/catchouli/std140.rs#a4d8bc160f8ebe2748bb2418ce0049d796fa1875"
 dependencies = [
  "std140-macros",
 ]

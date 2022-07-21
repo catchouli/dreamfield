@@ -34,6 +34,7 @@ fn main() {
 
     // The input state
     let mut input_events = VecDeque::<InputEvent>::new();
+
     // The game state
     let mut game_state = GameState::new();
 

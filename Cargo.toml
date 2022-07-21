@@ -13,8 +13,8 @@ image = "0.24.2"
 tobj = "3.2.3"
 num = "0.4.0"
 rand = "0.8.5"
-gltf = { version = "1.0", features = ["extras"] }
-std140 = "0.2.5"
+gltf = { version = "1.0", features = ["extras", "names", "KHR_lights_punctual"] }
+std140 = { git = "https://github.com/catchouli/std140.rs" }
 strum = "0.24.1"
 strum_macros = "0.24.1"
 rangemap = "1.0.3"
