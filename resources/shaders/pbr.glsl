@@ -9,6 +9,7 @@ layout (location = 0) in vec3 in_pos;
 layout (location = 1) in vec3 in_nrm;
 layout (location = 3) in vec2 in_uv;
 
+out float var_dist;
 out vec3 var_pos;
 out vec3 var_nrm;
 out vec2 var_uv;
@@ -20,6 +21,7 @@ void main() {
     var_nrm = normalize(mat_normal * in_nrm);
     var_uv = in_uv;
     gl_Position = mat_model_view_proj * vec4(in_pos.x, in_pos.y, in_pos.z, 1.0);
+    var_dist = length(gl_Position);
 }
 
 #endif
@@ -28,6 +30,7 @@ void main() {
 
 uniform sampler2D tex_base_color;
 
+in float var_dist;
 in vec3 var_pos;
 in vec3 var_nrm;
 in vec2 var_uv;
@@ -71,6 +74,13 @@ void main() {
 
     vec3 out_color = light * base_color;
     out_color = min(out_color, vec3(1.0));
+
+    // fog
+    float fog_factor = fog_dist.y > 0.0 ?
+        clamp((var_dist-fog_dist.x)/(fog_dist.y-fog_dist.x), 0.0, 1.0)
+        : 0.0;
+
+    out_color = (out_color * (1.0 - fog_factor)) + (fog_color * fog_factor);
 
     out_frag_color = vec4(out_color, 1.0);
 }

@@ -1,6 +1,6 @@
 use super::bindings;
 use super::to_std140::{ToStd140, FromStd140};
-use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3};
+use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3, vec2};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
 use rangemap::RangeSet;
@@ -110,7 +110,9 @@ pub struct GlobalParams {
     pub mat_model_view_proj: std140::mat4x4,
     pub mat_normal: std140::mat3x3,
     pub sim_time: std140::float,
-    pub vp_aspect: std140::float
+    pub vp_aspect: std140::float,
+    pub fog_color: std140::vec3,
+    pub fog_dist: std140::vec2
 }
 
 impl Default for GlobalParams {
@@ -124,7 +126,9 @@ impl Default for GlobalParams {
             mat_model_view_proj: Matrix4::identity().to_std140(),
             mat_normal: Matrix3::identity().to_std140(),
             sim_time: (0.0).to_std140(),
-            vp_aspect: (1.0).to_std140()
+            vp_aspect: (1.0).to_std140(),
+            fog_color: vec3(0.0, 0.0, 0.0).to_std140(),
+            fog_dist: vec2(0.0, 0.0).to_std140()
         }
     }
 }

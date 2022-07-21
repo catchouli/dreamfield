@@ -49,6 +49,20 @@ impl FromStd140<f32> for std140::float {
     }
 }
 
+impl ToStd140<std140::vec2> for cgmath::Vector2<f32> {
+    fn to_std140(&self) -> std140::vec2 {
+        std140::vec2(self.x, self.y)
+    }
+}
+
+impl FromStd140<cgmath::Vector2<f32>> for std140::vec2 {
+    fn from_std140(&self) -> cgmath::Vector2<f32> {
+        match self {
+            std140::vec2(x, y) => cgmath::vec2(*x, *y)
+        }
+    }
+}
+
 impl ToStd140<std140::vec3> for cgmath::Vector3<f32> {
     fn to_std140(&self) -> std140::vec3 {
         std140::vec3(self.x, self.y, self.z)

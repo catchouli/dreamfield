@@ -34,6 +34,10 @@ impl GLRenderer {
     pub fn new(width: i32, height: i32) -> GLRenderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
+        ubo_global.set_fog_color(&vec3(0.05, 0.05, 0.05));
+        ubo_global.set_fog_dist(&vec2(5.0, 20.0));
+        // TODO: shouldn't be needed
+        ubo_global.upload_all();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
         // Load shaders

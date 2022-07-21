@@ -7,8 +7,12 @@ layout (std140) uniform GlobalParams
     mat4 mat_model;
     mat4 mat_model_view_proj;
     mat3 mat_normal;
+
     float sim_time;
     float vp_aspect;
+
+    vec3 fog_color;
+    vec2 fog_dist;
 };
 
 layout (std140) uniform MaterialParams
