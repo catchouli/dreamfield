@@ -116,7 +116,7 @@ impl GLRenderer {
         // Draw glfw models
         self.pbr_shader.use_program();
         self.demo_scene_model.render(&mut self.ubo_global);
-        self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.time as f32, 0.0)));
+        self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.ball_pos, 0.0)));
         self.fire_orb_model.render(&mut self.ubo_global);
     }
 

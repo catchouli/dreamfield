@@ -46,7 +46,7 @@ impl FpsCamera {
 
     /// Make a new fps camera at the specified position and orientation
     pub fn new_with_pos_rot(pos: Vector3<f32>, pitch: f32, yaw: f32, look_speed: f32) -> Self {
-        FpsCamera {
+        let mut cam = FpsCamera {
             look_speed,
             pos,
             pitch,
@@ -59,7 +59,11 @@ impl FpsCamera {
                 right: vec3(-1.0, 0.0, 1.0)
             },
             dirty: true
-        }
+        };
+
+        cam.update_matrices();
+
+        cam
     }
 
     /// Get forward vector

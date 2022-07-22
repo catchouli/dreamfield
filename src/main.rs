@@ -1,15 +1,15 @@
 pub mod renderer;
 pub mod system;
 pub mod sim;
+pub mod rewindable_game_state;
 
 use std::collections::VecDeque;
 
 use glfw::{Action, Context, Key};
 use system::glfw_system::Window;
-use sim::{GameState, input::{InputEvent, InputName}};
+use sim::{GameState, input::{InputEvent, InputName, InputState}};
 use renderer::gl_renderer::GLRenderer;
-
-use crate::renderer::camera::Camera;
+use rewindable_game_state::RewindableGameState;
 
 /// The width of the window
 const WINDOW_WIDTH: u32 = 1024 * 2;
@@ -36,7 +36,7 @@ fn main() {
     let mut input_events = VecDeque::<InputEvent>::new();
 
     // The game state
-    let mut game_state = GameState::new();
+    let mut game_state = RewindableGameState::<GameState>::new();
 
     // Fixed timestep - https://gafferongames.com/post/fix_your_timestep/
     let mut current_time = window.glfw.get_time();
@@ -45,6 +45,9 @@ fn main() {
 
     // Mouse movement
     let (mut mouse_x, mut mouse_y) = window.window.get_cursor_pos();
+
+    // Input state
+    let mut input_state = InputState::new();
 
     // Start main loop
     while !window.window.should_close() {
@@ -56,6 +59,11 @@ fn main() {
         // Handle mouse movement
         (mouse_x, mouse_y) = handle_mouse_movement(&window, (mouse_x, mouse_y), &mut input_events);
 
+        // Update input state
+        for event in input_events.iter() {
+            handle_input_event(*event, &mut input_state)
+        }
+
         // Fixed timestep
         let new_time = window.glfw.get_time();
         let frame_time = new_time - current_time;
@@ -65,7 +73,7 @@ fn main() {
 
         while accumulator >= FIXED_UPDATE_TIME {
             // Simulate game state
-            game_state.simulate(sim_time, &mut input_events);
+            game_state.simulate(sim_time, &input_state);
 
             // Consume accumulated time
             accumulator -= FIXED_UPDATE_TIME;
@@ -73,8 +81,7 @@ fn main() {
         }
 
         // Render
-        game_state.camera.update();
-        renderer.render(&mut game_state);
+        renderer.render(game_state.cur_state());
         window.window.swap_buffers();
     }
 }
@@ -103,13 +110,13 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
             }
         }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
-            if let Some(game_input) = map_game_inputs_key(key, true) {
-                input_events.push_back(game_input);
+            if let Some(input) = map_game_inputs_key(key) {
+                input_events.push_back(InputEvent::GameInput(input, true));
             }
         }
         glfw::WindowEvent::Key(key, _, Action::Release, _) => {
-            if let Some(game_input) = map_game_inputs_key(key, false) {
-                input_events.push_back(game_input);
+            if let Some(input) = map_game_inputs_key(key) {
+                input_events.push_back(InputEvent::GameInput(input, false));
             }
         }
         _ => {}
@@ -117,13 +124,14 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
 }
 
 /// Map game inputs from the keyboard
-fn map_game_inputs_key(key: Key, pressed: bool) -> Option<InputEvent> {
+fn map_game_inputs_key(key: Key) -> Option<InputName> {
     match key {
-        Key::W => Some(InputEvent::GameInput(InputName::CamForwards, pressed)),
-        Key::S => Some(InputEvent::GameInput(InputName::CamBackwards, pressed)),
-        Key::A => Some(InputEvent::GameInput(InputName::CamLeft, pressed)),
-        Key::D => Some(InputEvent::GameInput(InputName::CamRight, pressed)),
-        Key::LeftShift => Some(InputEvent::GameInput(InputName::CamSpeed, pressed)),
+        Key::W => Some(InputName::CamForwards),
+        Key::S => Some(InputName::CamBackwards),
+        Key::A => Some(InputName::CamLeft),
+        Key::D => Some(InputName::CamRight),
+        Key::LeftShift => Some(InputName::CamSpeed),
+        Key::Z => Some(InputName::Rewind),
         _ => None
     }
 }
@@ -140,4 +148,19 @@ fn handle_mouse_movement(window: &Window, (old_mouse_x, old_mouse_y): (f64, f64)
     }
 
     (mouse_x, mouse_y)
+}
+
+/// Handle an input event
+fn handle_input_event(event: InputEvent, input_state: &mut InputState) {
+    match event {
+        InputEvent::CursorMoved(dx, dy) => {
+            input_state.mouse_diff = (dx, dy);
+        }
+        InputEvent::CursorCaptured(captured) => {
+            input_state.cursor_captured = captured;
+        }
+        InputEvent::GameInput(input_name, is_down) => {
+            input_state.inputs[input_name as usize] = is_down;
+        }
+    }
 }

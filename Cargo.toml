@@ -19,5 +19,6 @@ strum = "0.24.1"
 strum_macros = "0.24.1"
 rangemap = "1.0.3"
 gpp = "0.6.2"
+ncollide3d = "0.33.0"
 dreamfield_macros = { path = "dreamfield_macros" }
 dreamfield_traits = { path = "dreamfield_traits" }
