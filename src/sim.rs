@@ -108,15 +108,13 @@ impl GameState {
         let (forward_cam_movement, right_cam_movement) = self.movement_input(input_state);
         let cam_movement = forward_cam_movement * self.camera.forward() + right_cam_movement * self.camera.right();
 
-        // Apply gravity to velocity
-        let mut velocity_y = self.velocity.y - GRAVITY_ACCELERATION;
-        let velocity_y_len = f32::abs(velocity_y);
-
         // Now solve the y movement and xz movement separately
         let mut pos = *self.camera.pos();
 
-        // Do y first
+        // Resolve vertical motion
+        let velocity_y = self.velocity.y - GRAVITY_ACCELERATION;
         if velocity_y < 0.0 {
+            let velocity_y_len = f32::abs(velocity_y);
             let velocity_y_dir = vec3(0.0, -1.0, 0.0);
 
             let stop_dist = self.level_collision
@@ -124,34 +122,44 @@ impl GameState {
                 .map(|t| t - CHAR_HEIGHT)
                 .filter(|t| *t < velocity_y_len);
 
-            (pos, velocity_y) = match stop_dist {
+            (pos, self.velocity.y) = match stop_dist {
                 Some(t) => (pos + t * velocity_y_dir, 0.0),
                 _ => (pos + vec3(0.0, velocity_y, 0.0), velocity_y)
             };
         }
 
-        // Then xz
-        let velocity_xz = vec3(cam_movement.x, 0.0, cam_movement.z);
-        if velocity_xz.x != 0.0 || velocity_xz.y != 0.0 || velocity_xz.z != 0.0 {
-            let velocity_xz_len = velocity_xz.magnitude();
-            let velocity_xz_dir = velocity_xz / velocity_xz_len;
-
-            let stop_dist = self.level_collision
-                .raycast(&pos, &velocity_xz_dir, velocity_xz_len + 0.5) 
-                .map(|t| t - MIN_DIST)
-                .filter(|t| *t < velocity_xz_len);
-
-            pos = match stop_dist {
-                Some(t) => pos + t * velocity_xz_dir,
-                _ => pos + velocity_xz
-            };
+        // Resolve horizontal motion
+        let mut movement = vec3(cam_movement.x, 0.0, cam_movement.z);
+        if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
+            movement = self.resolve_movement(&pos, &movement);
+            if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
+                movement = self.resolve_movement(&pos, &movement);
+            }
+            pos += movement;
         }
-
-        // Accumulate y velocity
-        self.velocity.y = velocity_y;
 
         // Update camera position
         self.camera.set_pos(&pos);
         self.camera.update();
+    }
+
+    fn resolve_movement(&self, pos: &Vector3<f32>, movement: &Vector3<f32>) -> Vector3<f32> {
+        let movement_len = movement.magnitude();
+        let movement_dir = movement / movement_len;
+
+        let ray_start = pos;
+        let ray_dist = movement_len;
+
+        match self.level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
+            Some(ray_hit) => {
+                let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
+                let hit_dot = hit_normal.dot(*movement);
+                let hit_pos = pos + ray_hit.toi * movement_dir;
+                movement - (hit_dot * hit_normal)
+            },
+            _ => {
+                *movement
+            }
+        }
     }
 }

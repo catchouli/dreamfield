@@ -1,5 +1,5 @@
 use byteorder::{ReadBytesExt, LittleEndian};
-use ncollide3d::{shape::TriMesh, math::{Point, Isometry}, query::{Ray, RayCast}};
+use ncollide3d::{shape::TriMesh, math::{Point, Isometry}, query::{Ray, RayCast, RayIntersection}};
 use cgmath::{SquareMatrix, Matrix4, vec4, Vector3};
 use gltf::Semantic;
 
@@ -22,6 +22,15 @@ impl LevelCollision {
             ncollide3d::math::Vector::new(direction.x, direction.y, direction.z));
 
         self.level_tri_mesh.toi_with_ray(&Isometry::identity(), &ray, max_dist, true)
+    }
+
+    /// Raycast into the level, and obtain a normal
+    pub fn raycast_normal(&self, origin: &Vector3<f32>, direction: &Vector3<f32>, max_dist: f32) -> Option<RayIntersection<f32>> {
+        let ray = Ray::new(
+            Point::new(origin.x, origin.y, origin.z),
+            ncollide3d::math::Vector::new(direction.x, direction.y, direction.z));
+
+        self.level_tri_mesh.toi_and_normal_with_ray(&Isometry::identity(), &ray, max_dist, true)
     }
 
     /// Load level collision
