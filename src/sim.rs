@@ -1,6 +1,8 @@
 pub mod input;
 pub mod level_collision;
 
+use std::cmp::Ordering;
+
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
 use crate::renderer::camera::{FpsCamera, Camera};
 use crate::renderer::gl_renderer::resources;
@@ -129,25 +131,43 @@ impl GameState {
         }
 
         // Resolve horizontal motion
+        const collider_radius: f32 = 1.0;
         let mut movement = vec3(cam_movement.x, 0.0, cam_movement.z);
-        if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-            movement = self.resolve_movement(&pos, &movement);
+        for _ in (0..2) {
             if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-                movement = self.resolve_movement(&pos, &movement);
+                movement = self.resolve_movement_radius(&pos, &movement, 1.0);
             }
-            pos += movement;
         }
+        pos += movement;
 
         // Update camera position
         self.camera.set_pos(&pos);
         self.camera.update();
     }
 
+    fn resolve_movement_radius(&self, pos: &Vector3<f32>, movement: &Vector3<f32>, radius: f32) -> Vector3<f32> {
+        const ray_origin_offsets: [Vector3<f32>; 4] = [
+            vec3( 1.0, 0.0,  0.0),
+            vec3(-1.0, 0.0,  0.0),
+            vec3( 0.0, 0.0, -1.0),
+            vec3( 0.0, 0.0,  1.0)
+        ];
+
+        *ray_origin_offsets.map(|offset| {
+                self.resolve_movement(&(pos + offset * radius), movement)
+            })
+            .iter()
+            .min_by(|a, b| { a.magnitude2().partial_cmp(&b.magnitude2()).unwrap_or(Ordering::Equal) })
+            .unwrap()
+    }
+
     fn resolve_movement(&self, pos: &Vector3<f32>, movement: &Vector3<f32>) -> Vector3<f32> {
+        let collider_pos = pos;
+
         let movement_len = movement.magnitude();
         let movement_dir = movement / movement_len;
 
-        let ray_start = pos;
+        let ray_start = collider_pos;
         let ray_dist = movement_len;
 
         match self.level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
