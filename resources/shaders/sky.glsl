@@ -54,7 +54,9 @@ void main() {
     // Calculate ray dir
     vec3 ray_dir = calc_ray_dir();
 
-    out_frag_color = 0.25 * texture(tex_skybox, project_equilateral(ray_dir));
+    vec3 out_color = fog_color;
+
+    out_frag_color = vec4(out_color, 1.0);
 }
 
 #endif

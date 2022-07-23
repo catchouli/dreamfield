@@ -3,13 +3,10 @@ pub mod system;
 pub mod sim;
 pub mod rewindable_game_state;
 
-use std::collections::VecDeque;
-
 use glfw::{Action, Context, Key};
 use system::glfw_system::Window;
-use sim::{GameState, input::{InputEvent, InputName, InputState}};
+use sim::{GameState, input::{InputState, InputName}};
 use renderer::gl_renderer::GLRenderer;
-use rewindable_game_state::RewindableGameState;
 
 /// The width of the window
 const WINDOW_WIDTH: u32 = 1024 * 2;
@@ -18,9 +15,9 @@ const WINDOW_WIDTH: u32 = 1024 * 2;
 const WINDOW_HEIGHT: u32 = 768 * 2;
 
 /// The fixed update frequency
-const FIXED_UPDATE: i32 = 60;
+const FIXED_UPDATE: i32 = 30;
 
-/// The fixed update target tim
+/// The fixed update target time
 const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 
 // Entry point
@@ -32,7 +29,7 @@ fn main() {
     let (win_width, win_height) = window.window.get_size();
     let mut renderer = GLRenderer::new(win_width, win_height);
 
-    let mut game_state = RewindableGameState::<GameState>::new();
+    let mut game_state = GameState::new();
 
     // Fixed timestep - https://gafferongames.com/post/fix_your_timestep/
     let mut current_time = window.glfw.get_time();
@@ -72,7 +69,7 @@ fn main() {
         }
 
         // Render
-        renderer.render(game_state.cur_state());
+        renderer.render(&game_state);
         window.window.swap_buffers();
     }
 }

@@ -75,7 +75,6 @@ void main() {
     vec3 out_color = light * base_color;
     out_color = min(out_color, vec3(1.0));
 
-    // fog
     float fog_factor = fog_dist.y > 0.0 ?
         clamp((var_dist-fog_dist.x)/(fog_dist.y-fog_dist.x), 0.0, 1.0)
         : 0.0;
