@@ -80,7 +80,7 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
 {
     match event {
         glfw::WindowEvent::FramebufferSize(width, height) => {
-            renderer.set_viewport(width, height)
+            renderer.set_window_viewport(width, height)
         }
         glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
             window.window.set_should_close(true)
@@ -96,6 +96,9 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
                 window.set_mouse_captured(false);
                 input_state.cursor_captured = false;
             }
+        }
+        glfw::WindowEvent::Key(Key::F1, _, Action::Press, _) => {
+            renderer.toggle_graphics_mode();
         }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
             if let Some(input) = map_game_inputs_key(key) {

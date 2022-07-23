@@ -7,6 +7,7 @@ pub mod to_std140;
 pub mod bindings;
 pub mod resources;
 pub mod lights;
+pub mod framebuffer;
 
 use cgmath::*;
 
@@ -16,17 +17,27 @@ use texture::*;
 use uniform_buffer::*;
 use gltf_model::*;
 
+use self::framebuffer::Framebuffer;
+
 use super::camera::Camera;
+
+const RENDER_WIDTH: i32 = 320;
+const RENDER_HEIGHT: i32 = 240;
 
 /// The GL renderer
 pub struct GLRenderer {
     full_screen_rect: Mesh,
     sky_shader: ShaderProgram,
     pbr_shader: ShaderProgram,
+    ps1_shader: ShaderProgram,
+    blit_shader: ShaderProgram,
     sky_texture: Texture,
     demo_scene_model: GltfModel,
     fire_orb_model: GltfModel,
-    ubo_global: UniformBuffer<GlobalParams>
+    ubo_global: UniformBuffer<GlobalParams>,
+    framebuffer: Framebuffer,
+    window_viewport: (i32, i32),
+    ps1_mode: bool
 }
 
 impl GLRenderer {
@@ -36,6 +47,11 @@ impl GLRenderer {
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.05, 0.05, 0.05));
         ubo_global.set_fog_dist(&vec2(10.0, 25.0));
+
+        let aspect = RENDER_WIDTH as f32 / RENDER_HEIGHT as f32;
+        ubo_global.set_mat_proj(&perspective(Deg(60.0), aspect, 0.1, 20.0));
+        ubo_global.set_vp_aspect(&aspect);
+
         // TODO: shouldn't be needed
         ubo_global.upload_all();
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
@@ -43,6 +59,8 @@ impl GLRenderer {
         // Load shaders
         let sky_shader = ShaderProgram::new_from_vf(resources::SHADER_SKY);
         let pbr_shader = ShaderProgram::new_from_vf(resources::SHADER_PBR);
+        let ps1_shader = ShaderProgram::new_from_vf(resources::SHADER_PS1);
+        let blit_shader = ShaderProgram::new_from_vf(resources::SHADER_BLIT);
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -77,34 +95,41 @@ impl GLRenderer {
             }
         }
 
+        // Create framebuffer
+        let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
+
         // Create renderer struct
-        let mut renderer = GLRenderer {
+        GLRenderer {
            full_screen_rect,
            sky_shader,
            pbr_shader,
            sky_texture,
+           ps1_shader,
+           blit_shader,
            demo_scene_model,
            fire_orb_model,
-           ubo_global
-        };
-
-        // Set viewport
-        renderer.set_viewport(width, height);
-
-        renderer
+           ubo_global,
+           framebuffer,
+           window_viewport: (width, height),
+           ps1_mode: true
+        }
     }
 
     /// Render the game
     pub fn render(&mut self, game_state: &crate::GameState) {
-        unsafe {
-            gl::ClearColor(0.06, 0.1, 0.1, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-        }
-
         // Update global params
         self.ubo_global.set_sim_time(&(game_state.time as f32));
         self.ubo_global.set_mat_view_derive(&game_state.camera.get_view_matrix());
         self.ubo_global.upload_changed();
+
+        // Bind framebuffer and clear
+        self.set_gl_viewport(RENDER_WIDTH, RENDER_HEIGHT);
+        self.framebuffer.bind_draw();
+
+        unsafe {
+            gl::ClearColor(0.06, 0.1, 0.1, 1.0);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
 
         // Draw background
         unsafe { gl::Disable(gl::DEPTH_TEST) }
@@ -114,21 +139,43 @@ impl GLRenderer {
         unsafe { gl::Enable(gl::DEPTH_TEST) }
 
         // Draw glfw models
-        self.pbr_shader.use_program();
+        let main_shader = match self.ps1_mode {
+            true => &self.ps1_shader,
+            false => &self.pbr_shader
+        };
+        main_shader.use_program();
         self.demo_scene_model.render(&mut self.ubo_global);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.ball_pos, 0.0)));
         self.fire_orb_model.render(&mut self.ubo_global);
+
+        // Unbind framebuffer
+        self.framebuffer.unbind();
+
+        // Render framebuffer to screen
+        let (window_width, window_height) = self.window_viewport;
+        self.set_gl_viewport(window_width, window_height);
+
+        unsafe { gl::Disable(gl::DEPTH_TEST) }
+        self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+        self.blit_shader.use_program();
+        self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+        unsafe { gl::Enable(gl::DEPTH_TEST) }
+    }
+
+    pub fn toggle_graphics_mode(&mut self) {
+        self.ps1_mode = !self.ps1_mode;
+        println!("ps1 shader {}", if self.ps1_mode { "enabled" } else { "disabled "});
+    }
+
+    // Update the window viewport
+    pub fn set_window_viewport(&mut self, width: i32, height: i32) {
+        println!("Setting viewport to {width} * {height}");
+        self.window_viewport = (width, height);
     }
 
     /// Update the viewport
-    pub fn set_viewport(&mut self, width: i32, height: i32) {
-        println!("Setting viewport to {width} * {height}");
+    pub fn set_gl_viewport(&mut self, width: i32, height: i32) {
         unsafe { gl::Viewport(0, 0, width, height) };
-
-        // Update projection matrix and aspect
-        let aspect = width as f32 / height as f32;
-        self.ubo_global.set_mat_proj(&perspective(Deg(60.0), aspect, 0.1, 100.0));
-        self.ubo_global.set_vp_aspect(&aspect);
     }
 }
 

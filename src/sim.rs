@@ -1,8 +1,6 @@
 pub mod input;
 pub mod level_collision;
 
-use std::cmp::Ordering;
-
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
 use crate::renderer::camera::{FpsCamera, Camera};
 use crate::renderer::gl_renderer::resources;
@@ -110,32 +108,35 @@ impl GameState {
         let (forward_cam_movement, right_cam_movement) = self.movement_input(input_state);
         let cam_movement = forward_cam_movement * self.camera.forward() + right_cam_movement * self.camera.right();
 
+        // Update velocity with cam movement and gravity
+        self.velocity.x = cam_movement.x;
+        self.velocity.z = cam_movement.z;
+        self.velocity.y -= GRAVITY_ACCELERATION;
+
         // Now solve the y movement and xz movement separately
         let mut pos = *self.camera.pos();
 
         // Resolve vertical motion
-        let velocity_y = self.velocity.y - GRAVITY_ACCELERATION;
-        if velocity_y < 0.0 {
-            let velocity_y_len = f32::abs(velocity_y);
+        if self.velocity.y < 0.0 {
+            let velocity_y_len = f32::abs(self.velocity.y);
             let velocity_y_dir = vec3(0.0, -1.0, 0.0);
 
             let stop_dist = self.level_collision
-                .raycast(&(pos + vec3(0.0, 1.0, 0.0)), &velocity_y_dir, velocity_y_len + 2.0)
+                .raycast(&(pos + vec3(0.0, 1.0, 0.0)), &velocity_y_dir, velocity_y_len + 10.0)
                 .map(|t| t - CHAR_HEIGHT)
                 .filter(|t| *t < velocity_y_len);
 
             (pos, self.velocity.y) = match stop_dist {
                 Some(t) => (pos + t * velocity_y_dir, 0.0),
-                _ => (pos + vec3(0.0, velocity_y, 0.0), velocity_y)
+                _ => (pos + vec3(0.0, self.velocity.y, 0.0), self.velocity.y)
             };
         }
 
         // Resolve horizontal motion
-        const collider_radius: f32 = 1.0;
-        let mut movement = vec3(cam_movement.x, 0.0, cam_movement.z);
-        for _ in (0..2) {
+        let mut movement = vec3(self.velocity.x, 0.0, self.velocity.z);
+        for _ in 0..2 {
             if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-                movement = self.resolve_movement_radius(&pos, &movement, 1.0);
+                movement = self.resolve_movement(&pos, &movement);
             }
         }
         pos += movement;
@@ -145,36 +146,17 @@ impl GameState {
         self.camera.update();
     }
 
-    fn resolve_movement_radius(&self, pos: &Vector3<f32>, movement: &Vector3<f32>, radius: f32) -> Vector3<f32> {
-        const ray_origin_offsets: [Vector3<f32>; 4] = [
-            vec3( 1.0, 0.0,  0.0),
-            vec3(-1.0, 0.0,  0.0),
-            vec3( 0.0, 0.0, -1.0),
-            vec3( 0.0, 0.0,  1.0)
-        ];
-
-        *ray_origin_offsets.map(|offset| {
-                self.resolve_movement(&(pos + offset * radius), movement)
-            })
-            .iter()
-            .min_by(|a, b| { a.magnitude2().partial_cmp(&b.magnitude2()).unwrap_or(Ordering::Equal) })
-            .unwrap()
-    }
-
     fn resolve_movement(&self, pos: &Vector3<f32>, movement: &Vector3<f32>) -> Vector3<f32> {
-        let collider_pos = pos;
-
         let movement_len = movement.magnitude();
         let movement_dir = movement / movement_len;
 
-        let ray_start = collider_pos;
+        let ray_start = pos;
         let ray_dist = movement_len;
 
         match self.level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
             Some(ray_hit) => {
                 let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
                 let hit_dot = hit_normal.dot(*movement);
-                let hit_pos = pos + ray_hit.toi * movement_dir;
                 movement - (hit_dot * hit_normal)
             },
             _ => {

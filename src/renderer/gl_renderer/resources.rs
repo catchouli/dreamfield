@@ -7,3 +7,5 @@ pub const MODEL_FIRE_ORB: &[u8] = include_bytes!("../../../resources/models/fire
 
 pub const SHADER_SKY: (&str, &str) = preprocess_shader_vf!(include_bytes!("../../../resources/shaders/sky.glsl"));
 pub const SHADER_PBR: (&str, &str) = preprocess_shader_vf!(include_bytes!("../../../resources/shaders/pbr.glsl"));
+pub const SHADER_PS1: (&str, &str) = preprocess_shader_vf!(include_bytes!("../../../resources/shaders/ps1_per_vertex.glsl"));
+pub const SHADER_BLIT: (&str, &str) = preprocess_shader_vf!(include_bytes!("../../../resources/shaders/blit.glsl"));
