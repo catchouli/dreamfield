@@ -110,7 +110,9 @@ pub struct GlobalParams {
     pub mat_model_view_proj: std140::mat4x4,
     pub mat_normal: std140::mat3x3,
     pub sim_time: std140::float,
-    pub vp_aspect: std140::float,
+    pub target_aspect: std140::float,
+    pub window_aspect: std140::float,
+    pub render_res: std140::vec2,
     pub fog_color: std140::vec3,
     pub fog_dist: std140::vec2
 }
@@ -126,7 +128,9 @@ impl Default for GlobalParams {
             mat_model_view_proj: Matrix4::identity().to_std140(),
             mat_normal: Matrix3::identity().to_std140(),
             sim_time: (0.0).to_std140(),
-            vp_aspect: (1.0).to_std140(),
+            target_aspect: (1.0).to_std140(),
+            window_aspect: (1.0).to_std140(),
+            render_res: vec2(0.0, 0.0).to_std140(),
             fog_color: vec3(0.0, 0.0, 0.0).to_std140(),
             fog_dist: vec2(0.0, 0.0).to_std140()
         }

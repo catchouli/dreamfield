@@ -90,11 +90,20 @@ impl ShaderProgram {
                 info_log.set_len(length as usize);
                 let message = std::str::from_utf8(&info_log).unwrap();
 
-                println!("Fragment shader failed to compile:\n{message}\n\nShader source:\n");
+                let shader_type_str = match shader_type {
+                    gl::VERTEX_SHADER => "Vertex",
+                    gl::FRAGMENT_SHADER => "Fragment",
+                    _ => "<unknown>"
+                };
+
+                println!("{shader_type_str} shader failed to compile:\n");
 
                 for (i, line) in shader_source.lines().enumerate() {
                     println!("[{i}] {line}");
                 }
+
+                println!("\n{message}\n");
+
             }
 
             shader

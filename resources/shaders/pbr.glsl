@@ -1,7 +1,6 @@
 #version 330 core
 
 #include resources/shaders/include/uniforms.glsl
-#define M_PI 3.1415926535897932384626433832795
 
 #ifdef BUILDING_VERTEX_SHADER
 
@@ -10,18 +9,20 @@ layout (location = 1) in vec3 in_nrm;
 layout (location = 3) in vec2 in_uv;
 
 out float var_dist;
-out vec3 var_pos;
+out vec3 var_world_pos;
 out vec3 var_nrm;
 out vec2 var_uv;
 
 void main() {
-    mat4 mvp = mat_proj * mat_view * mat_model;
+    vec4 world_pos = mat_model * vec4(in_pos, 1.0);
+    vec4 eye_pos = mat_view * world_pos;
+    vec4 clip_pos = mat_proj * eye_pos;
 
-    var_pos = (mat_model * vec4(in_pos, 1.0)).xyz;
+    var_world_pos = world_pos.xyz;
     var_nrm = normalize(mat_normal * in_nrm);
     var_uv = in_uv;
-    gl_Position = mat_model_view_proj * vec4(in_pos.x, in_pos.y, in_pos.z, 1.0);
-    var_dist = length(gl_Position);
+    var_dist = length(eye_pos);
+    gl_Position = clip_pos;
 }
 
 #endif
@@ -31,7 +32,7 @@ void main() {
 uniform sampler2D tex_base_color;
 
 in float var_dist;
-in vec3 var_pos;
+in vec3 var_world_pos;
 in vec3 var_nrm;
 in vec2 var_uv;
 
@@ -58,11 +59,11 @@ void main() {
         else if (lights[i].light_type == POINT_LIGHT) {
             const float POINT_LIGHT_INTENSITY_SCALE = 0.1;
 
-            vec3 light_dir = normalize(lights[i].light_pos - var_pos);
+            vec3 light_dir = normalize(lights[i].light_pos - var_world_pos);
 
             float diffuse = max(dot(var_nrm, light_dir), 0.0);
 
-            float light_dist = length(var_pos - lights[i].light_pos);
+            float light_dist = length(var_world_pos - lights[i].light_pos);
 
             float dist_over_range = (light_dist / lights[i].range);
             float dist_over_range_4 = dist_over_range * dist_over_range * dist_over_range * dist_over_range;

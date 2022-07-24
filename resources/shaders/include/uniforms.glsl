@@ -1,3 +1,6 @@
+#ifndef UNIFORMS_GLSL
+#define UNIFORMS_GLSL
+
 layout (std140) uniform GlobalParams
 {
     mat4 mat_proj;
@@ -9,7 +12,9 @@ layout (std140) uniform GlobalParams
     mat3 mat_normal;
 
     float sim_time;
-    float vp_aspect;
+    float target_aspect;
+    float window_aspect;
+    vec2 render_res;
 
     vec3 fog_color;
     vec2 fog_dist;
@@ -46,3 +51,5 @@ layout (std140) uniform LightParams
     vec3 ambient_light;
     Light lights[LIGHT_COUNT];
 };
+
+#endif

@@ -1,7 +1,7 @@
 #version 330 core
 
+#include resources/shaders/include/constants.glsl
 #include resources/shaders/include/uniforms.glsl
-#define M_PI 3.1415926535897932384626433832795
 
 #ifdef BUILDING_VERTEX_SHADER
 
@@ -48,7 +48,7 @@ vec2 project_equilateral(vec3 ray_dir) {
 }
 
 void main() {
-    float horz_fov = M_PI / 2.0 * vp_aspect;
+    float horz_fov = M_PI / 2.0 * target_aspect;
     float vert_fov = M_PI / 2.0;
 
     // Calculate ray dir

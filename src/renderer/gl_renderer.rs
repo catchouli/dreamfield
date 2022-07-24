@@ -24,6 +24,8 @@ use super::camera::Camera;
 const RENDER_WIDTH: i32 = 320;
 const RENDER_HEIGHT: i32 = 240;
 
+const RENDER_ASPECT: f32 = 4.0 / 3.0;
+
 /// The GL renderer
 pub struct GLRenderer {
     full_screen_rect: Mesh,
@@ -46,11 +48,12 @@ impl GLRenderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.05, 0.05, 0.05));
-        ubo_global.set_fog_dist(&vec2(10.0, 25.0));
+        ubo_global.set_fog_dist(&vec2(5.0, 20.0));
 
-        let aspect = RENDER_WIDTH as f32 / RENDER_HEIGHT as f32;
-        ubo_global.set_mat_proj(&perspective(Deg(60.0), aspect, 0.1, 20.0));
-        ubo_global.set_vp_aspect(&aspect);
+        ubo_global.set_target_aspect(&RENDER_ASPECT);
+        ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
+
+        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.1, 20.0));
 
         // TODO: shouldn't be needed
         ubo_global.upload_all();
@@ -99,7 +102,7 @@ impl GLRenderer {
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
 
         // Create renderer struct
-        GLRenderer {
+        let mut renderer = GLRenderer {
            full_screen_rect,
            sky_shader,
            pbr_shader,
@@ -112,7 +115,11 @@ impl GLRenderer {
            framebuffer,
            window_viewport: (width, height),
            ps1_mode: true
-        }
+        };
+
+        renderer.set_window_viewport(width, height);
+
+        renderer
     }
 
     /// Render the game
@@ -162,19 +169,23 @@ impl GLRenderer {
         unsafe { gl::Enable(gl::DEPTH_TEST) }
     }
 
+    /// Toggle ps1 graphics mode
     pub fn toggle_graphics_mode(&mut self) {
         self.ps1_mode = !self.ps1_mode;
         println!("ps1 shader {}", if self.ps1_mode { "enabled" } else { "disabled "});
     }
 
-    // Update the window viewport
+    /// Update the window viewport
     pub fn set_window_viewport(&mut self, width: i32, height: i32) {
         println!("Setting viewport to {width} * {height}");
         self.window_viewport = (width, height);
+        self.ubo_global.set_window_aspect(&(width as f32 / height as f32));
+        // TODO: shouldn't be needed
+        self.ubo_global.upload_all();
     }
 
-    /// Update the viewport
-    pub fn set_gl_viewport(&mut self, width: i32, height: i32) {
+    /// Update the gl viewport
+    fn set_gl_viewport(&mut self, width: i32, height: i32) {
         unsafe { gl::Viewport(0, 0, width, height) };
     }
 }
