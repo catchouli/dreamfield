@@ -33,7 +33,7 @@ impl GameState {
     /// Create a new, default game state
     pub fn new() -> GameState {
         // Create camera
-        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 10.0, 13.0), -0.17, 0.0, CAM_LOOK_SPEED);
+        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 7.0, 10.0), -0.17, 0.0, CAM_LOOK_SPEED);
 
         // Load level collision
         let level_collision = LevelCollision::new(resources::MODEL_DEMO_SCENE);

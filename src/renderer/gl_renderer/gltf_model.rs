@@ -141,8 +141,15 @@ impl GltfModel {
     }
 
     /// Render a model
-    pub fn render(&mut self, ubo_global: &mut UniformBuffer<GlobalParams>) {
+    pub fn render(&mut self, ubo_global: &mut UniformBuffer<GlobalParams>, patches: bool) {
+        // Bind global ubo
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
+
+        // Figure out primitive type
+        let prim_type = match patches {
+            true => gl::PATCHES,
+            false => gl::TRIANGLES
+        };
 
         // Bind lights if the model has any
         if let Some(ubo_lights) = &mut self.ubo_lights {
@@ -175,7 +182,7 @@ impl GltfModel {
                 if let Some((offset, length)) = primitive.indexed_offset_length {
                     unsafe {
                         gl::BindVertexArray(primitive.vao);
-                        gl::DrawElements(gl::TRIANGLES,
+                        gl::DrawElements(prim_type,
                                          length,
                                          gl::UNSIGNED_SHORT,
                                          offset as *const GLvoid);
@@ -185,7 +192,7 @@ impl GltfModel {
                 else if let Some(count) = primitive.primitive_count {
                     unsafe {
                         gl::BindVertexArray(primitive.vao);
-                        gl::DrawArrays(gl::TRIANGLES, 0, count);
+                        gl::DrawArrays(prim_type, 0, count);
                     }
                 }
                 else {

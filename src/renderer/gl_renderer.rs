@@ -49,12 +49,12 @@ impl GLRenderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.05, 0.05, 0.05));
-        ubo_global.set_fog_dist(&vec2(5.0, 20.0));
+        ubo_global.set_fog_dist(&vec2(7.5, 15.0));
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
 
-        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.1, 20.0));
+        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 20.0));
 
         // TODO: shouldn't be needed
         ubo_global.upload_all();
@@ -63,7 +63,7 @@ impl GLRenderer {
         // Load shaders
         let sky_shader = ShaderProgram::new_from_vf(resources::SHADER_SKY);
         let pbr_shader = ShaderProgram::new_from_vf(resources::SHADER_PBR);
-        let ps1_shader = ShaderProgram::new_from_vf(resources::SHADER_PS1);
+        let ps1_shader = ShaderProgram::new_from_vtf(resources::SHADER_PS1);
         let blit_shader = ShaderProgram::new_from_vf(resources::SHADER_BLIT);
 
         // Load meshes
@@ -144,7 +144,7 @@ impl GLRenderer {
 
         // Clear screen
         unsafe {
-            gl::ClearColor(0.06, 0.1, 0.1, 1.0);
+            gl::ClearColor(0.05, 0.05, 0.05, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
@@ -152,7 +152,7 @@ impl GLRenderer {
         unsafe { gl::Disable(gl::DEPTH_TEST) }
         self.sky_texture.bind(bindings::TextureSlot::BaseColor);
         self.sky_shader.use_program();
-        self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+        self.full_screen_rect.draw_indexed(gl::PATCHES, 6);
 
         // Draw glfw models
         unsafe { gl::Enable(gl::DEPTH_TEST) }
@@ -163,9 +163,9 @@ impl GLRenderer {
         };
         main_shader.use_program();
 
-        self.demo_scene_model.render(&mut self.ubo_global);
+        self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.ball_pos, 0.0)));
-        self.fire_orb_model.render(&mut self.ubo_global);
+        self.fire_orb_model.render(&mut self.ubo_global, true);
 
         // Unbind framebuffer
         self.framebuffer.unbind();

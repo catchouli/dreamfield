@@ -54,6 +54,141 @@ pub fn preprocess_shader_vf(args: TokenStream) -> TokenStream {
     })
 }
 
+/// A macro that loads and preprocesses a shader at compile time, with tessellation
+#[proc_macro]
+pub fn preprocess_shader_vtf(args: TokenStream) -> TokenStream {
+    // Expand macro invocation
+    let args_expanded = args.expand_expr().expect("Failed to expand expression");
+
+    // Get literal byte string (should be shader source)
+    let args_byte_str: LitByteStr = syn::parse(args_expanded).expect("Expected byte string");
+
+    // Get the shader source as a utf8 string
+    let shader_source_bytes = args_byte_str.value().clone();
+    let shader_source = std::str::from_utf8(&shader_source_bytes).expect("Failed to parse utf-8 string");
+
+    // Split the shader source into the version directive and the rest
+    let (version, rest) = split_version_directive(&shader_source);
+
+    // Preprocess vertex shader
+    println!("Preprocessing vertex shader source");
+    let vertex_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_VERTEX_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess vertex shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess tessellation control shader
+    println!("Preprocessing tessellation control shader source");
+    let tess_control_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_TESS_CONTROL_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess tessellation control shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess tessellation evaluation shader
+    println!("Preprocessing tessellation evaluation shader source");
+    let tess_eval_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_TESS_EVAL_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess tessellation evaluation shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess fragment shader
+    println!("Preprocessing fragment shader source");
+    let fragment_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_FRAGMENT_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess fragment shader");
+        format!("{}\n{}", version, processed)
+    };
+
+
+    TokenStream::from(quote! { 
+        (#vertex_shader, #tess_control_shader, #tess_eval_shader, #fragment_shader)
+    })
+}
+
+/// A macro that loads and preprocesses a shader at compile time, with tessellation and geometry
+/// shaders
+#[proc_macro]
+pub fn preprocess_shader_vtgf(args: TokenStream) -> TokenStream {
+    // Expand macro invocation
+    let args_expanded = args.expand_expr().expect("Failed to expand expression");
+
+    // Get literal byte string (should be shader source)
+    let args_byte_str: LitByteStr = syn::parse(args_expanded).expect("Expected byte string");
+
+    // Get the shader source as a utf8 string
+    let shader_source_bytes = args_byte_str.value().clone();
+    let shader_source = std::str::from_utf8(&shader_source_bytes).expect("Failed to parse utf-8 string");
+
+    // Split the shader source into the version directive and the rest
+    let (version, rest) = split_version_directive(&shader_source);
+
+    // Preprocess vertex shader
+    println!("Preprocessing vertex shader source");
+    let vertex_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_VERTEX_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess vertex shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess tessellation control shader
+    println!("Preprocessing tessellation control shader source");
+    let tess_control_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_TESS_CONTROL_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess tessellation control shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess tessellation evaluation shader
+    println!("Preprocessing tessellation evaluation shader source");
+    let tess_eval_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_TESS_EVAL_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess tessellation evaluation shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess geometry shader
+    println!("Preprocessing geometry shader source");
+    let geometry_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_GEOMETRY_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess geometry shader");
+        format!("{}\n{}", version, processed)
+    };
+
+    // Preprocess fragment shader
+    println!("Preprocessing fragment shader source");
+    let fragment_shader = {
+        let mut context = gpp::Context::new();
+        context.macros.insert("BUILDING_FRAGMENT_SHADER".to_string(), "1".to_string());
+        let processed = gpp::process_str(&rest, &mut context)
+            .expect("failed to preprocess fragment shader");
+        format!("{}\n{}", version, processed)
+    };
+
+
+    TokenStream::from(quote! { 
+        (#vertex_shader, #tess_control_shader, #tess_eval_shader, #geometry_shader, #fragment_shader)
+    })
+}
+
 /// Split a shader source at the version directive
 fn split_version_directive(source: &str) -> (String, String) {
     let mut version_directive = String::new();
