@@ -1,4 +1,4 @@
-#![feature(proc_macro_expand)]
+#![feature(proc_macro_expand, proc_macro_span)]
 
 extern crate proc_macro;
 extern crate syn;
@@ -6,6 +6,7 @@ extern crate syn;
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput, Ident, LitByteStr};
+use proc_macro::Span;
 
 /// A field in a uniform block struct with an ident and type
 struct UniformField<'a> {
@@ -16,6 +17,12 @@ struct UniformField<'a> {
 /// A macro that loads and preprocesses a shader at compile time
 #[proc_macro]
 pub fn preprocess_shader_vf(args: TokenStream) -> TokenStream {
+    let binding = Span::call_site().source_file().path();
+    let source_dir = binding.to_str().unwrap();
+
+    // Set cwd
+    println!("preprocessing shader {}", source_dir);
+
     // Expand macro invocation
     let args_expanded = args.expand_expr().expect("Failed to expand expression");
 

@@ -1,7 +1,7 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
-#include dreamfield_renderer/shaders/include/uniforms.glsl
+#include resources/shaders/include/uniforms.glsl
 
 // Calculate the lighting for the given vertex/fragment
 vec3 calculate_lighting(vec3 world_pos, vec3 world_normal) {

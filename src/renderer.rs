@@ -1,9 +1,9 @@
 pub mod resources;
+pub mod shaders;
 
 use cgmath::*;
 use dreamfield_renderer::gl_backend::*;
 use dreamfield_renderer::camera::Camera;
-use dreamfield_renderer::shaders;
 
 const RENDER_WIDTH: i32 = 320;
 const RENDER_HEIGHT: i32 = 240;
