@@ -212,6 +212,11 @@ impl GltfModel {
         &self.drawables
     }
 
+    /// Get the model's lights
+    pub fn lights(&self) -> &Vec<GltfLight> {
+        &self.lights
+    }
+
     /// Load a mesh into a vao
     fn load_mesh(mesh: &gltf::Mesh, buffers: &[u32]) -> GltfMesh {
         // Create primitive VAOs

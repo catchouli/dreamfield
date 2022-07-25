@@ -4,7 +4,6 @@ use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3, vec2};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
 use rangemap::RangeSet;
-use gl::types::*;
 use super::lights::LIGHT_COUNT;
 
 /// Uniform buffer wrapper
@@ -63,7 +62,7 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
     }
 
     /// Upload all data to the buffer
-    pub fn upload_all(&self) {
+    fn upload_all(&self) {
         unsafe {
             gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo);
             gl::BufferSubData(gl::UNIFORM_BUFFER,
@@ -75,19 +74,24 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
 
     // Upload modified ranges to the buffer
     pub fn upload_changed(&mut self) {
-        unsafe { gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo) }
-        for range in self.modified_ranges.iter() {
-            unsafe {
-                // Exciting undefined behaviour
-                let mut ptr_int = &self.data as *const T as usize;
-                ptr_int += range.start;
-                gl::BufferSubData(gl::UNIFORM_BUFFER,
-                                  range.start as isize,
-                                  (range.end - range.start) as isize,
-                                  ptr_int as *const GLvoid);
-            }
-        }
-        self.modified_ranges = RangeSet::new();
+        // TODO: figure out why upload_changed isn't working properly
+        self.upload_all();
+        return;
+
+        //unsafe { gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo) }
+        //for range in self.modified_ranges.iter() {
+        //    println!("uploading {}..{}", range.start, range.end);
+        //    unsafe {
+        //        // Exciting undefined behaviour
+        //        let mut ptr_int = &self.data as *const T as usize;
+        //        ptr_int += range.start;
+        //        gl::BufferSubData(gl::UNIFORM_BUFFER,
+        //                          range.start as isize,
+        //                          (range.end - range.start) as isize,
+        //                          ptr_int as *const GLvoid);
+        //    }
+        //}
+        //self.modified_ranges = RangeSet::new();
     }
 }
 

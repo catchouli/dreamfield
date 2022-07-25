@@ -214,6 +214,7 @@ dependencies = [
  "byteorder",
  "cgmath",
  "dreamfield_macros",
+ "dreamfield_renderer",
  "dreamfield_traits",
  "gl",
  "glfw",
@@ -223,10 +224,7 @@ dependencies = [
  "ncollide3d",
  "num",
  "rand",
- "rangemap",
  "std140",
- "strum",
- "strum_macros",
  "tobj",
 ]
 
@@ -239,6 +237,28 @@ dependencies = [
  "quote",
  "std140",
  "syn",
+]
+
+[[package]]
+name = "dreamfield_renderer"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "cgmath",
+ "dreamfield_macros",
+ "dreamfield_traits",
+ "gl",
+ "gltf",
+ "gpp",
+ "image 0.24.2",
+ "ncollide3d",
+ "num",
+ "rand",
+ "rangemap",
+ "std140",
+ "strum",
+ "strum_macros",
+ "tobj",
 ]
 
 [[package]]

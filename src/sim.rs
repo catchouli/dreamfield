@@ -2,8 +2,8 @@ pub mod input;
 pub mod level_collision;
 
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
-use crate::renderer::camera::{FpsCamera, Camera};
-use crate::renderer::gl_renderer::resources;
+use dreamfield_renderer::camera::{FpsCamera, Camera};
+use crate::renderer::resources;
 
 use self::input::{InputName, InputState};
 use self::level_collision::LevelCollision;
@@ -12,13 +12,13 @@ use self::level_collision::LevelCollision;
 const CAM_LOOK_SPEED: f32 = 1.0;
 
 /// The camera move speed
-const CAM_MOVE_SPEED: f32 = 0.1;
+const CAM_MOVE_SPEED: f32 = 3.0;
 
 /// The camera fast move speed
-const CAM_MOVE_SPEED_FAST: f32 = 0.5;
+const CAM_MOVE_SPEED_FAST: f32 = 10.0;
 
 /// The gravity acceleration
-const GRAVITY_ACCELERATION: f32 = 0.01;
+const GRAVITY_ACCELERATION: f32 = 9.8;
 
 /// The game state
 pub struct GameState {
@@ -94,9 +94,6 @@ impl GameState {
         /// The character camera height
         const CHAR_HEIGHT: f32 = 1.8;
 
-        /// Minimum distance to stop before walls
-        const MIN_DIST: f32 = 0.5;
-
         // Update look direction
         if input_state.cursor_captured {
             let (dx, dy) = input_state.mouse_diff;
@@ -111,29 +108,30 @@ impl GameState {
         // Update velocity with cam movement and gravity
         self.velocity.x = cam_movement.x;
         self.velocity.z = cam_movement.z;
-        self.velocity.y -= GRAVITY_ACCELERATION;
+        self.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
         let mut pos = *self.camera.pos();
 
         // Resolve vertical motion
         if self.velocity.y < 0.0 {
-            let velocity_y_len = f32::abs(self.velocity.y);
-            let velocity_y_dir = vec3(0.0, -1.0, 0.0);
+            let movement_y = self.velocity.y * time_delta;
+            let movement_y_len = f32::abs(movement_y);
+            let movement_y_dir = vec3(0.0, -1.0, 0.0);
 
             let stop_dist = self.level_collision
-                .raycast(&(pos + vec3(0.0, 1.0, 0.0)), &velocity_y_dir, velocity_y_len + 10.0)
+                .raycast(&(pos + vec3(0.0, 1.0, 0.0)), &movement_y_dir, movement_y_len + 10.0)
                 .map(|t| t - CHAR_HEIGHT)
-                .filter(|t| *t < velocity_y_len);
+                .filter(|t| *t < movement_y_len);
 
             (pos, self.velocity.y) = match stop_dist {
-                Some(t) => (pos + t * velocity_y_dir, 0.0),
-                _ => (pos + vec3(0.0, self.velocity.y, 0.0), self.velocity.y)
+                Some(t) => (pos + t * movement_y_dir, 0.0),
+                _ => (pos + vec3(0.0, movement_y, 0.0), self.velocity.y)
             };
         }
 
         // Resolve horizontal motion
-        let mut movement = vec3(self.velocity.x, 0.0, self.velocity.z);
+        let mut movement = time_delta * vec3(self.velocity.x, 0.0, self.velocity.z);
         for _ in 0..2 {
             if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
                 movement = self.resolve_movement(&pos, &movement);

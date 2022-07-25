@@ -6,7 +6,7 @@ pub mod rewindable_game_state;
 use glfw::{Action, Context, Key};
 use system::glfw_system::Window;
 use sim::{GameState, input::{InputState, InputName}};
-use renderer::gl_renderer::GLRenderer;
+use renderer::Renderer;
 
 /// The width of the window
 const WINDOW_WIDTH: u32 = 1024 * 2;
@@ -27,7 +27,7 @@ fn main() {
 
     // Create renderer
     let (win_width, win_height) = window.window.get_size();
-    let mut renderer = GLRenderer::new(win_width, win_height);
+    let mut renderer = Renderer::new(win_width, win_height);
 
     let mut game_state = GameState::new();
 
@@ -75,7 +75,7 @@ fn main() {
 }
 
 /// Handle events
-fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: glfw::WindowEvent,
+fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw::WindowEvent,
                        input_state: &mut InputState)
 {
     match event {
