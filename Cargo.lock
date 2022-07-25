@@ -248,6 +248,7 @@ dependencies = [
  "dreamfield_macros",
  "dreamfield_traits",
  "gl",
+ "glfw",
  "gltf",
  "gpp",
  "image 0.24.2",

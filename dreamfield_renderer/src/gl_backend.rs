@@ -7,6 +7,7 @@ pub mod to_std140;
 pub mod bindings;
 pub mod lights;
 pub mod framebuffer;
+pub mod glfw_system;
 
 pub use shader::*;
 pub use mesh::*;
@@ -17,3 +18,4 @@ pub use to_std140::*;
 pub use bindings::*;
 pub use lights::*;
 pub use framebuffer::*;
+pub use glfw_system::*;

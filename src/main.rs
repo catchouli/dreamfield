@@ -1,10 +1,9 @@
 pub mod renderer;
-pub mod system;
 pub mod sim;
 pub mod rewindable_game_state;
 
 use glfw::{Action, Context, Key};
-use system::glfw_system::Window;
+use dreamfield_renderer::gl_backend::glfw_system::Window;
 use sim::{GameState, input::{InputState, InputName}};
 use renderer::Renderer;
 
