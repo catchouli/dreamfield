@@ -1,6 +1,6 @@
 use super::bindings;
 use super::to_std140::{ToStd140, FromStd140};
-use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3, vec2};
+use cgmath::{SquareMatrix, Matrix3, Matrix4, Matrix, vec3, vec2, vec4};
 use dreamfield_macros::UniformSetters;
 use dreamfield_traits::UniformSetters;
 use rangemap::RangeSet;
@@ -175,13 +175,15 @@ impl UniformBuffer<GlobalParams> {
 #[std140::repr_std140]
 #[derive(UniformSetters)]
 pub struct MaterialParams {
-    pub has_base_color_texture: std140::boolean
+    pub has_base_color_texture: std140::boolean,
+    pub base_color: std140::vec4
 }
 
 impl Default for MaterialParams {
     fn default() -> Self {
         MaterialParams {
-            has_base_color_texture: false.to_std140()
+            has_base_color_texture: false.to_std140(),
+            base_color: vec4(1.0, 1.0, 1.0, 1.0).to_std140()
         }
     }
 }

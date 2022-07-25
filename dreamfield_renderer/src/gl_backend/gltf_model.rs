@@ -467,7 +467,10 @@ impl GltfModel {
     /// Load material to a ubo
     fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
         let mut ubo = UniformBuffer::<MaterialParams>::new();
-        ubo.set_has_base_color_texture(&mat.pbr_metallic_roughness().base_color_texture().is_some());
+        let pbr = mat.pbr_metallic_roughness();
+        let base_color = pbr.base_color_factor();
+        ubo.set_has_base_color_texture(&pbr.base_color_texture().is_some());
+        ubo.set_base_color(&vec4(base_color[0], base_color[1], base_color[2], base_color[3]));
         ubo
     }
 }

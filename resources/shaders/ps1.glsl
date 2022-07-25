@@ -116,9 +116,8 @@ noperspective in vec3 frag_light;
 out vec4 out_frag_color;
 
 void main() {
-    vec3 sun_dir = normalize(vec3(0.5, 0.5, 0.5));
-    vec3 base_color = has_base_color_texture ? texture(tex_base_color, frag_uv).xyz : vec3(1.0);
-    float diffuse_strength = dot(sun_dir, frag_nrm);
+    vec3 base_color_tex = has_base_color_texture ? texture(tex_base_color, frag_uv).rgb : vec3(1.0);
+    vec3 albedo = base_color.rgb * base_color_tex;
 
 #ifdef VERTEX_LIGHTING
     vec3 light = frag_light;
@@ -130,7 +129,7 @@ void main() {
         clamp((frag_dist - fog_dist.x)/(fog_dist.y - fog_dist.x), 0.0, 1.0)
         : 1.0;
 
-    vec3 out_color = light * base_color * (1.0 - fog_factor)
+    vec3 out_color = light * albedo * (1.0 - fog_factor)
         + fog_factor * fog_color;
 
     out_color = min(out_color, vec3(1.0));

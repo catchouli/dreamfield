@@ -23,6 +23,7 @@ layout (std140) uniform GlobalParams
 layout (std140) uniform MaterialParams
 {
     bool has_base_color_texture;
+    vec4 base_color;
 };
 
 #define LIGHT_COUNT 20
