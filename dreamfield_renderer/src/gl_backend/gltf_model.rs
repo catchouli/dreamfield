@@ -55,11 +55,22 @@ struct GltfMeshPrimitive {
 }
 
 impl GltfModel {
+    /// Load a model from a gltf file
+    /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
+    pub fn from_file(path: &str) -> Result<GltfModel, gltf::Error> {
+        Self::import(gltf::import(path)?)
+    }
+
     /// Load a model from a gltf file embedded in a buffer
     /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
     pub fn from_buf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
-        let (doc, buffer_data, image_data) = gltf::import_slice(data)?;
+        Self::import(gltf::import_slice(data)?)
+    }
 
+    /// Load from a (doc, buffer_data, image_data)
+    fn import((doc, buffer_data, image_data): (gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>))
+        -> Result<GltfModel, gltf::Error>
+    {
         // Load all buffers
         let buffers: Vec<u32> = unsafe {
             let mut buffers = vec![0; buffer_data.len()];
