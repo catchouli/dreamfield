@@ -92,6 +92,13 @@ impl FpsCamera {
         self.dirty = true;
     }
 
+    /// Set the camera pitch and yaw
+    pub fn set_pitch_yaw(&mut self, pitch: f32, yaw: f32) {
+        self.pitch = pitch;
+        self.yaw = yaw;
+        self.dirty = true;
+    }
+
     /// Move the camera in its axis
     pub fn move_camera(&mut self, forward: f32, right: f32, up: f32) {
         let new_pos = self.pos + forward * self.forward() + right * self.right() + up * self.right();
