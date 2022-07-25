@@ -39,7 +39,8 @@ pub struct GLRenderer {
     ubo_global: UniformBuffer<GlobalParams>,
     framebuffer: Framebuffer,
     window_viewport: (i32, i32),
-    ps1_mode: bool
+    ps1_mode: bool,
+    wireframe_enabled: bool
 }
 
 impl GLRenderer {
@@ -114,7 +115,8 @@ impl GLRenderer {
            ubo_global,
            framebuffer,
            window_viewport: (width, height),
-           ps1_mode: true
+           ps1_mode: true,
+           wireframe_enabled: false
         };
 
         renderer.set_window_viewport(width, height);
@@ -133,6 +135,14 @@ impl GLRenderer {
         self.set_gl_viewport(RENDER_WIDTH, RENDER_HEIGHT);
         self.framebuffer.bind_draw();
 
+        // Enable or disable wireframe mode
+        let polygon_mode = match self.wireframe_enabled {
+            true => gl::LINE,
+            false => gl::FILL
+        };
+        unsafe { gl::PolygonMode(gl::FRONT_AND_BACK, polygon_mode) }
+
+        // Clear screen
         unsafe {
             gl::ClearColor(0.06, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -143,14 +153,16 @@ impl GLRenderer {
         self.sky_texture.bind(bindings::TextureSlot::BaseColor);
         self.sky_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
-        unsafe { gl::Enable(gl::DEPTH_TEST) }
 
         // Draw glfw models
+        unsafe { gl::Enable(gl::DEPTH_TEST) }
+
         let main_shader = match self.ps1_mode {
             true => &self.ps1_shader,
             false => &self.pbr_shader
         };
         main_shader.use_program();
+
         self.demo_scene_model.render(&mut self.ubo_global);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.ball_pos, 0.0)));
         self.fire_orb_model.render(&mut self.ubo_global);
@@ -162,11 +174,14 @@ impl GLRenderer {
         let (window_width, window_height) = self.window_viewport;
         self.set_gl_viewport(window_width, window_height);
 
-        unsafe { gl::Disable(gl::DEPTH_TEST) }
+        unsafe {
+            gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
+            gl::Disable(gl::DEPTH_TEST)
+        }
+
         self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
         self.blit_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
-        unsafe { gl::Enable(gl::DEPTH_TEST) }
     }
 
     /// Toggle ps1 graphics mode
@@ -182,6 +197,11 @@ impl GLRenderer {
         self.ubo_global.set_window_aspect(&(width as f32 / height as f32));
         // TODO: shouldn't be needed
         self.ubo_global.upload_all();
+    }
+
+    /// Toggle wireframe mode
+    pub fn toggle_wireframe_mode(&mut self) {
+        self.wireframe_enabled = !self.wireframe_enabled;
     }
 
     /// Update the gl viewport

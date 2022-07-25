@@ -100,6 +100,9 @@ fn handle_window_event(window: &mut Window, renderer: &mut GLRenderer, event: gl
         glfw::WindowEvent::Key(Key::F1, _, Action::Press, _) => {
             renderer.toggle_graphics_mode();
         }
+        glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
+            renderer.toggle_wireframe_mode();
+        }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
             if let Some(input) = map_game_inputs_key(key) {
                 input_state.inputs[input as usize] = true;
