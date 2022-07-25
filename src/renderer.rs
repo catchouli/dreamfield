@@ -3,6 +3,7 @@ pub mod resources;
 use cgmath::*;
 use dreamfield_renderer::gl_backend::*;
 use dreamfield_renderer::camera::Camera;
+use dreamfield_renderer::shaders;
 
 const RENDER_WIDTH: i32 = 320;
 const RENDER_HEIGHT: i32 = 240;
@@ -42,10 +43,10 @@ impl Renderer {
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
         // Load shaders
-        let sky_shader = ShaderProgram::new_from_vf(resources::SHADER_SKY);
-        let pbr_shader = ShaderProgram::new_from_vf(resources::SHADER_PBR);
-        let ps1_shader = ShaderProgram::new_from_vtf(resources::SHADER_PS1);
-        let blit_shader = ShaderProgram::new_from_vf(resources::SHADER_BLIT);
+        let sky_shader = ShaderProgram::new_from_vf(shaders::SHADER_SKY);
+        let pbr_shader = ShaderProgram::new_from_vf(shaders::SHADER_PBR);
+        let ps1_shader = ShaderProgram::new_from_vtf(shaders::SHADER_PS1);
+        let blit_shader = ShaderProgram::new_from_vf(shaders::SHADER_BLIT);
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
