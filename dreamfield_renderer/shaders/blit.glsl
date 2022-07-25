@@ -1,6 +1,6 @@
 #version 330 core
 
-#include resources/shaders/include/uniforms.glsl
+#include dreamfield_renderer/shaders/include/uniforms.glsl
 
 #ifdef BUILDING_VERTEX_SHADER
 

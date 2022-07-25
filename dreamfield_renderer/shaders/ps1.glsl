@@ -2,9 +2,9 @@
 
 #define VERTEX_LIGHTING 1
 
-#include resources/shaders/include/uniforms.glsl
-#include resources/shaders/include/lighting.glsl
-#include resources/shaders/include/utils.glsl
+#include dreamfield_renderer/shaders/include/uniforms.glsl
+#include dreamfield_renderer/shaders/include/lighting.glsl
+#include dreamfield_renderer/shaders/include/utils.glsl
 
 #ifdef BUILDING_VERTEX_SHADER
 
@@ -44,7 +44,7 @@ void main() {
     float eye_dist = length(eye_pos);
 
     float min_tess_level = 1.0;
-    float max_tess_level = 9.0;
+    float max_tess_level = 4.0;
     float tess_end = 15.0;
     float dist_norm = min(eye_dist, tess_end) / tess_end;
     float tess_level = min_tess_level + (1.0 - dist_norm) * (max_tess_level - min_tess_level);
@@ -64,13 +64,13 @@ in vec3 tes_pos[];
 in vec3 tes_normal[];
 in vec2 tes_uv[];
 
-noperspective out float gs_dist;
-noperspective out vec3 gs_world_pos;
-noperspective out vec3 gs_nrm;
-noperspective out vec2 gs_uv;
+noperspective out float frag_dist;
+noperspective out vec3 frag_world_pos;
+noperspective out vec3 frag_nrm;
+noperspective out vec2 frag_uv;
 
 #ifdef VERTEX_LIGHTING
-noperspective out vec3 gs_light;
+noperspective out vec3 frag_light;
 #endif
 
 vec3 lerp3D(vec3 v0, vec3 v1, vec3 v2)
@@ -87,91 +87,16 @@ void main() {
     vec4 eye_pos = mat_view * world_pos;
     vec4 clip_pos = mat_proj * eye_pos;
 
-    gs_world_pos = world_pos.xyz;
-    gs_nrm = normalize(mat_normal * normal);
-    gs_uv = uv;
-    gs_dist = length(eye_pos);
+    frag_world_pos = world_pos.xyz;
+    frag_nrm = normalize(mat_normal * normal);
+    frag_uv = uv;
+    frag_dist = length(eye_pos);
     gl_Position = snap_pos(clip_pos, render_res);
 
 #ifdef VERTEX_LIGHTING
-    gs_light = calculate_lighting(gs_world_pos, gs_nrm);
+    frag_light = calculate_lighting(frag_world_pos, frag_nrm);
 #endif
 }
-
-#endif
-
-#ifdef BUILDING_GEOMETRY_SHADER
-
-layout (triangles) in;
-layout (triangle_strip, max_vertices = 3) out;
-
-noperspective in float gs_dist[];
-noperspective in vec3 gs_world_pos[];
-noperspective in vec3 gs_nrm[];
-noperspective in vec2 gs_uv[];
-
-#ifdef VERTEX_LIGHTING
-noperspective in vec3 gs_light[];
-#endif
-
-noperspective out float frag_dist;
-noperspective out vec3 frag_world_pos;
-noperspective out vec3 frag_nrm;
-noperspective out vec2 frag_uv;
-
-#ifdef VERTEX_LIGHTING
-noperspective out vec3 frag_light;
-#endif
-
-bool is_on_screen(vec4 pos) {
-    pos.xyz /= pos.w;
-    return pos.x >= -1.0 && pos.x <= 1.0 && pos.y >= -1.0 && pos.y <= 1.0;
-}
-
-void main() {
-    vec4 a = gl_in[0].gl_Position;
-    vec4 b = gl_in[1].gl_Position;
-    vec4 c = gl_in[2].gl_Position;
-
-    int verts_on_screen =
-        (is_on_screen(a) ? 1 : 0) +
-        (is_on_screen(b) ? 1 : 0) +
-        (is_on_screen(c) ? 1 : 0);
-
-    if (verts_on_screen > 1) {
-        gl_Position = a; 
-        frag_dist = gs_dist[0];
-        frag_world_pos = gs_world_pos[0];
-        frag_nrm = gs_nrm[0];
-        frag_uv = gs_uv[0];
-#ifdef VERTEX_LIGHTING
-        frag_light = gs_light[0];
-#endif
-        EmitVertex();
-
-        gl_Position = b;
-        frag_dist = gs_dist[1];
-        frag_world_pos = gs_world_pos[1];
-        frag_nrm = gs_nrm[1];
-        frag_uv = gs_uv[1];
-#ifdef VERTEX_LIGHTING
-        frag_light = gs_light[1];
-#endif
-        EmitVertex();
-
-        gl_Position = c;
-        frag_dist = gs_dist[2];
-        frag_world_pos = gs_world_pos[2];
-        frag_nrm = gs_nrm[2];
-        frag_uv = gs_uv[2];
-#ifdef VERTEX_LIGHTING
-        frag_light = gs_light[2];
-#endif
-        EmitVertex();
-
-        EndPrimitive();
-    }
-}  
 
 #endif
 
