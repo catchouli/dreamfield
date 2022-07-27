@@ -51,10 +51,13 @@ void main() {
     float horz_fov = M_PI / 2.0 * target_aspect;
     float vert_fov = M_PI / 2.0;
 
-    // Calculate ray dir
     vec3 ray_dir = calc_ray_dir();
+    vec3 rd = ray_dir;
+    //vec2 tex_coords = project_equilateral(ray_dir);
 
-    vec3 out_color = fog_color;
+    vec2 tex_coords = vec2(atan(rd.z, rd.x) + M_PI, acos(rd.y)) / vec2(2.0 * M_PI, M_PI);
+
+    vec3 out_color = texture(tex_skybox, tex_coords).rgb;
 
     out_frag_color = vec4(out_color, 1.0);
 }

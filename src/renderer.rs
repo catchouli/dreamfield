@@ -32,13 +32,13 @@ impl Renderer {
     pub fn new(width: i32, height: i32) -> Renderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
-        ubo_global.set_fog_color(&vec3(0.05, 0.05, 0.05));
-        ubo_global.set_fog_dist(&vec2(7.5, 15.0));
+        ubo_global.set_fog_color(&vec3(0.0, 0.0, 0.0));
+        ubo_global.set_fog_dist(&vec2(14.0, 15.0));
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
 
-        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 20.0));
+        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 15.0));
 
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
@@ -127,6 +127,7 @@ impl Renderer {
         // Clear screen
         unsafe {
             gl::ClearColor(0.05, 0.05, 0.05, 1.0);
+            gl::ClearColor(1.0, 0.0, 1.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
@@ -134,7 +135,7 @@ impl Renderer {
         unsafe { gl::Disable(gl::DEPTH_TEST) }
         self.sky_texture.bind(bindings::TextureSlot::BaseColor);
         self.sky_shader.use_program();
-        self.full_screen_rect.draw_indexed(gl::PATCHES, 6);
+        self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
         // Draw glfw models
         unsafe { gl::Enable(gl::DEPTH_TEST) }
