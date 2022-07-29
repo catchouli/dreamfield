@@ -11,15 +11,18 @@
 layout(location = 0) in vec3 vs_pos;
 layout(location = 1) in vec3 vs_normal;
 layout(location = 3) in vec2 vs_uv;
+layout(location = 5) in vec4 vs_col;
 
 out vec3 tcs_pos;
 out vec3 tcs_normal;
 out vec2 tcs_uv;
+out vec3 tcs_col;
 
 void main() {
     tcs_pos = vs_pos;
     tcs_normal = vs_normal;
     tcs_uv = vs_uv;
+    tcs_col = vs_col.rgb / 65535.0;
 }
 
 #endif
@@ -29,16 +32,19 @@ void main() {
 in vec3 tcs_pos[];
 in vec3 tcs_normal[];
 in vec2 tcs_uv[];
+in vec3 tcs_col[];
 
 layout(vertices=3) out;
 out vec3 tes_pos[];
 out vec3 tes_normal[];
 out vec2 tes_uv[];
+out vec3 tes_col[];
 
 void main() {
     tes_pos[gl_InvocationID] = tcs_pos[gl_InvocationID];
     tes_normal[gl_InvocationID] = tcs_normal[gl_InvocationID];
     tes_uv[gl_InvocationID] = tcs_uv[gl_InvocationID];
+    tes_col[gl_InvocationID] = tcs_col[gl_InvocationID];
 
     vec4 eye_pos = mat_view * mat_model * vec4(tcs_pos[gl_InvocationID], 1.0);
     float eye_dist = length(eye_pos);
@@ -63,11 +69,13 @@ layout(triangles,equal_spacing) in;
 in vec3 tes_pos[];
 in vec3 tes_normal[];
 in vec2 tes_uv[];
+in vec3 tes_col[];
 
 noperspective out float frag_dist;
 noperspective out vec3 frag_world_pos;
 noperspective out vec3 frag_nrm;
 noperspective out vec2 frag_uv;
+noperspective out vec3 frag_col;
 
 #ifdef VERTEX_LIGHTING
 noperspective out vec3 frag_light;
@@ -82,6 +90,7 @@ void main() {
     vec3 pos = lerp3D(tes_pos[0], tes_pos[1], tes_pos[2]);
     vec3 normal = lerp3D(tes_normal[0], tes_normal[1], tes_normal[2]);
     vec2 uv = lerp3D(vec3(tes_uv[0], 0.0), vec3(tes_uv[1], 0.0), vec3(tes_uv[2], 0.0)).xy;
+    vec3 col = lerp3D(tes_col[0], tes_col[1], tes_col[2]);
 
     vec4 world_pos = mat_model * vec4(pos, 1.0);
     vec4 eye_pos = mat_view * world_pos;
@@ -90,6 +99,7 @@ void main() {
     frag_world_pos = world_pos.xyz;
     frag_nrm = normalize(mat_normal * normal);
     frag_uv = uv;
+    frag_col = col;
     frag_dist = length(eye_pos);
     gl_Position = snap_pos(clip_pos, render_res);
 
@@ -108,6 +118,7 @@ noperspective in float frag_dist;
 noperspective in vec3 frag_world_pos;
 noperspective in vec3 frag_nrm;
 noperspective in vec2 frag_uv;
+noperspective in vec3 frag_col;
 
 #ifdef VERTEX_LIGHTING
 noperspective in vec3 frag_light;
@@ -116,8 +127,10 @@ noperspective in vec3 frag_light;
 out vec4 out_frag_color;
 
 void main() {
-    vec3 base_color_tex = has_base_color_texture ? texture(tex_base_color, frag_uv).rgb : vec3(1.0);
-    vec3 albedo = base_color.rgb * base_color_tex;
+    vec4 base_color_tex = has_base_color_texture ? texture(tex_base_color, frag_uv) : vec4(1.0);
+    vec3 albedo = base_color.rgb * base_color_tex.rgb;
+
+    float alpha = base_color.a * base_color_tex.a;
 
 #ifdef VERTEX_LIGHTING
     vec3 light = frag_light;
@@ -133,7 +146,7 @@ void main() {
         + fog_factor * fog_color;
 
     out_color = min(out_color, vec3(1.0));
-    out_frag_color = vec4(out_color, 1.0);
+    out_frag_color = vec4(out_color, alpha);
 }
 
 #endif

@@ -12,10 +12,10 @@ use self::level_collision::LevelCollision;
 const CAM_LOOK_SPEED: f32 = 1.0;
 
 /// The camera move speed
-const CAM_MOVE_SPEED: f32 = 3.0;
+const CAM_MOVE_SPEED: f32 = 4.0;
 
 /// The camera fast move speed
-const CAM_MOVE_SPEED_FAST: f32 = 10.0;
+const CAM_MOVE_SPEED_FAST: f32 = 50.0;
 
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
@@ -33,7 +33,9 @@ impl GameState {
     /// Create a new, default game state
     pub fn new() -> GameState {
         // Create camera
-        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 7.0, 10.0), -0.17, 0.0, CAM_LOOK_SPEED);
+        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), -0.17, 0.0, 0.0);
+        // Going outside (disabled)
+        //let camera = FpsCamera::new_with_pos_rot(vec3(-53.925, 5.8, 19.56), 0.097, 1.57, 0.0);
 
         // Load level collision
         let level_collision = LevelCollision::new(resources::MODEL_DEMO_SCENE);
@@ -61,7 +63,7 @@ impl GameState {
     }
 
     /// Get the movement input
-    fn movement_input(&mut self, input_state: &InputState) -> (f32, f32) {
+    fn movement_input(&self, input_state: &InputState) -> (f32, f32) {
         let inputs = input_state.inputs;
 
         let cam_speed = match inputs[InputName::CamSpeed as usize] {
@@ -71,8 +73,8 @@ impl GameState {
 
         let cam_forwards = inputs[InputName::CamForwards as usize];
         let cam_backwards = inputs[InputName::CamBackwards as usize];
-        let cam_left = inputs[InputName::CamLeft as usize];
-        let cam_right = inputs[InputName::CamRight as usize];
+        let cam_left = inputs[InputName::CamStrafeLeft as usize];
+        let cam_right = inputs[InputName::CamStrafeRight as usize];
 
         let forward_cam_movement = match (cam_forwards, cam_backwards) {
             (true, false) => cam_speed,
@@ -89,17 +91,47 @@ impl GameState {
         (forward_cam_movement, right_cam_movement)
     }
 
+    /// Get the look input
+    fn look_input(&self, input_state: &InputState) -> (f32, f32) {
+        let inputs = input_state.inputs;
+
+        let cam_look_up = inputs[InputName::CamLookUp as usize];
+        let cam_look_down = inputs[InputName::CamLookDown as usize];
+        let cam_look_left = inputs[InputName::CamLookLeft as usize];
+        let cam_look_right = inputs[InputName::CamLookRight as usize];
+
+        let cam_look_vertical = match (cam_look_up, cam_look_down) {
+            (true, false) => CAM_LOOK_SPEED,
+            (false, true) => -CAM_LOOK_SPEED,
+            _ => 0.0
+        };
+
+        let cam_look_horizontal = match (cam_look_left, cam_look_right) {
+            (true, false) => CAM_LOOK_SPEED,
+            (false, true) => -CAM_LOOK_SPEED,
+            _ => 0.0
+        };
+
+        (cam_look_horizontal, cam_look_vertical)
+    }
+
     /// Simulate the character movement
     fn simulate_character(&mut self, input_state: &InputState, time_delta: f32) {
         /// The character camera height
         const CHAR_HEIGHT: f32 = 1.8;
 
-        // Update look direction
+        // Update look direction (mouse)
         if input_state.cursor_captured {
             let (dx, dy) = input_state.mouse_diff;
             self.camera.mouse_move(dx as f32, dy as f32);
-            self.camera.update_matrices();
         }
+
+        // Update look direction (buttons)
+        let (cam_look_horizontal, cam_look_vertical) = self.look_input(input_state);
+        let (mut pitch, mut yaw) = self.camera.get_pitch_yaw();
+        pitch += cam_look_vertical * time_delta;
+        yaw += cam_look_horizontal * time_delta;
+        self.camera.set_pitch_yaw(pitch, yaw);
 
         // Get camera movement input
         let (forward_cam_movement, right_cam_movement) = self.movement_input(input_state);

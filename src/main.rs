@@ -41,11 +41,14 @@ fn main() {
     // Input state
     let mut input_state = InputState::new();
 
+    // Colemak mode (hax)
+    let mut colemak_mode = false;
+
     // Start main loop
     while !window.window.should_close() {
         // Handle events
         for event in window.poll_events() {
-            handle_window_event(&mut window, &mut renderer, event, &mut input_state);
+            handle_window_event(&mut window, &mut renderer, event, &mut input_state, &mut colemak_mode);
         }
 
         // Handle mouse movement
@@ -75,8 +78,13 @@ fn main() {
 
 /// Handle events
 fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw::WindowEvent,
-                       input_state: &mut InputState)
+                       input_state: &mut InputState, colemak_mode: &mut bool)
 {
+    let input_map_func = match colemak_mode {
+        true => map_game_inputs_colemak,
+        false => map_game_inputs_default
+    };
+
     match event {
         glfw::WindowEvent::FramebufferSize(width, height) => {
             renderer.set_window_viewport(width, height)
@@ -102,13 +110,16 @@ fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw
         glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
             renderer.toggle_wireframe_mode();
         }
+        glfw::WindowEvent::Key(Key::F9, _, Action::Press, _) => {
+            *colemak_mode = !(*colemak_mode);
+        }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
-            if let Some(input) = map_game_inputs_key(key) {
+            if let Some(input) = input_map_func(key) {
                 input_state.inputs[input as usize] = true;
             }
         }
         glfw::WindowEvent::Key(key, _, Action::Release, _) => {
-            if let Some(input) = map_game_inputs_key(key) {
+            if let Some(input) = input_map_func(key) {
                 input_state.inputs[input as usize] = false;
             }
         }
@@ -117,12 +128,41 @@ fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw
 }
 
 /// Map game inputs from the keyboard
-fn map_game_inputs_key(key: Key) -> Option<InputName> {
+fn map_game_inputs_default(key: Key) -> Option<InputName> {
     match key {
         Key::W => Some(InputName::CamForwards),
+        Key::A => Some(InputName::CamStrafeLeft),
         Key::S => Some(InputName::CamBackwards),
-        Key::A => Some(InputName::CamLeft),
-        Key::D => Some(InputName::CamRight),
+        Key::D => Some(InputName::CamStrafeRight),
+        Key::I => Some(InputName::CamLookUp),
+        Key::J => Some(InputName::CamLookLeft),
+        Key::K => Some(InputName::CamLookDown),
+        Key::L => Some(InputName::CamLookRight),
+        Key::Up => Some(InputName::CamLookUp),
+        Key::Left => Some(InputName::CamLookLeft),
+        Key::Down => Some(InputName::CamLookDown),
+        Key::Right => Some(InputName::CamLookRight),
+        Key::LeftShift => Some(InputName::CamSpeed),
+        Key::Z => Some(InputName::Rewind),
+        _ => None
+    }
+}
+
+/// Map game inputs from colemak (hax)
+fn map_game_inputs_colemak(key: Key) -> Option<InputName> {
+    match key {
+        Key::W => Some(InputName::CamForwards),
+        Key::A => Some(InputName::CamStrafeLeft),
+        Key::R => Some(InputName::CamBackwards),
+        Key::S => Some(InputName::CamStrafeRight),
+        Key::U => Some(InputName::CamLookUp),
+        Key::N => Some(InputName::CamLookLeft),
+        Key::E => Some(InputName::CamLookDown),
+        Key::I => Some(InputName::CamLookRight),
+        Key::Up => Some(InputName::CamLookUp),
+        Key::Left => Some(InputName::CamLookLeft),
+        Key::Down => Some(InputName::CamLookDown),
+        Key::Right => Some(InputName::CamLookRight),
         Key::LeftShift => Some(InputName::CamSpeed),
         Key::Z => Some(InputName::Rewind),
         _ => None

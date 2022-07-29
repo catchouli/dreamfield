@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use cgmath::{Matrix4, SquareMatrix, Vector3, Zero, vec3, Rad, Quaternion, Rotation3};
 
 /// The world forward direction
@@ -11,6 +13,12 @@ const WORLD_RIGHT: Vector3<f32> = vec3(1.0, 0.0, 0.0);
 
 /// The base scale for camera look speed
 const BASE_CAM_LOOK_SPEED_SCALE: f32 = 0.002;
+
+/// The min limit for pitch
+const PITCH_MIN: f32 = -PI * 0.4;
+
+/// The min limit for pitch
+const PITCH_MAX: f32 = PI * 0.4;
 
 /// A camera trait for providing something that can be used to obtain a view matrix
 pub trait Camera {
@@ -92,9 +100,14 @@ impl FpsCamera {
         self.dirty = true;
     }
 
+    /// Get the camera pitch and yaw
+    pub fn get_pitch_yaw(&self) -> (f32, f32) {
+        (self.pitch, self.yaw)
+    }
+
     /// Set the camera pitch and yaw
     pub fn set_pitch_yaw(&mut self, pitch: f32, yaw: f32) {
-        self.pitch = pitch;
+        self.pitch = f32::clamp(pitch, PITCH_MIN, PITCH_MAX);
         self.yaw = yaw;
         self.dirty = true;
     }
@@ -107,8 +120,10 @@ impl FpsCamera {
 
     /// Input mouse movement
     pub fn mouse_move(&mut self, dx: f32, dy: f32) {
-        self.pitch -= dy * self.look_speed * BASE_CAM_LOOK_SPEED_SCALE;
-        self.yaw -= dx * self.look_speed * BASE_CAM_LOOK_SPEED_SCALE;
+        let (mut pitch, mut yaw) = self.get_pitch_yaw();
+        pitch -= dy * self.look_speed * BASE_CAM_LOOK_SPEED_SCALE;
+        yaw -= dx * self.look_speed * BASE_CAM_LOOK_SPEED_SCALE;
+        self.set_pitch_yaw(pitch, yaw);
         self.dirty = true;
     }
 

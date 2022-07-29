@@ -11,8 +11,12 @@ pub enum InputEvent {
 pub enum InputName {
     CamForwards,
     CamBackwards,
-    CamLeft,
-    CamRight,
+    CamStrafeLeft,
+    CamStrafeRight,
+    CamLookUp,
+    CamLookLeft,
+    CamLookDown,
+    CamLookRight,
     CamSpeed,
     Rewind,
     Last

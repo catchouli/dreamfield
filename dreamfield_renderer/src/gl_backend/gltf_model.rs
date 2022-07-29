@@ -4,12 +4,12 @@ use gltf::image::Format;
 use gltf::accessor::DataType;
 use gltf::json::extras::RawValue;
 use gltf::khr_lights_punctual::Kind;
+use gltf::material::AlphaMode;
 use super::texture::{Texture, TextureParams};
-use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams, LightParams, Light};
+use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::bindings;
 use super::lights::LightType;
 use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4};
-use super::to_std140::*;
 
 /// A gltf model
 pub struct GltfModel {
@@ -19,7 +19,6 @@ pub struct GltfModel {
     drawables: Vec<GltfDrawable>,
     lights: Vec<GltfLight>,
     materials: Vec<UniformBuffer<MaterialParams>>,
-    ubo_lights: Option<UniformBuffer<LightParams>>,
     default_material: UniformBuffer<MaterialParams>,
     transform: Matrix4<f32>
 }
@@ -32,14 +31,14 @@ pub struct GltfDrawable {
 }
 
 pub struct GltfLight {
-    light_type: LightType,
-    light_pos: Vector3<f32>,
-    light_dir: Vector3<f32>,
-    color: Vector3<f32>,
-    intensity: f32,
-    range: Option<f32>,
-    inner_cone_angle: Option<f32>,
-    outer_cone_angle: Option<f32>
+    pub light_type: LightType,
+    pub light_pos: Vector3<f32>,
+    pub light_dir: Vector3<f32>,
+    pub color: Vector3<f32>,
+    pub intensity: f32,
+    pub range: Option<f32>,
+    pub inner_cone_angle: Option<f32>,
+    pub outer_cone_angle: Option<f32>
 }
 
 struct GltfMesh {
@@ -51,7 +50,8 @@ struct GltfMeshPrimitive {
     indexed_offset_length: Option<(i32, i32)>,
     material_index: Option<usize>,
     base_color_texture: Option<usize>,
-    primitive_count: Option<i32>
+    primitive_count: Option<i32>,
+    alpha_blend: bool
 }
 
 impl GltfModel {
@@ -110,31 +110,6 @@ impl GltfModel {
             (drawables, lights)
         };
 
-        // Load all lights
-        let ubo_lights = match lights.len() {
-            0 => None,
-            _ => {
-                let mut ubo_lights = UniformBuffer::new();
-
-                for (i, light) in lights.iter().enumerate() {
-                    let light_range = light.range.unwrap_or(0.0);
-                    ubo_lights.set_lights(i, &Light {
-                        enabled: true.to_std140(),
-                        light_pos: light.light_pos.to_std140(),
-                        light_dir: light.light_dir.to_std140(),
-                        light_type: (light.light_type as i32).to_std140(),
-                        color: vec3(light.color.x, light.color.y, light.color.z).to_std140(),
-                        intensity: light.intensity.to_std140(),
-                        range: light_range.to_std140(),
-                        inner_cone_angle: light.inner_cone_angle.unwrap_or(0.0).to_std140(),
-                        outer_cone_angle: light.outer_cone_angle.unwrap_or(0.0).to_std140()
-                    });
-                }
-
-                Some(ubo_lights)
-            }
-        };
-
         // Create default material
         let default_material = UniformBuffer::<MaterialParams>::new();
 
@@ -145,7 +120,6 @@ impl GltfModel {
             drawables,
             lights,
             materials,
-            ubo_lights,
             default_material,
             transform: SquareMatrix::identity()
         })
@@ -161,11 +135,6 @@ impl GltfModel {
             true => gl::PATCHES,
             false => gl::TRIANGLES
         };
-
-        // Bind lights if the model has any
-        if let Some(ubo_lights) = &mut self.ubo_lights {
-            ubo_lights.bind(bindings::UniformBlockBinding::LightParams);
-        }
 
         // Render all prims
         for drawable in self.drawables.iter_mut() {
@@ -183,6 +152,19 @@ impl GltfModel {
                     .map(|mat| &mut self.materials[mat])
                     .unwrap_or(&mut self.default_material)
                     .bind(bindings::UniformBlockBinding::MaterialParams);
+
+                // Enable or disable alpha blending
+                unsafe {
+                    if primitive.alpha_blend {
+                        gl::Enable(gl::BLEND);
+                        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+                        gl::DepthMask(gl::FALSE);
+                    }
+                    else {
+                        gl::Disable(gl::BLEND);
+                        gl::DepthMask(gl::TRUE);
+                    }
+                }
 
                 // Bind textures, or unbind if None
                 if let Some(base_color_texture_index) = primitive.base_color_texture {
@@ -266,12 +248,12 @@ impl GltfModel {
                 let buffer = buffer_view.buffer();
                 let buffer_index = buffer.index();
 
-                let attrib_index = Self::attribute_index(&prim_type);
-                let attrib_size = Self::attribute_size(&prim_type);
-                let attrib_stride = buffer_view.stride().unwrap_or(0) as i32;
+                let data_type = accessor.data_type();
 
-                // Assuming that it's always gl::FLOAT but I might be wrong
-                let attrib_type = gl::FLOAT;
+                let attrib_index = Self::attribute_index(&prim_type);
+                let attrib_size = accessor.dimensions().multiplicity() as i32;
+                let attrib_type = data_type.as_gl_enum();
+                let attrib_stride = buffer_view.stride().unwrap_or(0) as i32;
 
                 let offset = buffer_view.offset();
 
@@ -287,17 +269,10 @@ impl GltfModel {
                 }
             }
 
-            // Figure out primitive count for non-indexed drawing, I don't know how else to do this
-            // but maybe the information is in the gltf model somewhere. We divide the buffer view
-            // length for each primitive by the size in bytes to figure out the number of
-            // primitives, and if they're mismatched we log a warning and choose the smallest one.
+            // Figure out primitive count for non-indexed drawing
             let primitive_count: Option<i32> = prim.attributes()
-                .flat_map(|(name, accessor)| accessor.view().map(|view| (name, view)))
-                .fold(None, |prev: Option<(Semantic, i32)>, (name, view)| {
-                    // Calculate attribute count
-                    let attrib_size = Self::attribute_size(&name);
-                    let attrib_size_bytes = attrib_size * (std::mem::size_of::<f32>() as i32);
-                    let attrib_count = (view.length() as i32) / attrib_size_bytes;
+                .fold(None, |prev: Option<(Semantic, i32)>, (name, accessor)| {
+                    let attrib_count = accessor.count() as i32;
 
                     // If it's a different size to the previous, warn and use the smaller one
                     if let Some((prev_name, prev_count)) = prev {
@@ -323,30 +298,19 @@ impl GltfModel {
                 .base_color_texture()
                 .map(|tex_info| tex_info.texture().index());
 
+            // Look up whether it's alpha blended
+            let alpha_blend = prim.material().alpha_mode() == AlphaMode::Blend;
+
             // Get material index
             let material_index = prim.material().index();
 
             GltfMeshPrimitive {
-                vao, indexed_offset_length, base_color_texture, material_index, primitive_count
+                vao, indexed_offset_length, base_color_texture, material_index, primitive_count, alpha_blend
             }
         }).collect();
 
         GltfMesh {
             primitives
-        }
-    }
-
-    /// Get the attribute size of a prim_type (1, 2, 3, or 4)
-    fn attribute_size(prim_type: &gltf::Semantic) -> i32 {
-        match prim_type {
-            Semantic::Positions => 3,
-            Semantic::Normals => 3,
-            Semantic::Tangents => 4,
-            Semantic::Colors(_) => 3,
-            Semantic::TexCoords(_) => 2,
-            Semantic::Joints(_) => 0,
-            Semantic::Weights(_) => 0,
-            Semantic::Extras(_) => 0
         }
     }
 

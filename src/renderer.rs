@@ -24,7 +24,8 @@ pub struct Renderer {
     framebuffer: Framebuffer,
     window_viewport: (i32, i32),
     ps1_mode: bool,
-    wireframe_enabled: bool
+    wireframe_enabled: bool,
+    ubo_lights: Option<UniformBuffer<LightParams>>
 }
 
 impl Renderer {
@@ -33,12 +34,12 @@ impl Renderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.0, 0.0, 0.0));
-        ubo_global.set_fog_dist(&vec2(14.0, 15.0));
+        ubo_global.set_fog_dist(&vec2(15.0, 22.0));
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
 
-        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 15.0));
+        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 22.0));
 
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
@@ -73,7 +74,13 @@ impl Renderer {
         let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
         let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
-        // Look for extra fields
+        // Build lights from demo scene (disabled)
+        //let ubo_lights = Self::lights_from_models(demo_scene_model.lights());
+
+        // Just build an empty light buffer for later
+        let ubo_lights = Some(UniformBuffer::new());
+
+        // Look for extra fields (unused so far)
         for drawable in demo_scene_model.drawables().iter() {
             if let Some(extra) = drawable.extras() {
                 let raw = extra.get();
@@ -98,7 +105,8 @@ impl Renderer {
            framebuffer,
            window_viewport: (width, height),
            ps1_mode: true,
-           wireframe_enabled: false
+           wireframe_enabled: false,
+           ubo_lights
         };
 
         renderer.set_window_viewport(width, height);
@@ -138,13 +146,31 @@ impl Renderer {
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
         // Draw glfw models
-        unsafe { gl::Enable(gl::DEPTH_TEST) }
+        unsafe {
+            gl::Enable(gl::DEPTH_TEST);
+        }
 
         let main_shader = match self.ps1_mode {
             true => &self.ps1_shader,
             false => &self.pbr_shader
         };
         main_shader.use_program();
+
+        // Update and bind lights
+        if let Some(ubo_lights) = &mut self.ubo_lights {
+            ubo_lights.set_lights(0, &Light {
+                enabled: true.to_std140(),
+                light_pos: game_state.camera.pos().to_std140(),
+                light_dir: vec3(0.0, 0.0, 0.0).to_std140(),
+                light_type: (LightType::PointLight as i32).to_std140(),
+                color: vec3(1.0, 0.89, 0.8).to_std140(),
+                intensity: (1000.0).to_std140(),
+                range: (100.0).to_std140(),
+                inner_cone_angle: (0.0).to_std140(),
+                outer_cone_angle: (0.0).to_std140()
+            });
+            ubo_lights.bind(bindings::UniformBlockBinding::LightParams);
+        }
 
         self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(vec3(0.0, game_state.ball_pos, 0.0)));
@@ -189,6 +215,33 @@ impl Renderer {
     /// Update the gl viewport
     fn set_gl_viewport(&mut self, width: i32, height: i32) {
         unsafe { gl::Viewport(0, 0, width, height) };
+    }
+
+    /// Build a light ubo from the gltf light list
+    fn _lights_from_models(lights: &[GltfLight]) -> Option<UniformBuffer<LightParams>> {
+        match lights.len() {
+            0 => None,
+            _ => {
+                let mut ubo_lights = UniformBuffer::new();
+
+                for (i, light) in lights.iter().enumerate() {
+                    let light_range = light.range.unwrap_or(0.0);
+                    ubo_lights.set_lights(i, &Light {
+                        enabled: true.to_std140(),
+                        light_pos: light.light_pos.to_std140(),
+                        light_dir: light.light_dir.to_std140(),
+                        light_type: (light.light_type as i32).to_std140(),
+                        color: vec3(light.color.x, light.color.y, light.color.z).to_std140(),
+                        intensity: light.intensity.to_std140(),
+                        range: light_range.to_std140(),
+                        inner_cone_angle: light.inner_cone_angle.unwrap_or(0.0).to_std140(),
+                        outer_cone_angle: light.outer_cone_angle.unwrap_or(0.0).to_std140()
+                    });
+                }
+
+                Some(ubo_lights)
+            }
+        }
     }
 }
 
