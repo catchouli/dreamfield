@@ -1,6 +1,6 @@
 #version 400 core
 
-#define VERTEX_LIGHTING 1
+//#define VERTEX_LIGHTING
 
 #include resources/shaders/include/uniforms.glsl
 #include resources/shaders/include/lighting.glsl
@@ -22,7 +22,7 @@ void main() {
     tcs_pos = vs_pos;
     tcs_normal = vs_normal;
     tcs_uv = vs_uv;
-    tcs_col = vs_col.rgb / 65535.0;
+    tcs_col = vs_col.rgb;
 }
 
 #endif
@@ -51,7 +51,7 @@ void main() {
 
     float min_tess_level = 1.0;
     float max_tess_level = 4.0;
-    float tess_end = 15.0;
+    float tess_end = 10.0;
     float dist_norm = min(eye_dist, tess_end) / tess_end;
     float tess_level = min_tess_level + (1.0 - dist_norm) * (max_tess_level - min_tess_level);
 
@@ -135,7 +135,10 @@ void main() {
 #ifdef VERTEX_LIGHTING
     vec3 light = frag_light;
 #else
-    vec3 light = calculate_lighting(frag_world_pos, frag_nrm);
+    const float BLENDER_BAKED_LIGHT_SCALE = 5.0;
+    const vec3 AMBIENT_LIGHT = vec3(0.1);
+    const vec3 MAX_LIGHT = vec3(1.0);
+    vec3 light = min(MAX_LIGHT, frag_col * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
 #endif
 
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?

@@ -257,6 +257,21 @@ impl GltfModel {
 
                 let offset = buffer_view.offset();
 
+                // Ignore extra UV properties
+                let ignored = match prim_type {
+                    Semantic::Colors(_) => { println!("got colors"); false },
+                    Semantic::TexCoords(0) => false,
+                    Semantic::TexCoords(1) => true,
+                    _ =>  false
+                };
+
+                if ignored {
+                    continue;
+                }
+
+                // Log buffers being bound
+                println!("Binding buffer for attrib {:?} (type: {:?}, index: {attrib_index}, size: {attrib_size}, type: {attrib_type}, stride: {attrib_stride})", prim_type, data_type);
+
                 unsafe {
                     gl::BindBuffer(gl::ARRAY_BUFFER, buffers[buffer_index]);
                     gl::EnableVertexAttribArray(attrib_index);

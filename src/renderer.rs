@@ -72,6 +72,7 @@ impl Renderer {
 
         // Load models
         let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
+        println!("loading fire orb");
         let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Build lights from demo scene (disabled)
