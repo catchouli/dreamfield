@@ -1,6 +1,7 @@
 #version 400 core
 
 //#define VERTEX_LIGHTING
+//#define SNAP_VERTEX_POS
 
 #include resources/shaders/include/uniforms.glsl
 #include resources/shaders/include/lighting.glsl
@@ -50,10 +51,15 @@ void main() {
     float eye_dist = length(eye_pos);
 
     float min_tess_level = 1.0;
-    float max_tess_level = 4.0;
+    float max_tess_level = 8.0;
+    float tess_level_steps = 2.0;
+
+    float tess_level_range = max_tess_level - min_tess_level;
+
     float tess_end = 10.0;
     float dist_norm = min(eye_dist, tess_end) / tess_end;
-    float tess_level = min_tess_level + (1.0 - dist_norm) * (max_tess_level - min_tess_level);
+
+    float tess_level = min_tess_level + (1.0 - dist_norm) * tess_level_range;
 
     gl_TessLevelInner[0] = tess_level;
     gl_TessLevelOuter[0] = tess_level;
@@ -75,11 +81,8 @@ noperspective out float frag_dist;
 noperspective out vec3 frag_world_pos;
 noperspective out vec3 frag_nrm;
 noperspective out vec2 frag_uv;
-noperspective out vec3 frag_col;
 
-#ifdef VERTEX_LIGHTING
 noperspective out vec3 frag_light;
-#endif
 
 vec3 lerp3D(vec3 v0, vec3 v1, vec3 v2)
 {
@@ -99,12 +102,18 @@ void main() {
     frag_world_pos = world_pos.xyz;
     frag_nrm = normalize(mat_normal * normal);
     frag_uv = uv;
-    frag_col = col;
     frag_dist = length(eye_pos);
+
+#ifdef SNAP_VERTEX_POS
     gl_Position = snap_pos(clip_pos, render_res);
+#else
+    gl_Position = clip_pos;
+#endif
 
 #ifdef VERTEX_LIGHTING
     frag_light = calculate_lighting(frag_world_pos, frag_nrm);
+#else
+    frag_light = col;
 #endif
 }
 
@@ -118,11 +127,8 @@ noperspective in float frag_dist;
 noperspective in vec3 frag_world_pos;
 noperspective in vec3 frag_nrm;
 noperspective in vec2 frag_uv;
-noperspective in vec3 frag_col;
 
-#ifdef VERTEX_LIGHTING
 noperspective in vec3 frag_light;
-#endif
 
 out vec4 out_frag_color;
 
@@ -135,10 +141,10 @@ void main() {
 #ifdef VERTEX_LIGHTING
     vec3 light = frag_light;
 #else
-    const float BLENDER_BAKED_LIGHT_SCALE = 5.0;
+    const float BLENDER_BAKED_LIGHT_SCALE = 1.0;
     const vec3 AMBIENT_LIGHT = vec3(0.1);
     const vec3 MAX_LIGHT = vec3(1.0);
-    vec3 light = min(MAX_LIGHT, frag_col * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
+    vec3 light = min(MAX_LIGHT, frag_light * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
 #endif
 
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?
