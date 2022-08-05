@@ -10,6 +10,14 @@ const RENDER_HEIGHT: i32 = 240;
 
 const RENDER_ASPECT: f32 = 4.0 / 3.0;
 
+const FOV: f32 = 60.0;
+
+const NEAR_CLIP: f32 = 0.01;
+const FAR_CLIP: f32 = 35.0;
+
+const FOG_START: f32 = FAR_CLIP - 10.0;
+const FOG_END: f32 = FAR_CLIP - 5.0;
+
 /// The renderer
 pub struct Renderer {
     full_screen_rect: Mesh,
@@ -34,12 +42,12 @@ impl Renderer {
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.0, 0.0, 0.0));
-        ubo_global.set_fog_dist(&vec2(15.0, 22.0));
+        ubo_global.set_fog_dist(&vec2(FOG_START, FOG_END));
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
 
-        ubo_global.set_mat_proj(&perspective(Deg(60.0), RENDER_ASPECT, 0.01, 22.0));
+        ubo_global.set_mat_proj(&perspective(Deg(FOV), RENDER_ASPECT, NEAR_CLIP, FAR_CLIP));
 
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
