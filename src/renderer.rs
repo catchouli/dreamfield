@@ -79,9 +79,9 @@ impl Renderer {
             .expect("Failed to load sky texture");
 
         // Load models
-        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
+        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE, true).unwrap();
         println!("loading fire orb");
-        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
+        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB, true).unwrap();
 
         // Build lights from demo scene (disabled)
         //let ubo_lights = Self::lights_from_models(demo_scene_model.lights());

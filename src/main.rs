@@ -14,7 +14,7 @@ const WINDOW_WIDTH: u32 = 1024 * 2;
 const WINDOW_HEIGHT: u32 = 768 * 2;
 
 /// The fixed update frequency
-const FIXED_UPDATE: i32 = 30;
+const FIXED_UPDATE: i32 = 15;
 
 /// The fixed update target time
 const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);

@@ -34,7 +34,7 @@ impl Texture {
         let height = img.height() as i32;
         let data = img.into_bytes();
 
-        Texture::new_from_buf(&data, width, height, gl::RGB, gl::RGB, params)
+        Texture::new_from_buf(&data, width, height, gl::RGB, gl::UNSIGNED_BYTE, gl::RGB, params)
     }
 
     /// Load a new texture from an image in a buffer
@@ -46,12 +46,12 @@ impl Texture {
         let height = rgb_img.height() as i32;
         let data = rgb_img.as_bytes();
 
-        Texture::new_from_buf(&data, width, height, gl::RGB, gl::RGB, params)
+        Texture::new_from_buf(&data, width, height, gl::RGB, gl::UNSIGNED_BYTE, gl::RGB, params)
     }
 
     /// Load a new texture from a buffer
-    pub fn new_from_buf(buf: &[u8], width: i32, height: i32, source_format: u32, dest_format: u32,
-                        params: TextureParams) -> Result<Texture, Box<dyn Error>>
+    pub fn new_from_buf(buf: &[u8], width: i32, height: i32, source_format: u32, source_type: u32,
+                        dest_format: u32, params: TextureParams) -> Result<Texture, Box<dyn Error>>
     {
         unsafe {
             let mut texture = 0;
@@ -71,7 +71,7 @@ impl Texture {
                            height,
                            0,
                            source_format,
-                           gl::UNSIGNED_BYTE,
+                           source_type,
                            &buf[0] as *const u8 as *const GLvoid);
 
             Ok(Texture { id: texture })
@@ -91,11 +91,50 @@ impl Texture {
         }
     }
 
-    // Unbind texture
+    /// Unbind texture
     pub fn unbind(slot: bindings::TextureSlot) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0 + slot as u32);
             gl::BindTexture(gl::TEXTURE_2D, 0)
+        }
+    }
+
+    /// Convert RGBA8 to RGBA5551
+    pub fn convert_rgba8_to_rgba5551(buf: &[u8], out_vec: &mut Vec<u8>) {
+        let input_bytes = buf.len();
+
+        if (input_bytes % 4) != 0 {
+            panic!("convert_rgba8_to_rgba5551: Input buffer needs to be a multiple of 4");
+        }
+
+        let output_bytes = input_bytes / 2;
+        out_vec.resize(output_bytes, 0);
+
+        for i in 0 .. buf.len() / 4 {
+            let mut r = buf[i * 4] as u16;
+            let mut g = buf[i * 4 + 1] as u16;
+            let mut b = buf[i * 4 + 2] as u16;
+            let mut a = buf[i * 4 + 3] as u16;
+
+            // Convert from 0..255 to 0..31
+            r = r * 31 / 255;
+            g = g * 31 / 255;
+            b = b * 31 / 255;
+
+            // Alpha maps 0 to 0, and any other value to 1
+            a = match a {
+                0 => 0,
+                _ => 1
+            };
+
+            // Now convert it back to 2 bytes
+            r = r << 11;
+            g = g << 6;
+            b = b << 1;
+            let converted = r | g | b | a;
+
+            out_vec[i * 2 + 1] = (converted >> 8) as u8;
+            out_vec[i * 2 + 0] = (converted & 0b11111111) as u8;
         }
     }
 }

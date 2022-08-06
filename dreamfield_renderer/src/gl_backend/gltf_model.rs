@@ -56,20 +56,19 @@ struct GltfMeshPrimitive {
 
 impl GltfModel {
     /// Load a model from a gltf file
-    /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
-    pub fn from_file(path: &str) -> Result<GltfModel, gltf::Error> {
-        Self::import(gltf::import(path)?)
+    pub fn from_file(path: &str, downscale_textures: bool) -> Result<GltfModel, gltf::Error> {
+        Self::import(gltf::import(path)?, downscale_textures)
     }
 
     /// Load a model from a gltf file embedded in a buffer
-    /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
-    pub fn from_buf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
-        Self::import(gltf::import_slice(data)?)
+    pub fn from_buf(data: &[u8], downscale_textures: bool) -> Result<GltfModel, gltf::Error> {
+        Self::import(gltf::import_slice(data)?, downscale_textures)
     }
 
     /// Load from a (doc, buffer_data, image_data)
-    fn import((doc, buffer_data, image_data): (gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>))
-        -> Result<GltfModel, gltf::Error>
+    /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
+    fn import((doc, buffer_data, image_data): (gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>),
+              downscale_textures: bool) -> Result<GltfModel, gltf::Error>
     {
         // Load all buffers
         let buffers: Vec<u32> = unsafe {
@@ -88,7 +87,9 @@ impl GltfModel {
         };
 
         // Load all textures
-        let textures = doc.textures().map(|tex| Self::load_gltf_texture(&tex, &image_data)).collect();
+        let textures = doc.textures()
+            .map(|tex| Self::load_gltf_texture(&tex, &image_data, downscale_textures))
+            .collect();
 
         // Load all meshes
         let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
@@ -344,9 +345,25 @@ impl GltfModel {
     }
 
     /// Load a gltf texture
-    fn load_gltf_texture(tex: &gltf::Texture, image_data: &[gltf::image::Data]) -> Texture {
+    fn load_gltf_texture(tex: &gltf::Texture, image_data: &[gltf::image::Data], downscale: bool) -> Texture {
         let data = &image_data[tex.source().index()];
         let sampler = tex.sampler();
+
+        // Downscale textures to RGBA5551 if selected
+        let mut new_pixel_vec = Vec::<u8>::new();
+        let (format, ty, pixels) = match downscale {
+            true => {
+                if data.format != Format::R8G8B8A8 {
+                    panic!("load_gltf_texture: must be RGBA8 to be downscaled");
+                }
+                Texture::convert_rgba8_to_rgba5551(&data.pixels, &mut new_pixel_vec);
+                (gl::RGBA, gl::UNSIGNED_SHORT_5_5_5_1, &new_pixel_vec)
+            }
+            false => {
+                let (format, ty) = Self::source_format(data.format);
+                (format, ty, &data.pixels)
+            }
+        };
 
         // Load texture
         let tex_params = TextureParams {
@@ -356,28 +373,30 @@ impl GltfModel {
             mag_filter: sampler.mag_filter().map(|f| f.as_gl_enum()).unwrap_or(gl::NEAREST)
         };
 
-        let tex = Texture::new_from_buf(&data.pixels, data.width as i32, data.height as i32,
-            Self::source_format(data.format), gl::RGBA, tex_params).expect("Failed to load gltf texture");
+        let width = data.width as i32;
+        let height = data.height as i32;
+        let tex = Texture::new_from_buf(&pixels, width, height, format, ty, gl::RGBA, tex_params)
+            .expect("Failed to load gltf texture");
 
-        // Generate mipmaps - the mag_filter is often one which needs them
+        // Generate mipmaps - the mag_filter is often on which needs them
         tex.gen_mipmaps();
 
         tex
     }
 
-    /// Get gl format from gltf::image::Format
-    fn source_format(format: gltf::image::Format) -> u32 {
+    /// Get gl format and type from gltf::image::Format
+    fn source_format(format: gltf::image::Format) -> (u32, u32) {
         match format {
-            Format::R8 => gl::RED,
-            Format::R8G8 => gl::RG,
-            Format::R8G8B8 => gl::RGB,
-            Format::R8G8B8A8 => gl::RGBA,
-            Format::B8G8R8 => gl::BGR,
-            Format::B8G8R8A8 => gl::BGRA,
-            Format::R16 => gl::R16,
-            Format::R16G16 => gl::RG16,
-            Format::R16G16B16 => gl::RGB16,
-            Format::R16G16B16A16 => gl::RGBA16,
+            Format::R8 => (gl::RED, gl::UNSIGNED_BYTE),
+            Format::R8G8 => (gl::RG, gl::UNSIGNED_BYTE),
+            Format::R8G8B8 => (gl::RGB, gl::UNSIGNED_BYTE),
+            Format::R8G8B8A8 => (gl::RGBA, gl::UNSIGNED_BYTE),
+            Format::B8G8R8 => (gl::BGR, gl::UNSIGNED_BYTE),
+            Format::B8G8R8A8 => (gl::BGRA, gl::UNSIGNED_BYTE),
+            Format::R16 => (gl::RED, gl::UNSIGNED_SHORT),
+            Format::R16G16 => (gl::RG, gl::UNSIGNED_SHORT),
+            Format::R16G16B16 => (gl::RGB, gl::UNSIGNED_SHORT),
+            Format::R16G16B16A16 => (gl::RGBA, gl::UNSIGNED_SHORT),
         }
     }
 
