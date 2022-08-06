@@ -1,7 +1,7 @@
 #version 400 core
 
-//#define VERTEX_LIGHTING
-//#define SNAP_VERTEX_POS
+//#define REALTIME_LIGHTING
+#define SNAP_VERTEX_POS
 
 #include resources/shaders/include/uniforms.glsl
 #include resources/shaders/include/lighting.glsl
@@ -14,13 +14,26 @@ layout(location = 1) in vec3 vs_normal;
 layout(location = 3) in vec2 vs_uv;
 layout(location = 5) in vec4 vs_col;
 
-out vec3 tcs_pos;
+out vec4 tcs_clip_pos;
+out vec3 tcs_eye_pos;
+out vec3 tcs_world_pos;
 out vec3 tcs_normal;
 out vec2 tcs_uv;
 out vec3 tcs_col;
 
 void main() {
-    tcs_pos = vs_pos;
+    vec4 world_pos = mat_model * vec4(vs_pos, 1.0);
+    vec4 eye_pos = mat_view * world_pos;
+    vec4 clip_pos = mat_proj * eye_pos;
+
+#ifdef SNAP_VERTEX_POS
+    clip_pos = snap_pos(clip_pos, render_res);
+#endif
+
+    tcs_clip_pos = clip_pos;
+    tcs_eye_pos = eye_pos.xyz;
+    tcs_world_pos = world_pos.xyz;
+
     tcs_normal = vs_normal;
     tcs_uv = vs_uv;
     tcs_col = vs_col.rgb;
@@ -30,25 +43,30 @@ void main() {
 
 #ifdef BUILDING_TESS_CONTROL_SHADER
 
-in vec3 tcs_pos[];
+in vec4 tcs_clip_pos[];
+in vec3 tcs_eye_pos[];
+in vec3 tcs_world_pos[];
 in vec3 tcs_normal[];
 in vec2 tcs_uv[];
 in vec3 tcs_col[];
 
 layout(vertices=3) out;
-out vec3 tes_pos[];
+out vec4 tes_clip_pos[];
+out vec3 tes_eye_pos[];
+out vec3 tes_world_pos[];
 out vec3 tes_normal[];
 out vec2 tes_uv[];
 out vec3 tes_col[];
 
 void main() {
-    tes_pos[gl_InvocationID] = tcs_pos[gl_InvocationID];
+    tes_clip_pos[gl_InvocationID] = tcs_clip_pos[gl_InvocationID];
+    tes_eye_pos[gl_InvocationID] = tcs_eye_pos[gl_InvocationID];
+    tes_world_pos[gl_InvocationID] = tcs_world_pos[gl_InvocationID];
     tes_normal[gl_InvocationID] = tcs_normal[gl_InvocationID];
     tes_uv[gl_InvocationID] = tcs_uv[gl_InvocationID];
     tes_col[gl_InvocationID] = tcs_col[gl_InvocationID];
 
-    vec4 eye_pos = mat_view * mat_model * vec4(tcs_pos[gl_InvocationID], 1.0);
-    float eye_dist = length(eye_pos);
+    float eye_dist = length(tes_eye_pos[gl_InvocationID]);
 
     float min_tess_level = 1.0;
     float max_tess_level = 8.0;
@@ -72,7 +90,9 @@ void main() {
 #ifdef BUILDING_TESS_EVAL_SHADER
 
 layout(triangles,equal_spacing) in;
-in vec3 tes_pos[];
+in vec4 tes_clip_pos[];
+in vec3 tes_eye_pos[];
+in vec3 tes_world_pos[];
 in vec3 tes_normal[];
 in vec2 tes_uv[];
 in vec3 tes_col[];
@@ -84,33 +104,31 @@ noperspective out vec2 frag_uv;
 
 noperspective out vec3 frag_light;
 
+vec4 lerp3D(vec4 v0, vec4 v1, vec4 v2)
+{
+    return vec4(gl_TessCoord.x) * v0 + vec4(gl_TessCoord.y) * v1 + vec4(gl_TessCoord.z) * v2;
+}
+
 vec3 lerp3D(vec3 v0, vec3 v1, vec3 v2)
 {
     return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
 }
 
 void main() {
-    vec3 pos = lerp3D(tes_pos[0], tes_pos[1], tes_pos[2]);
+    vec4 clip_pos = lerp3D(tes_clip_pos[0], tes_clip_pos[1], tes_clip_pos[2]);
+    vec3 eye_pos = lerp3D(tes_eye_pos[0], tes_eye_pos[1], tes_eye_pos[2]);
+    vec3 world_pos = lerp3D(tes_world_pos[0], tes_world_pos[1], tes_world_pos[2]);
     vec3 normal = lerp3D(tes_normal[0], tes_normal[1], tes_normal[2]);
     vec2 uv = lerp3D(vec3(tes_uv[0], 0.0), vec3(tes_uv[1], 0.0), vec3(tes_uv[2], 0.0)).xy;
     vec3 col = lerp3D(tes_col[0], tes_col[1], tes_col[2]);
 
-    vec4 world_pos = mat_model * vec4(pos, 1.0);
-    vec4 eye_pos = mat_view * world_pos;
-    vec4 clip_pos = mat_proj * eye_pos;
-
-    frag_world_pos = world_pos.xyz;
+    frag_world_pos = world_pos;
     frag_nrm = normalize(mat_normal * normal);
     frag_uv = uv;
     frag_dist = length(eye_pos);
-
-#ifdef SNAP_VERTEX_POS
-    gl_Position = snap_pos(clip_pos, render_res);
-#else
     gl_Position = clip_pos;
-#endif
 
-#ifdef VERTEX_LIGHTING
+#ifdef REALTIME_LIGHTING
     frag_light = calculate_lighting(frag_world_pos, frag_nrm);
 #else
     frag_light = col;
@@ -138,14 +156,10 @@ void main() {
 
     float alpha = base_color.a * base_color_tex.a;
 
-#ifdef VERTEX_LIGHTING
-    vec3 light = frag_light;
-#else
     const float BLENDER_BAKED_LIGHT_SCALE = 1.0;
     const vec3 AMBIENT_LIGHT = vec3(0.1);
     const vec3 MAX_LIGHT = vec3(1.0);
     vec3 light = min(MAX_LIGHT, frag_light * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
-#endif
 
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?
         clamp((frag_dist - fog_dist.x)/(fog_dist.y - fog_dist.x), 0.0, 1.0)
