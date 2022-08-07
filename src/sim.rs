@@ -9,7 +9,7 @@ use self::input::{InputName, InputState};
 use self::level_collision::LevelCollision;
 
 /// The camera look speed
-const CAM_LOOK_SPEED: f32 = 1.0;
+const CAM_LOOK_SPEED: f32 = 0.5;
 
 /// The camera move speed
 const CAM_MOVE_SPEED: f32 = 4.0;
@@ -24,7 +24,7 @@ const GRAVITY_ACCELERATION: f32 = 9.8;
 pub struct GameState {
     pub time: f64,
     pub camera: FpsCamera,
-    pub ball_pos: f32,
+    pub ball_pos: Vector3<f32>,
     pub level_collision: LevelCollision,
     pub velocity: Vector3<f32>
 }
@@ -45,7 +45,7 @@ impl GameState {
         GameState {
             time: 0.0,
             camera,
-            ball_pos: 0.0,
+            ball_pos: vec3(-9.0, 0.0, 9.0),
             level_collision,
             velocity: Vector3::zero()
         }
@@ -58,7 +58,7 @@ impl GameState {
         self.time = sim_time;
 
         // Update ball
-        self.ball_pos += 0.02;
+        self.ball_pos.y = self.time.sin() as f32 + 2.0;
 
         // Simulate character
         self.simulate_character(input_state, time_delta as f32);

@@ -366,12 +366,16 @@ impl GltfModel {
         };
 
         // Load texture
-        let tex_params = TextureParams {
+        let mut tex_params = TextureParams {
             horz_wrap: sampler.wrap_s().as_gl_enum(),
             vert_wrap: sampler.wrap_t().as_gl_enum(),
             min_filter: sampler.min_filter().map(|f| f.as_gl_enum()).unwrap_or(gl::NEAREST),
             mag_filter: sampler.mag_filter().map(|f| f.as_gl_enum()).unwrap_or(gl::NEAREST)
         };
+
+        // TODO: find a way to disable mipmaps in blender's exporter
+        tex_params.min_filter = Self::de_mipmapify(tex_params.min_filter);
+        tex_params.mag_filter = Self::de_mipmapify(tex_params.mag_filter);
 
         let width = data.width as i32;
         let height = data.height as i32;
@@ -470,6 +474,18 @@ impl GltfModel {
         ubo.set_has_base_color_texture(&pbr.base_color_texture().is_some());
         ubo.set_base_color(&vec4(base_color[0], base_color[1], base_color[2], base_color[3]));
         ubo
+    }
+
+    /// Remove mipmap part from a texture filter
+    /// TODO: find a way to disable mipmaps in blender's exporter
+    fn de_mipmapify(filter: u32) -> u32 {
+        match filter {
+            gl::NEAREST_MIPMAP_NEAREST => gl::NEAREST,
+            gl::LINEAR_MIPMAP_NEAREST => gl::LINEAR,
+            gl::NEAREST_MIPMAP_LINEAR => gl::NEAREST,
+            gl::LINEAR_MIPMAP_LINEAR => gl::LINEAR,
+            _ => filter
+        }
     }
 }
 
