@@ -70,7 +70,7 @@ impl LevelCollision {
                     let buffer = &buffers[buffer_index];
 
                     if accessor.data_type() != gltf::accessor::DataType::U16 {
-                        panic!("not u16 mesh indices");
+                        panic!("not u16 mesh indices: {:?}", accessor.data_type());
                     }
                     let data_type_size = std::mem::size_of::<u16>();
 
