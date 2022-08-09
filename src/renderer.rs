@@ -25,11 +25,14 @@ pub struct Renderer {
     pbr_shader: ShaderProgram,
     ps1_shader: ShaderProgram,
     blit_shader: ShaderProgram,
+    composite_yiq_shader: ShaderProgram,
+    composite_resolve_shader: ShaderProgram,
     sky_texture: Texture,
     demo_scene_model: GltfModel,
     fire_orb_model: GltfModel,
     ubo_global: UniformBuffer<GlobalParams>,
     framebuffer: Framebuffer,
+    yiq_framebuffer: Framebuffer,
     window_viewport: (i32, i32),
     ps1_mode: bool,
     wireframe_enabled: bool,
@@ -56,6 +59,8 @@ impl Renderer {
         let pbr_shader = ShaderProgram::new_from_vf(shaders::SHADER_PBR);
         let ps1_shader = ShaderProgram::new_from_vtf(shaders::SHADER_PS1);
         let blit_shader = ShaderProgram::new_from_vf(shaders::SHADER_BLIT);
+        let composite_yiq_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_YIQ);
+        let composite_resolve_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_RESOLVE);
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -99,6 +104,7 @@ impl Renderer {
 
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
+        let yiq_framebuffer = Framebuffer::new_with_color_filter(RENDER_WIDTH, RENDER_HEIGHT, gl::LINEAR_MIPMAP_LINEAR);
 
         // Create renderer struct
         let mut renderer = Renderer {
@@ -108,10 +114,13 @@ impl Renderer {
            sky_texture,
            ps1_shader,
            blit_shader,
+           composite_yiq_shader,
+           composite_resolve_shader,
            demo_scene_model,
            fire_orb_model,
            ubo_global,
            framebuffer,
+           yiq_framebuffer,
            window_viewport: (width, height),
            ps1_mode: true,
            wireframe_enabled: false,
@@ -185,18 +194,29 @@ impl Renderer {
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
         self.fire_orb_model.render(&mut self.ubo_global, true);
 
-        // Unbind framebuffer
-        self.framebuffer.unbind();
-
-        // Render framebuffer to screen
-        let (window_width, window_height) = self.window_viewport;
-        self.set_gl_viewport(window_width, window_height);
-
+        // Disable depth test for blitting operations
         unsafe {
             gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
             gl::Disable(gl::DEPTH_TEST)
         }
 
+        // Composite simulation: convert rgb to yiq color space
+        self.yiq_framebuffer.bind_draw();
+        self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+        self.composite_yiq_shader.use_program();
+        self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+
+        // Composite simulation: resolve back to regular framebuffer
+        self.framebuffer.bind_draw();
+        self.yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+        unsafe { gl::GenerateMipmap(gl::TEXTURE_2D) };
+        self.composite_resolve_shader.use_program();
+        self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+        self.framebuffer.unbind();
+
+        // Render framebuffer to screen
+        let (window_width, window_height) = self.window_viewport;
+        self.set_gl_viewport(window_width, window_height);
         self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
         self.blit_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);

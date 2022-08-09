@@ -10,6 +10,11 @@ pub struct Framebuffer
 
 impl Framebuffer {
     pub fn new(width: i32, height: i32) -> Self {
+        Self::new_with_color_filter(width, height, gl::NEAREST)
+    }
+
+    /// Create a new framebuffer with a specific opengl color filter
+    pub fn new_with_color_filter(width: i32, height: i32, filter: u32) -> Self {
         // Create framebuffer object
         let mut framebuffer_object: u32 = 0;
         unsafe {
@@ -25,16 +30,16 @@ impl Framebuffer {
             gl::BindTexture(gl::TEXTURE_2D, color_tex);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, filter as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, filter as i32);
 
             gl::TexImage2D(gl::TEXTURE_2D,
                            0,
-                           gl::RGBA8 as i32,
+                           gl::RGB32F as i32,
                            width,
                            height,
                            0,
-                           gl::BGRA,
+                           gl::RGBA,
                            gl::UNSIGNED_BYTE,
                            std::ptr::null());
 

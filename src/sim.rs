@@ -32,8 +32,10 @@ pub struct GameState {
 impl GameState {
     /// Create a new, default game state
     pub fn new() -> GameState {
-        // Create camera looking at corridor
-        let camera = FpsCamera::new_with_pos_rot(vec3(5.2, 0.8, 12.8), 0.03, 2.0, 0.0);
+        // Create camera looking at torch
+        let camera = FpsCamera::new_with_pos_rot(vec3(-33.04357, 4.42999, 15.564), 0.563, 2.499, 0.0);
+        // Looking at corridor
+        //let camera = FpsCamera::new_with_pos_rot(vec3(5.2, 0.8, 12.8), 0.03, 2.0, 0.0);
         // Default pos
         //let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), -0.17, 0.0, 0.0);
         // Going outside
@@ -146,6 +148,9 @@ impl GameState {
 
         // Now solve the y movement and xz movement separately
         let mut pos = *self.camera.pos();
+
+        // Print the camera position
+        //println!("cam pos: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
 
         // Resolve vertical motion
         if self.velocity.y < 0.0 {
