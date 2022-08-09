@@ -357,6 +357,7 @@ impl GltfModel {
                     panic!("load_gltf_texture: must be RGBA8 to be downscaled");
                 }
                 Texture::convert_rgba8_to_rgba5551(&data.pixels, &mut new_pixel_vec);
+                //Texture::quantize_to_bit_depth(&data.pixels, &mut new_pixel_vec, 4);
                 (gl::RGBA, gl::UNSIGNED_SHORT_5_5_5_1, &new_pixel_vec)
             }
             false => {

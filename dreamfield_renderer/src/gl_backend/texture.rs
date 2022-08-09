@@ -137,5 +137,42 @@ impl Texture {
             out_vec[i * 2 + 0] = (converted & 0b11111111) as u8;
         }
     }
+
+    /// Quantize a RGBA888 texture to a certain bit depth, leaving it as RGBA8888
+    pub fn quantize_to_bit_depth(buf: &[u8], out_vec: &mut Vec<u8>, target_component_depth: u8) {
+        if target_component_depth < 1 || target_component_depth > 8 {
+            panic!("quantize_to_bit_depth: target_component_depth should be (1..8)");
+        }
+
+        if (buf.len() % 4) != 0 {
+            panic!("quantize_to_bit_depth: Input buffer needs to be a multiple of 4");
+        }
+
+        out_vec.resize(buf.len(), 0);
+
+        const DEFAULT_DOMAIN: i32 = 256;
+        let target_domain = 1 << target_component_depth as i32;
+        let multiplier = (target_domain as f32) / (DEFAULT_DOMAIN as f32);
+
+        for i in 0 .. buf.len() / 4 {
+            let mut r = buf[i * 4] as f32;
+            let mut g = buf[i * 4 + 1] as f32;
+            let mut b = buf[i * 4 + 2] as f32;
+
+            r = f32::floor(r * multiplier) / multiplier;
+            g = f32::floor(g * multiplier) / multiplier;
+            b = f32::floor(b * multiplier) / multiplier;
+
+            let a = match buf[i * 4 + 3] {
+                0 => 0,
+                _ => 1
+            };
+
+            out_vec[i * 4] = r as u8;
+            out_vec[i * 4 + 1] = g as u8;
+            out_vec[i * 4 + 2] = b as u8;
+            out_vec[i * 4 + 3] = a;
+        }
+    }
 }
 
