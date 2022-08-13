@@ -10,6 +10,7 @@ use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::bindings;
 use super::lights::LightType;
 use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4};
+use serde::{Deserialize, Serialize};
 
 /// A gltf model
 pub struct GltfModel {
@@ -27,7 +28,8 @@ pub struct GltfDrawable {
     name: String,
     mesh: usize,
     transform: Matrix4<f32>,
-    extras: Option<Box<RawValue>>
+    extras: Option<Box<RawValue>>,
+    is_billboard: bool
 }
 
 pub struct GltfLight {
@@ -52,6 +54,14 @@ struct GltfMeshPrimitive {
     base_color_texture: Option<usize>,
     primitive_count: Option<i32>,
     alpha_blend: bool
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Extras {
+    #[serde(default)]
+    is_billboard: i32,
+    #[serde(default)]
+    bing_bong: i32
 }
 
 impl GltfModel {
@@ -140,10 +150,16 @@ impl GltfModel {
         // Render all prims
         for drawable in self.drawables.iter_mut() {
             let mesh = &mut self.meshes[drawable.mesh];
-
-            // Calculate world transform of drawable and bind model mat
             let model_mat = self.transform * drawable.transform;
-            ubo_global.set_mat_model_derive(&model_mat);
+
+            if drawable.is_billboard {
+                let view_mat = ubo_global.get_mat_view();
+                let billboard_mat = Self::calc_billboard_matrix(&view_mat, &model_mat);
+                ubo_global.set_mat_model_derive(&billboard_mat);
+            }
+            else {
+                ubo_global.set_mat_model_derive(&model_mat);
+            }
             ubo_global.upload_changed();
 
             // Draw
@@ -452,13 +468,26 @@ impl GltfModel {
 
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
-            // Create drawable
-            out_drawables.push(GltfDrawable {
+            let mut drawable = GltfDrawable {
                 name: mesh.name().unwrap_or("").to_string(),
                 mesh: mesh.index(),
                 transform: world_transform,
-                extras: node.extras().clone()
-            });
+                extras: node.extras().clone(),
+                is_billboard: false
+            };
+
+            // Extras
+            if let Some(extras) = &drawable.extras {
+                let extras: Extras = serde_json::from_str(extras.get()).unwrap();
+
+                drawable.is_billboard = match extras.is_billboard {
+                    0 => false,
+                    _ => true
+                }
+            }
+
+            // Create drawable
+            out_drawables.push(drawable);
         }
 
         // Recurse into children
@@ -487,6 +516,30 @@ impl GltfModel {
             gl::LINEAR_MIPMAP_LINEAR => gl::LINEAR,
             _ => filter
         }
+    }
+
+    // Calculate a billboard matrix
+    fn calc_billboard_matrix(view_mat: &Matrix4<f32>, model_mat: &Matrix4<f32>) -> Matrix4<f32> {
+        let x = model_mat[3][0];
+        let y = model_mat[3][1];
+        let z = model_mat[3][2];
+
+        let mut billboard_mat = Matrix4::identity();
+
+        billboard_mat[0][0] = view_mat[0][0];
+        billboard_mat[0][1] = view_mat[1][0];
+        billboard_mat[0][2] = view_mat[2][0];
+        billboard_mat[1][0] = view_mat[0][1];
+        billboard_mat[1][1] = view_mat[1][1];
+        billboard_mat[1][2] = view_mat[2][1];
+        billboard_mat[2][0] = view_mat[0][2];
+        billboard_mat[2][1] = view_mat[1][2];
+        billboard_mat[2][2] = view_mat[2][2];
+        billboard_mat[3][0] = x;
+        billboard_mat[3][1] = y;
+        billboard_mat[3][2] = z;
+
+        billboard_mat
     }
 }
 

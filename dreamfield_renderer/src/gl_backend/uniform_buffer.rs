@@ -142,6 +142,10 @@ impl Default for GlobalParams {
 }
 
 impl UniformBuffer<GlobalParams> {
+    pub fn get_mat_view(&self) -> Matrix4<f32> {
+        self.data.mat_view.from_std140()
+    }
+
     /// Set the view and projection matrices, and also derive any other matrices as needed. Note
     /// that the projection matrix must be set first.
     pub fn set_mat_view_derive(&mut self, view: &Matrix4<f32>) {

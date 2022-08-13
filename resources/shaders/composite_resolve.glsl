@@ -29,8 +29,8 @@ void main() {
     const mat3 yiq_to_rgb = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
 
     float y = textureLod(tex, var_uv, 0.0).r;
-    float i = textureLod(tex, var_uv, 2.0).g;
-    float q = textureLod(tex, var_uv, 4.0).b;
+    float i = textureLod(tex, var_uv, 1.0).g;
+    float q = textureLod(tex, var_uv, 2.0).b;
 
     // Convert to rgb
     vec3 rgb = yiq_to_rgb * vec3(y, i, q);

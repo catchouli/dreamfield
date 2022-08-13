@@ -156,6 +156,9 @@ void main() {
 
     float alpha = base_color.a * base_color_tex.a;
 
+    if (alpha < 0.1)
+        discard;
+
     const float BLENDER_BAKED_LIGHT_SCALE = 1.0;
     const vec3 AMBIENT_LIGHT = vec3(0.05);
     const vec3 MAX_LIGHT = vec3(1.0);
