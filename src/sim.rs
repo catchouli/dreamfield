@@ -32,8 +32,10 @@ pub struct GameState {
 impl GameState {
     /// Create a new, default game state
     pub fn new() -> GameState {
-        // Create camera looking at torch
-        let camera = FpsCamera::new_with_pos_rot(vec3(-33.04357, 4.42999, 15.564), 0.563, 2.499, 0.0);
+        // Create camera
+        let camera = FpsCamera::new_with_pos_rot(vec3(-45.99, 5.75, 17.37), 0.163, 1.7323, 0.0);
+        // Looking at torch
+        //let camera = FpsCamera::new_with_pos_rot(vec3(-33.04357, 4.42999, 15.564), 0.563, 2.499, 0.0);
         // Looking at corridor
         //let camera = FpsCamera::new_with_pos_rot(vec3(5.2, 0.8, 12.8), 0.03, 2.0, 0.0);
         // Default pos
