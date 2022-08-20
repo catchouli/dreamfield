@@ -11,6 +11,9 @@ use self::level_collision::LevelCollision;
 /// The camera look speed
 const CAM_LOOK_SPEED: f32 = 0.5;
 
+/// The camera fast look speed
+const CAM_LOOK_SPEED_FAST: f32 = 1.5;
+
 /// The camera move speed
 const CAM_MOVE_SPEED: f32 = 4.0;
 
@@ -108,15 +111,20 @@ impl GameState {
         let cam_look_left = inputs[InputName::CamLookLeft as usize];
         let cam_look_right = inputs[InputName::CamLookRight as usize];
 
+        let cam_look_speed = match inputs[InputName::CamSpeed as usize] {
+            false => CAM_LOOK_SPEED,
+            true => CAM_LOOK_SPEED_FAST,
+        };
+
         let cam_look_vertical = match (cam_look_up, cam_look_down) {
-            (true, false) => CAM_LOOK_SPEED,
-            (false, true) => -CAM_LOOK_SPEED,
+            (true, false) => cam_look_speed,
+            (false, true) => -cam_look_speed,
             _ => 0.0
         };
 
         let cam_look_horizontal = match (cam_look_left, cam_look_right) {
-            (true, false) => CAM_LOOK_SPEED,
-            (false, true) => -CAM_LOOK_SPEED,
+            (true, false) => cam_look_speed,
+            (false, true) => -cam_look_speed,
             _ => 0.0
         };
 
@@ -126,7 +134,7 @@ impl GameState {
     /// Simulate the character movement
     fn simulate_character(&mut self, input_state: &InputState, time_delta: f32) {
         /// The character camera height
-        const CHAR_HEIGHT: f32 = 1.8;
+        const CHAR_HEIGHT: f32 = 2.4;
 
         // Update look direction (mouse)
         if input_state.cursor_captured {
