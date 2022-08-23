@@ -163,7 +163,7 @@ impl GameState {
         let mut pos = *self.camera.pos();
 
         // Print the camera position
-        //println!("cam pos: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
+        log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
 
         // Resolve vertical motion
         if self.velocity.y < 0.0 {

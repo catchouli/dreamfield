@@ -21,6 +21,10 @@ const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 
 // Entry point
 fn main() {
+    // Initialise logging
+    env_logger::init();
+    log::info!("Welcome to Dreamfield!");
+
     // Create window
     let mut window = Window::new_with_context(WINDOW_WIDTH, WINDOW_HEIGHT, "Dreamfield", gl::DEBUG_SEVERITY_LOW - 500);
 
@@ -112,6 +116,7 @@ fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw
         }
         glfw::WindowEvent::Key(Key::F9, _, Action::Press, _) => {
             *colemak_mode = !(*colemak_mode);
+            log::info!("Colemak mode {}", if *colemak_mode { "enabled" } else { "disabled "});
         }
         glfw::WindowEvent::Key(key, _, Action::Press, _) => {
             if let Some(input) = input_map_func(key) {

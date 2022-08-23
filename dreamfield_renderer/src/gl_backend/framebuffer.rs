@@ -10,11 +10,11 @@ pub struct Framebuffer
 
 impl Framebuffer {
     pub fn new(width: i32, height: i32) -> Self {
-        Self::new_with_color_filter(width, height, gl::NEAREST)
+        Self::new_with_color_min_filter(width, height, gl::NEAREST)
     }
 
     /// Create a new framebuffer with a specific opengl color filter
-    pub fn new_with_color_filter(width: i32, height: i32, filter: u32) -> Self {
+    pub fn new_with_color_min_filter(width: i32, height: i32, min_filter: u32) -> Self {
         // Create framebuffer object
         let mut framebuffer_object: u32 = 0;
         unsafe {
@@ -30,8 +30,8 @@ impl Framebuffer {
             gl::BindTexture(gl::TEXTURE_2D, color_tex);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, filter as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, filter as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, min_filter as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
 
             gl::TexImage2D(gl::TEXTURE_2D,
                            0,
@@ -95,7 +95,7 @@ impl Framebuffer {
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
-        println!("Cleaning up fbo");
+        log::debug!("Cleaning up fbo");
         unsafe {
             gl::DeleteTextures(1, &self.color_tex);
             gl::DeleteRenderbuffers(1, &self.depth_buffer);

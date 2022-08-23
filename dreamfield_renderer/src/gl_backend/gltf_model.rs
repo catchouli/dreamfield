@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use gl::types::*;
 use gltf::Semantic;
+use gltf::animation::Property;
 use gltf::image::Format;
 use gltf::accessor::DataType;
 use gltf::json::extras::RawValue;
@@ -11,9 +12,12 @@ use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
-use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg};
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg, Quaternion};
 use serde::{Deserialize, Serialize, Deserializer};
 use byteorder::{LittleEndian, ReadBytesExt};
+
+/// Size of an f32
+const F32_SIZE: usize = std::mem::size_of::<f32>();
 
 /// A gltf model
 pub struct GltfModel {
@@ -21,7 +25,14 @@ pub struct GltfModel {
     drawables: Vec<GltfDrawable>,
     lights: Vec<GltfLight>,
     transform: Matrix4<f32>,
-    ubo_joints: UniformBuffer<JointParams>
+    ubo_joints: UniformBuffer<JointParams>,
+    animations: Vec<GltfAnimation>,
+    transforms: Vec<Option<Rc<RefCell<GltfTransform>>>>
+}
+
+pub struct GltfTransform {
+    parent: Option<Rc<RefCell<GltfTransform>>>,
+    local_transform: Matrix4<f32>
 }
 
 pub struct GltfDrawable {
@@ -66,9 +77,23 @@ struct GltfSkin {
 }
 
 struct GltfJoint {
-    parent_world_transform: Matrix4<f32>,
-    local_transform: Matrix4<f32>,
+    joint_index: usize,
     inverse_bind_matrix: Matrix4<f32>
+}
+
+struct GltfAnimation {
+   channels: Vec<GltfAnimationChannel> 
+}
+
+struct GltfAnimationChannel {
+    target_node: usize,
+    frames: Vec<GltfAnimationKeyframe>
+}
+
+enum GltfAnimationKeyframe {
+    Translation(f32, Vector3<f32>),
+    Rotation(f32, Quaternion<f32>),
+    Scale(f32, Vector3<f32>)
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -140,7 +165,7 @@ impl GltfModel {
         let mut world_transforms = Vec::new();
         for scene in doc.scenes() {
             for node in scene.nodes() {
-                Self::calc_world_transforms_recursive(&node, &Matrix4::identity(), &mut world_transforms);
+                Self::calc_world_transforms_recursive(&node, None, &mut world_transforms);
             }
         }
 
@@ -164,35 +189,47 @@ impl GltfModel {
             (drawables, lights)
         };
 
+        // Load animations
+        let animations = doc.animations().map(|anim| {
+            Self::load_animation(&anim, &buffer_data)
+        }).collect();
+
         Ok(GltfModel {
             buffers,
             drawables,
             lights,
             transform: SquareMatrix::identity(),
-            ubo_joints: UniformBuffer::new()
+            ubo_joints: UniformBuffer::new(),
+            animations,
+            transforms: world_transforms
         })
     }
 
     /// Precalculate all the world transforms, I needed this because I couldn't figure another way to get the world
     /// transform of a joint.
-    pub fn calc_world_transforms_recursive(node: &gltf::Node, parent_world_transform: &Matrix4<f32>,
-        out_world_transforms: &mut Vec<Matrix4<f32>>)
+    pub fn calc_world_transforms_recursive(node: &gltf::Node, parent: Option<&Rc<RefCell<GltfTransform>>>,
+        out_world_transforms: &mut Vec<Option<Rc<RefCell<GltfTransform>>>>)
     {
-        println!("node index: {}", node.index());
+        //log::debug!("node index: {}", node.index());
 
         let node_index = node.index();
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
-        let world_transform = parent_world_transform * local_transform;
+        //let world_transform = parent_world_transform * local_transform;
 
         if out_world_transforms.len() <= node_index {
-            out_world_transforms.resize(node_index + 1, Matrix4::identity());
+            out_world_transforms.resize(node_index + 1, None);
         }
 
-        out_world_transforms[node_index] = world_transform;
+        let transform = Rc::new(RefCell::new(GltfTransform {
+            parent: parent.map(|rc| rc.clone()),
+            local_transform
+        }));
 
         for child in node.children() {
-            Self::calc_world_transforms_recursive(&child, &world_transform, out_world_transforms);
+            Self::calc_world_transforms_recursive(&child, Some(&transform), out_world_transforms);
         }
+
+        out_world_transforms[node_index] = Some(transform);
     }
 
     /// Render a model
@@ -226,12 +263,23 @@ impl GltfModel {
             if let Some(skin) = &drawable.skin {
                 self.ubo_joints.set_skinning_enabled(&true);
 
-                let mut skin_mut = skin.borrow_mut();
+                let skin_mut = skin.borrow_mut();
                 let rot = Matrix4::from_angle_y(Deg(1.0));
-                skin_mut.joints[8].local_transform = rot * skin_mut.joints[8].local_transform;
+
+                if let Some(joint_transform) = &self.transforms[skin_mut.joints[8].joint_index] {
+                    let mut joint_transform = joint_transform.borrow_mut();
+                    joint_transform.local_transform = rot * joint_transform.local_transform;
+                }
 
                 for (i, joint) in skin_mut.joints.iter().enumerate() {
-                    let joint_matrix = joint.parent_world_transform * joint.local_transform * joint.inverse_bind_matrix;
+                    let joint_world_transform = if let Some(joint_transform) = &self.transforms[joint.joint_index] {
+                        joint_transform.borrow().world_transform()
+                    }
+                    else {
+                        Matrix4::identity()
+                    };
+
+                    let joint_matrix = joint_world_transform * joint.inverse_bind_matrix;
                     self.ubo_joints.set_joints(i, &Joint {
                         joint_matrix: joint_matrix.to_std140()
                     });
@@ -284,7 +332,7 @@ impl GltfModel {
                     }
                 }
                 else {
-                    println!("No index data or primitive count for model");
+                    log::warn!("No index data or primitive count for model");
                 }
             }
         }
@@ -309,7 +357,7 @@ impl GltfModel {
     fn load_mesh(materials: &Vec<Rc<RefCell<GltfMaterial>>>, default_material: &Rc<RefCell<GltfMaterial>>,
                  textures: &Vec<Rc<Texture>>, mesh: &gltf::Mesh, buffers: &[u32]) -> GltfMesh
     {
-        println!("Loading mesh {}", mesh.name().unwrap_or("no-name"));
+        log::trace!("Loading mesh {}", mesh.name().unwrap_or("no-name"));
 
         // Create primitive VAOs
         let primitives = mesh.primitives().map(|prim| {
@@ -370,7 +418,7 @@ impl GltfModel {
 
                 // Log buffers being bound
                 // TODO: use a real logging library, with log levels
-                //println!("Binding buffer for attrib {:?} (type: {:?}, index: {attrib_index}, size: {attrib_size}, type: {attrib_type}, stride: {attrib_stride})", prim_type, data_type);
+                log::trace!("Binding buffer for attrib {:?} (type: {:?}, index: {attrib_index}, size: {attrib_size}, type: {attrib_type}, stride: {attrib_stride})", prim_type, data_type);
 
                 unsafe {
                     gl::BindBuffer(gl::ARRAY_BUFFER, buffers[buffer_index]);
@@ -392,7 +440,7 @@ impl GltfModel {
                     // If it's a different size to the previous, warn and use the smaller one
                     if let Some((prev_name, prev_count)) = prev {
                         if attrib_count != prev_count {
-                            println!("Attribute count mismatch: {}={}, {}={}. Using smallest.",
+                            log::warn!("Attribute count mismatch: {}={}, {}={}. Using smallest.",
                                      prev_name.to_string(),
                                      prev_count,
                                      name.to_string(),
@@ -608,13 +656,12 @@ impl GltfModel {
     }
 
     /// Load a skin
-    fn load_skin(skin: &gltf::Skin, buffer_data: &[gltf::buffer::Data], world_transforms: &[Matrix4<f32>]) -> GltfSkin {
-        // Get joint transforms
-        let joint_transforms = skin.joints().map(|joint| {
-            let world_transform = world_transforms[joint.index()];
-            let local_transform = cgmath::Matrix4::from(joint.transform().matrix());
-            let parent_world_transform = world_transform * local_transform.invert().unwrap();
-            (parent_world_transform, local_transform)
+    fn load_skin(skin: &gltf::Skin, buffer_data: &[gltf::buffer::Data],
+        world_transforms: &[Option<Rc<RefCell<GltfTransform>>>]) -> GltfSkin
+    {
+        // Get joint indices
+        let joint_indices = skin.joints().map(|joint| {
+            joint.index()
         });
 
         // Get inverse bind matrices
@@ -622,11 +669,9 @@ impl GltfModel {
         let inverse_bind_matrices = skin.inverse_bind_matrices().map(|accessor| {
             // Get view and buffer data
             let view = accessor.view().unwrap();
-            let buffer = view.buffer();
-            let buffer_data = &buffer_data[buffer.index()];
+            let buffer_data = &buffer_data[view.buffer().index()];
 
             // Read matrices
-            const F32_SIZE: usize = std::mem::size_of::<f32>();
             let expected_length = 16 * joint_count * F32_SIZE;
             assert!(accessor.data_type().size() == F32_SIZE);
             assert!(view.length() == expected_length);
@@ -635,7 +680,7 @@ impl GltfModel {
             let end = start + expected_length;
             let mut slice = buffer_data.get(start..end).unwrap();
 
-            (0..joint_count).map(|_| {
+            let matrices = (0..joint_count).map(|_| {
                 let m00 = slice.read_f32::<LittleEndian>().unwrap();
                 let m01 = slice.read_f32::<LittleEndian>().unwrap();
                 let m02 = slice.read_f32::<LittleEndian>().unwrap();
@@ -653,16 +698,20 @@ impl GltfModel {
                 let m32 = slice.read_f32::<LittleEndian>().unwrap();
                 let m33 = slice.read_f32::<LittleEndian>().unwrap();
                 Matrix4::new(m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33)
-            }).collect()
+            }).collect();
+
+            // Check data is fully consumed
+            assert!(slice.len() == 0);
+
+            matrices
         })
         .unwrap_or(vec![SquareMatrix::identity(); joint_count]);
 
         // Get joints
-        let joints = joint_transforms.zip(inverse_bind_matrices)
-            .map(|((parent_world_transform, local_transform), inverse_bind_matrix)| {
+        let joints = joint_indices.zip(inverse_bind_matrices)
+            .map(|(joint_index, inverse_bind_matrix)| {
                 GltfJoint {
-                    parent_world_transform,
-                    local_transform,
+                    joint_index,
                     inverse_bind_matrix
                 }
             })
@@ -671,6 +720,113 @@ impl GltfModel {
         GltfSkin {
             joints
         }
+    }
+
+    /// Load an animation
+    fn load_animation(anim: &gltf::Animation, buffer_data: &[gltf::buffer::Data]) -> GltfAnimation {
+        log::debug!("Loading animation {}", anim.name().unwrap());
+
+        // Load channels
+        let channels = anim.channels().map(|channel| {
+            // Get target node
+            let target = &channel.target();
+            let target_node = target.node().index();
+
+            // Load frames
+            let sampler = &channel.sampler();
+            let frames = Self::load_animation_frames(&sampler.input(), &sampler.output(), target.property(),
+                &buffer_data);
+
+            GltfAnimationChannel {
+                target_node,
+                frames
+            }
+        }).collect();
+
+        GltfAnimation {
+            channels
+        }
+    }
+
+    /// Load animation frames
+    fn load_animation_frames(input: &gltf::Accessor, output: &gltf::Accessor, property: Property,
+        buffer_data: &[gltf::buffer::Data]) -> Vec<GltfAnimationKeyframe>
+    {
+        // Get buffer view and data
+        let frame_count = input.count();
+        log::debug!("Loading {} {:?} animation frames", frame_count, property);
+
+        let property_components = match property {
+            Property::Translation => 3,
+            Property::Rotation => 4,
+            Property::Scale => 3,
+            Property::MorphTargetWeights => panic!("not implemented")
+        };
+
+        let input_view = input.view().unwrap();
+        let input_buffer_data = &buffer_data[input_view.buffer().index()];
+        let input_buffer_length = frame_count * F32_SIZE;
+
+        let output_view = output.view().unwrap();
+        let output_buffer_data = &buffer_data[output_view.buffer().index()];
+        let output_buffer_length = frame_count * property_components * F32_SIZE;
+
+        // Safety checks
+        assert!(input.data_type().size() == F32_SIZE);
+        assert!(output.data_type().size() == F32_SIZE);
+        assert!(input_view.length() == input_buffer_length);
+        assert!(output_view.length() == output_buffer_length);
+
+        // Load animation frames
+        let mut input_reader = {
+            let input_start = input_view.offset();
+            let input_end = input_start + input_buffer_length;
+            input_buffer_data.get(input_start..input_end).unwrap()
+        };
+
+        let mut output_reader = {
+            let output_start = output_view.offset();
+            let output_end = output_start + output_buffer_length;
+            output_buffer_data.get(output_start..output_end).unwrap()
+        };
+
+        let mut res = Vec::new();
+
+        for i in 0..frame_count {
+            let frame = match property {
+                Property::Translation => GltfAnimationKeyframe::Translation(
+                    input_reader.read_f32::<LittleEndian>().unwrap(),
+                    vec3(
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap()
+                    )),
+                Property::Rotation => GltfAnimationKeyframe::Rotation(
+                    input_reader.read_f32::<LittleEndian>().unwrap(),
+                    Quaternion::new(
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap()
+                    )),
+                Property::Scale => GltfAnimationKeyframe::Scale(
+                    input_reader.read_f32::<LittleEndian>().unwrap(),
+                    vec3(
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap(),
+                        output_reader.read_f32::<LittleEndian>().unwrap()
+                    )),
+                Property::MorphTargetWeights => panic!("not implemented")
+            };
+
+            res.push(frame);
+        }
+
+        // Check data is fully consumed
+        assert!(input_reader.len() == 0);
+        assert!(output_reader.len() == 0);
+
+        res
     }
 
     /// Remove mipmap part from a texture filter
@@ -738,6 +894,18 @@ impl GltfDrawable {
     /// Get the extra fields
     pub fn extras(&self) -> &Option<Box<RawValue>> {
         &self.raw_extras
+    }
+}
+
+impl GltfTransform {
+    pub fn world_transform(&self) -> Matrix4<f32> {
+        let parent_world_transform = if let Some(parent_transform) = &self.parent {
+            parent_transform.borrow().world_transform()
+        }
+        else {
+            Matrix4::identity()
+        };
+        parent_world_transform * self.local_transform
     }
 }
 

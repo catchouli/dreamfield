@@ -141,13 +141,13 @@ impl ShaderProgram {
                     _ => "<unknown>"
                 };
 
-                println!("{shader_type_str} shader failed to compile:\n");
+                log::error!("{shader_type_str} shader failed to compile:\n");
 
                 for (i, line) in shader_source.lines().enumerate() {
-                    println!("[{i}] {line}");
+                    log::error!("[{i}] {line}");
                 }
 
-                println!("\n{message}\n");
+                log::error!("\n{message}\n");
 
             }
 
@@ -183,7 +183,7 @@ impl ShaderProgram {
 
                 info_log.set_len(length as usize);
 
-                println!("Shader program failed to link\n{}", std::str::from_utf8(&info_log).unwrap());
+                log::error!("Shader program failed to link\n{}", std::str::from_utf8(&info_log).unwrap());
             }
 
             // Delete shaders
@@ -198,7 +198,7 @@ impl ShaderProgram {
 
 impl Drop for ShaderProgram {
     fn drop(&mut self) {
-        println!("Deleting shader program");
+        log::debug!("Deleting shader program");
         unsafe { gl::DeleteProgram(self.id) }
     }
 }

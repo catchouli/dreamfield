@@ -14,6 +14,8 @@ pub struct Window {
 impl Window {
     /// Create a new window with an opengl context with the given width and height
     pub fn new_with_context(width: u32, height: u32, title: &str, debug_log_level: u32) -> Window {
+        log::info!("Creating window");
+
         // Initialise glfw
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
         glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
@@ -52,11 +54,11 @@ impl Window {
     /// Set mouse captured
     pub fn set_mouse_captured(&mut self, captured: bool) {
         if captured && !self.mouse_captured {
-            println!("Capturing cursor");
+            log::info!("Capturing cursor");
             self.window.set_cursor_mode(glfw::CursorMode::Disabled)
         }
         else if self.mouse_captured {
-            println!("Releasing cursor");
+            log::info!("Releasing cursor");
             self.window.set_cursor_mode(glfw::CursorMode::Normal)
         }
 
@@ -85,7 +87,7 @@ impl Window {
 
         if severity >= min_severity {
             let message_str = unsafe { CStr::from_ptr(message).to_str().unwrap() };
-            println!("[{id:#x}] {message_str}");
+            log::warn!("[{id:#x}] {message_str}");
         }
     }
 }

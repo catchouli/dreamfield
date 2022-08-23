@@ -36,12 +36,13 @@ pub struct Renderer {
     window_viewport: (i32, i32),
     ps1_mode: bool,
     wireframe_enabled: bool,
-    ubo_lights: Option<UniformBuffer<LightParams>>
 }
 
 impl Renderer {
     /// Create a new Renderer
     pub fn new(width: i32, height: i32) -> Renderer {
+        log::info!("Creating renderer");
+
         // Create uniform buffers
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.0, 0.0, 0.0));
@@ -85,26 +86,12 @@ impl Renderer {
 
         // Load models
         let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE, true).unwrap();
-        println!("loading fire orb");
         let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB, true).unwrap();
-
-        // Build lights from demo scene (disabled)
-        //let ubo_lights = Self::lights_from_models(demo_scene_model.lights());
-
-        // Just build an empty light buffer for later
-        let ubo_lights = Some(UniformBuffer::new());
-
-        // Look for extra fields (unused so far)
-        //for drawable in demo_scene_model.drawables().iter() {
-        //    if let Some(extra) = drawable.extras() {
-        //        let raw = extra.get();
-        //        println!("Node {} has extras: {:?}", drawable.name(), raw);
-        //    }
-        //}
 
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
-        let yiq_framebuffer = Framebuffer::new_with_color_filter(RENDER_WIDTH, RENDER_HEIGHT, gl::LINEAR_MIPMAP_LINEAR);
+        let yiq_framebuffer = Framebuffer::new_with_color_min_filter(RENDER_WIDTH, RENDER_HEIGHT,
+            gl::LINEAR_MIPMAP_LINEAR);
 
         // Create renderer struct
         let mut renderer = Renderer {
@@ -123,8 +110,7 @@ impl Renderer {
            yiq_framebuffer,
            window_viewport: (width, height),
            ps1_mode: true,
-           wireframe_enabled: false,
-           ubo_lights
+           wireframe_enabled: false
         };
 
         renderer.set_window_viewport(width, height);
@@ -174,22 +160,6 @@ impl Renderer {
         };
         main_shader.use_program();
 
-        // Update and bind lights
-        if let Some(ubo_lights) = &mut self.ubo_lights {
-            ubo_lights.set_lights(0, &Light {
-                enabled: true.to_std140(),
-                light_pos: game_state.camera.pos().to_std140(),
-                light_dir: vec3(0.0, 0.0, 0.0).to_std140(),
-                light_type: (LightType::PointLight as i32).to_std140(),
-                color: vec3(1.0, 0.89, 0.8).to_std140(),
-                intensity: (1000.0).to_std140(),
-                range: (100.0).to_std140(),
-                inner_cone_angle: (0.0).to_std140(),
-                outer_cone_angle: (0.0).to_std140()
-            });
-            ubo_lights.bind(bindings::UniformBlockBinding::LightParams);
-        }
-
         self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
         self.fire_orb_model.render(&mut self.ubo_global, true);
@@ -223,14 +193,16 @@ impl Renderer {
     }
 
     /// Toggle ps1 graphics mode
+    /// TODO: fix the non-ps1 mode, which broke because it doesn't support tesselation. at the same
+    /// time I can also make it so tesselation is optional, for character models and such.
     pub fn toggle_graphics_mode(&mut self) {
         self.ps1_mode = !self.ps1_mode;
-        println!("ps1 shader {}", if self.ps1_mode { "enabled" } else { "disabled "});
+        log::info!("PS1 shader {}", if self.ps1_mode { "enabled" } else { "disabled "});
     }
 
     /// Update the window viewport
     pub fn set_window_viewport(&mut self, width: i32, height: i32) {
-        println!("Setting viewport to {width} * {height}");
+        log::info!("Setting viewport to {width} * {height}");
         self.window_viewport = (width, height);
         self.ubo_global.set_window_aspect(&(width as f32 / height as f32));
         self.ubo_global.upload_changed();
@@ -239,38 +211,12 @@ impl Renderer {
     /// Toggle wireframe mode
     pub fn toggle_wireframe_mode(&mut self) {
         self.wireframe_enabled = !self.wireframe_enabled;
+        log::info!("Wireframe mode {}", if self.wireframe_enabled { "enabled" } else { "disabled "});
     }
 
     /// Update the gl viewport
     fn set_gl_viewport(&mut self, width: i32, height: i32) {
         unsafe { gl::Viewport(0, 0, width, height) };
-    }
-
-    /// Build a light ubo from the gltf light list
-    fn _lights_from_models(lights: &[GltfLight]) -> Option<UniformBuffer<LightParams>> {
-        match lights.len() {
-            0 => None,
-            _ => {
-                let mut ubo_lights = UniformBuffer::new();
-
-                for (i, light) in lights.iter().enumerate() {
-                    let light_range = light.range.unwrap_or(0.0);
-                    ubo_lights.set_lights(i, &Light {
-                        enabled: true.to_std140(),
-                        light_pos: light.light_pos.to_std140(),
-                        light_dir: light.light_dir.to_std140(),
-                        light_type: (light.light_type as i32).to_std140(),
-                        color: vec3(light.color.x, light.color.y, light.color.z).to_std140(),
-                        intensity: light.intensity.to_std140(),
-                        range: light_range.to_std140(),
-                        inner_cone_angle: light.inner_cone_angle.unwrap_or(0.0).to_std140(),
-                        outer_cone_angle: light.outer_cone_angle.unwrap_or(0.0).to_std140()
-                    });
-                }
-
-                Some(ubo_lights)
-            }
-        }
     }
 }
 

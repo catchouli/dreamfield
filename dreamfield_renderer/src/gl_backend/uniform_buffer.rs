@@ -80,7 +80,7 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
 
         //unsafe { gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo) }
         //for range in self.modified_ranges.iter() {
-        //    println!("uploading {}..{}", range.start, range.end);
+        //    log::trace!("uploading {}..{}", range.start, range.end);
         //    unsafe {
         //        // Exciting undefined behaviour
         //        let mut ptr_int = &self.data as *const T as usize;
