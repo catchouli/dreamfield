@@ -95,12 +95,12 @@ impl Renderer {
         let ubo_lights = Some(UniformBuffer::new());
 
         // Look for extra fields (unused so far)
-        for drawable in demo_scene_model.drawables().iter() {
-            if let Some(extra) = drawable.extras() {
-                let raw = extra.get();
-                println!("Node {} has extras: {:?}", drawable.name(), raw);
-            }
-        }
+        //for drawable in demo_scene_model.drawables().iter() {
+        //    if let Some(extra) = drawable.extras() {
+        //        let raw = extra.get();
+        //        println!("Node {} has extras: {:?}", drawable.name(), raw);
+        //    }
+        //}
 
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);

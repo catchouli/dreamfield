@@ -9,6 +9,4 @@ proc-macro = true
 [dependencies]
 syn = { version = "1.0.98", features = ["printing"] }
 quote = "1.0.20"
-std140 = { git = "https://github.com/catchouli/std140.rs" }
 gpp = "0.6.2"
-dreamfield_traits = { path = "../dreamfield_traits" }

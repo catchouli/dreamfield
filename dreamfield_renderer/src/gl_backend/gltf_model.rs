@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use gl::types::*;
 use gltf::Semantic;
 use gltf::image::Format;
@@ -7,29 +9,27 @@ use gltf::khr_lights_punctual::Kind;
 use gltf::material::AlphaMode;
 use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
-use super::bindings;
+use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
-use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4};
-use serde::{Deserialize, Serialize};
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg};
+use serde::{Deserialize, Serialize, Deserializer};
+use byteorder::{LittleEndian, ReadBytesExt};
 
 /// A gltf model
 pub struct GltfModel {
     buffers: Vec<u32>,
-    textures: Vec<Texture>,
-    meshes: Vec<GltfMesh>,
     drawables: Vec<GltfDrawable>,
     lights: Vec<GltfLight>,
-    materials: Vec<UniformBuffer<MaterialParams>>,
-    default_material: UniformBuffer<MaterialParams>,
-    transform: Matrix4<f32>
+    transform: Matrix4<f32>,
+    ubo_joints: UniformBuffer<JointParams>
 }
 
 pub struct GltfDrawable {
     name: String,
-    mesh: usize,
+    mesh: Rc<GltfMesh>,
+    skin: Option<Rc<RefCell<GltfSkin>>>,
     transform: Matrix4<f32>,
-    extras: Option<Box<RawValue>>,
-    is_billboard: bool
+    raw_extras: Option<Box<RawValue>>
 }
 
 pub struct GltfLight {
@@ -44,24 +44,39 @@ pub struct GltfLight {
 }
 
 struct GltfMesh {
-    primitives: Vec<GltfMeshPrimitive>
+    primitives: Vec<GltfMeshPrimitive>,
+    parsed_extras: GltfMeshExtras
 }
 
 struct GltfMeshPrimitive {
     vao: u32,
     indexed_offset_length: Option<(i32, i32)>,
-    material_index: Option<usize>,
-    base_color_texture: Option<usize>,
+    material: Rc<RefCell<GltfMaterial>>,
+    base_color_texture: Option<Rc<Texture>>,
     primitive_count: Option<i32>,
     alpha_blend: bool
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Extras {
-    #[serde(default)]
-    is_billboard: i32,
-    #[serde(default)]
-    bing_bong: i32
+struct GltfMaterial {
+    uniform_buffer: UniformBuffer<MaterialParams>
+}
+
+struct GltfSkin {
+    joints: Vec<GltfJoint>
+}
+
+struct GltfJoint {
+    parent_world_transform: Matrix4<f32>,
+    local_transform: Matrix4<f32>,
+    inverse_bind_matrix: Matrix4<f32>
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+struct GltfMeshExtras {
+    #[serde(default, deserialize_with = "GltfModel::bool_from_int")]
+    is_billboard: bool,
+    #[serde(default, deserialize_with = "GltfModel::bool_from_int")]
+    keep_upright: bool
 }
 
 impl GltfModel {
@@ -98,14 +113,42 @@ impl GltfModel {
 
         // Load all textures
         let textures = doc.textures()
-            .map(|tex| Self::load_gltf_texture(&tex, &image_data, downscale_textures))
+            .map(|tex| {
+                let texture = Self::load_gltf_texture(&tex, &image_data, downscale_textures);
+                Rc::new(texture)
+            })
             .collect();
 
-        // Load all meshes
-        let meshes = doc.meshes().map(|mesh| Self::load_mesh(&mesh, &buffers)).collect();
-
         // Load all materials
-        let materials = doc.materials().map(|mat| Self::load_material(&mat)).collect();
+        let materials: Vec<Rc<RefCell<GltfMaterial>>> = doc.materials().map(|mat| {
+            let mat = Self::load_material(&mat);
+            Rc::new(RefCell::new(mat))
+        }).collect();
+
+        // Create default material
+        let default_material = Rc::new(RefCell::new(GltfMaterial {
+            uniform_buffer: UniformBuffer::<MaterialParams>::new()
+        }));
+
+        // Load all meshes
+        let meshes = doc.meshes().map(|mesh| {
+            let mesh = Self::load_mesh(&materials, &default_material, &textures, &mesh, &buffers);
+            Rc::new(mesh)
+        }).collect();
+
+        // Calculate world transforms
+        let mut world_transforms = Vec::new();
+        for scene in doc.scenes() {
+            for node in scene.nodes() {
+                Self::calc_world_transforms_recursive(&node, &Matrix4::identity(), &mut world_transforms);
+            }
+        }
+
+        // Load all skins
+        let skins = doc.skins().map(|skin| {
+            let skin = Self::load_skin(&skin, &buffer_data, &world_transforms);
+            Rc::new(RefCell::new(skin))
+        }).collect();
 
         // Build scene drawables and lights
         let (drawables, lights) = {
@@ -114,26 +157,42 @@ impl GltfModel {
 
             for scene in doc.scenes() {
                 for node in scene.nodes() {
-                    Self::build_scene_recursive(&node, &Matrix4::identity(), &mut drawables, &mut lights);
+                    Self::build_scene_recursive(&node, &Matrix4::identity(), &meshes, &skins, &mut drawables, &mut lights);
                 }
             }
 
             (drawables, lights)
         };
 
-        // Create default material
-        let default_material = UniformBuffer::<MaterialParams>::new();
-
         Ok(GltfModel {
             buffers,
-            textures,
-            meshes,
             drawables,
             lights,
-            materials,
-            default_material,
-            transform: SquareMatrix::identity()
+            transform: SquareMatrix::identity(),
+            ubo_joints: UniformBuffer::new()
         })
+    }
+
+    /// Precalculate all the world transforms, I needed this because I couldn't figure another way to get the world
+    /// transform of a joint.
+    pub fn calc_world_transforms_recursive(node: &gltf::Node, parent_world_transform: &Matrix4<f32>,
+        out_world_transforms: &mut Vec<Matrix4<f32>>)
+    {
+        println!("node index: {}", node.index());
+
+        let node_index = node.index();
+        let local_transform = cgmath::Matrix4::from(node.transform().matrix());
+        let world_transform = parent_world_transform * local_transform;
+
+        if out_world_transforms.len() <= node_index {
+            out_world_transforms.resize(node_index + 1, Matrix4::identity());
+        }
+
+        out_world_transforms[node_index] = world_transform;
+
+        for child in node.children() {
+            Self::calc_world_transforms_recursive(&child, &world_transform, out_world_transforms);
+        }
     }
 
     /// Render a model
@@ -149,12 +208,13 @@ impl GltfModel {
 
         // Render all prims
         for drawable in self.drawables.iter_mut() {
-            let mesh = &mut self.meshes[drawable.mesh];
+            let mesh = &mut drawable.mesh;
             let model_mat = self.transform * drawable.transform;
 
-            if drawable.is_billboard {
+            // Set model matrix based on whether this is a billboard or not
+            if mesh.parsed_extras.is_billboard {
                 let view_mat = ubo_global.get_mat_view();
-                let billboard_mat = Self::calc_billboard_matrix(&view_mat, &model_mat);
+                let billboard_mat = Self::calc_billboard_matrix(&view_mat, &model_mat, mesh.parsed_extras.keep_upright);
                 ubo_global.set_mat_model_derive(&billboard_mat);
             }
             else {
@@ -162,13 +222,31 @@ impl GltfModel {
             }
             ubo_global.upload_changed();
 
+            // Update joint matrices for skinned drawables
+            if let Some(skin) = &drawable.skin {
+                self.ubo_joints.set_skinning_enabled(&true);
+
+                let mut skin_mut = skin.borrow_mut();
+                let rot = Matrix4::from_angle_y(Deg(1.0));
+                skin_mut.joints[8].local_transform = rot * skin_mut.joints[8].local_transform;
+
+                for (i, joint) in skin_mut.joints.iter().enumerate() {
+                    let joint_matrix = joint.parent_world_transform * joint.local_transform * joint.inverse_bind_matrix;
+                    self.ubo_joints.set_joints(i, &Joint {
+                        joint_matrix: joint_matrix.to_std140()
+                    });
+                }
+            }
+            else {
+                self.ubo_joints.set_skinning_enabled(&false);
+            }
+            self.ubo_joints.bind(bindings::UniformBlockBinding::JointParams);
+
             // Draw
-            for primitive in mesh.primitives.iter_mut() {
+            for primitive in mesh.primitives.iter() {
                 // Bind material ubo
-                primitive.material_index
-                    .map(|mat| &mut self.materials[mat])
-                    .unwrap_or(&mut self.default_material)
-                    .bind(bindings::UniformBlockBinding::MaterialParams);
+                let material = &primitive.material;
+                material.borrow_mut().uniform_buffer.bind(bindings::UniformBlockBinding::MaterialParams);
 
                 // Enable or disable alpha blending
                 unsafe {
@@ -184,8 +262,8 @@ impl GltfModel {
                 }
 
                 // Bind textures, or unbind if None
-                if let Some(base_color_texture_index) = primitive.base_color_texture {
-                    self.textures[base_color_texture_index].bind(bindings::TextureSlot::BaseColor);
+                if let Some(texture) = &primitive.base_color_texture {
+                    texture.bind(bindings::TextureSlot::BaseColor);
                 }
 
                 // Indexed draw
@@ -228,7 +306,11 @@ impl GltfModel {
     }
 
     /// Load a mesh into a vao
-    fn load_mesh(mesh: &gltf::Mesh, buffers: &[u32]) -> GltfMesh {
+    fn load_mesh(materials: &Vec<Rc<RefCell<GltfMaterial>>>, default_material: &Rc<RefCell<GltfMaterial>>,
+                 textures: &Vec<Rc<Texture>>, mesh: &gltf::Mesh, buffers: &[u32]) -> GltfMesh
+    {
+        println!("Loading mesh {}", mesh.name().unwrap_or("no-name"));
+
         // Create primitive VAOs
         let primitives = mesh.primitives().map(|prim| {
             // Create VAO for primitive
@@ -276,7 +358,7 @@ impl GltfModel {
 
                 // Ignore extra UV properties
                 let ignored = match prim_type {
-                    Semantic::Colors(_) => { println!("got colors"); false },
+                    Semantic::Colors(_) => false,
                     Semantic::TexCoords(0) => false,
                     Semantic::TexCoords(1) => true,
                     _ =>  false
@@ -287,7 +369,8 @@ impl GltfModel {
                 }
 
                 // Log buffers being bound
-                println!("Binding buffer for attrib {:?} (type: {:?}, index: {attrib_index}, size: {attrib_size}, type: {attrib_type}, stride: {attrib_stride})", prim_type, data_type);
+                // TODO: use a real logging library, with log levels
+                //println!("Binding buffer for attrib {:?} (type: {:?}, index: {attrib_index}, size: {attrib_size}, type: {attrib_type}, stride: {attrib_stride})", prim_type, data_type);
 
                 unsafe {
                     gl::BindBuffer(gl::ARRAY_BUFFER, buffers[buffer_index]);
@@ -321,28 +404,44 @@ impl GltfModel {
                         Some((name, attrib_count))
                     }
                 })
-                .map(|(_, count)| count);
+            .map(|(_, count)| count);
 
             // Look up the textures to use, so we don't have to do this again to render
             let base_color_texture = prim
                 .material()
                 .pbr_metallic_roughness()
                 .base_color_texture()
-                .map(|tex_info| tex_info.texture().index());
+                .map(|tex_info| tex_info.texture().index())
+                .map(|idx| textures[idx].clone());
 
             // Look up whether it's alpha blended
             let alpha_blend = prim.material().alpha_mode() == AlphaMode::Blend;
 
             // Get material index
             let material_index = prim.material().index();
+            let material = material_index
+                .map(|idx| &materials[idx])
+                .unwrap_or(default_material)
+                .clone();
 
             GltfMeshPrimitive {
-                vao, indexed_offset_length, base_color_texture, material_index, primitive_count, alpha_blend
+                vao,
+                indexed_offset_length,
+                base_color_texture,
+                material,
+                primitive_count,
+                alpha_blend
             }
         }).collect();
 
+        // Parse extras
+        let parsed_extras = mesh.extras().as_ref().map(|extras| {
+            serde_json::from_str(extras.get()).unwrap()
+        }).unwrap_or(Default::default());
+
         GltfMesh {
-            primitives
+            primitives,
+            parsed_extras
         }
     }
 
@@ -435,7 +534,8 @@ impl GltfModel {
 
     /// Build the list of drawables recursively
     fn build_scene_recursive(node: &gltf::Node, parent_world_transform: &Matrix4<f32>,
-        out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
+                             meshes: &Vec<Rc<GltfMesh>>, skins: &Vec<Rc<RefCell<GltfSkin>>>,
+                             out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
     {
         const WORLD_FORWARD: Vector4<f32> = vec4(0.0, 0.0, -1.0, 0.0);
 
@@ -443,6 +543,7 @@ impl GltfModel {
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
         let world_transform = parent_world_transform * local_transform;
 
+        // Add light if this node has a light
         if let Some(light) = node.light() {
             let light_pos = vec3(world_transform[3][0], world_transform[3][1], world_transform[3][2]);
             let light_dir = (world_transform * WORLD_FORWARD).truncate();
@@ -468,23 +569,19 @@ impl GltfModel {
 
         // Add drawable if this node has a mesh
         if let Some(mesh) = node.mesh() {
-            let mut drawable = GltfDrawable {
-                name: mesh.name().unwrap_or("").to_string(),
-                mesh: mesh.index(),
+            // Get skin if there is one
+            let name = mesh.name().unwrap_or("").to_string();
+            let mesh = meshes[mesh.index()].clone();
+            let skin = node.skin().map(|skin| skins[skin.index()].clone());
+            let raw_extras = node.extras().clone();
+
+            let drawable = GltfDrawable {
+                name,
+                mesh,
+                skin,
                 transform: world_transform,
-                extras: node.extras().clone(),
-                is_billboard: false
+                raw_extras
             };
-
-            // Extras
-            if let Some(extras) = &drawable.extras {
-                let extras: Extras = serde_json::from_str(extras.get()).unwrap();
-
-                drawable.is_billboard = match extras.is_billboard {
-                    0 => false,
-                    _ => true
-                }
-            }
 
             // Create drawable
             out_drawables.push(drawable);
@@ -492,18 +589,88 @@ impl GltfModel {
 
         // Recurse into children
         for child in node.children() {
-            Self::build_scene_recursive(&child, &world_transform, out_drawables, out_lights);
+            Self::build_scene_recursive(&child, &world_transform, meshes, skins, out_drawables, out_lights);
         }
     }
 
     /// Load material to a ubo
-    fn load_material(mat: &gltf::Material) -> UniformBuffer<MaterialParams> {
+    fn load_material(mat: &gltf::Material) -> GltfMaterial {
+        // Create uniform buffer
         let mut ubo = UniformBuffer::<MaterialParams>::new();
         let pbr = mat.pbr_metallic_roughness();
         let base_color = pbr.base_color_factor();
         ubo.set_has_base_color_texture(&pbr.base_color_texture().is_some());
         ubo.set_base_color(&vec4(base_color[0], base_color[1], base_color[2], base_color[3]));
-        ubo
+
+        GltfMaterial {
+            uniform_buffer: ubo
+        }
+    }
+
+    /// Load a skin
+    fn load_skin(skin: &gltf::Skin, buffer_data: &[gltf::buffer::Data], world_transforms: &[Matrix4<f32>]) -> GltfSkin {
+        // Get joint transforms
+        let joint_transforms = skin.joints().map(|joint| {
+            let world_transform = world_transforms[joint.index()];
+            let local_transform = cgmath::Matrix4::from(joint.transform().matrix());
+            let parent_world_transform = world_transform * local_transform.invert().unwrap();
+            (parent_world_transform, local_transform)
+        });
+
+        // Get inverse bind matrices
+        let joint_count = skin.joints().count();
+        let inverse_bind_matrices = skin.inverse_bind_matrices().map(|accessor| {
+            // Get view and buffer data
+            let view = accessor.view().unwrap();
+            let buffer = view.buffer();
+            let buffer_data = &buffer_data[buffer.index()];
+
+            // Read matrices
+            const F32_SIZE: usize = std::mem::size_of::<f32>();
+            let expected_length = 16 * joint_count * F32_SIZE;
+            assert!(accessor.data_type().size() == F32_SIZE);
+            assert!(view.length() == expected_length);
+
+            let start = view.offset();
+            let end = start + expected_length;
+            let mut slice = buffer_data.get(start..end).unwrap();
+
+            (0..joint_count).map(|_| {
+                let m00 = slice.read_f32::<LittleEndian>().unwrap();
+                let m01 = slice.read_f32::<LittleEndian>().unwrap();
+                let m02 = slice.read_f32::<LittleEndian>().unwrap();
+                let m03 = slice.read_f32::<LittleEndian>().unwrap();
+                let m10 = slice.read_f32::<LittleEndian>().unwrap();
+                let m11 = slice.read_f32::<LittleEndian>().unwrap();
+                let m12 = slice.read_f32::<LittleEndian>().unwrap();
+                let m13 = slice.read_f32::<LittleEndian>().unwrap();
+                let m20 = slice.read_f32::<LittleEndian>().unwrap();
+                let m21 = slice.read_f32::<LittleEndian>().unwrap();
+                let m22 = slice.read_f32::<LittleEndian>().unwrap();
+                let m23 = slice.read_f32::<LittleEndian>().unwrap();
+                let m30 = slice.read_f32::<LittleEndian>().unwrap();
+                let m31 = slice.read_f32::<LittleEndian>().unwrap();
+                let m32 = slice.read_f32::<LittleEndian>().unwrap();
+                let m33 = slice.read_f32::<LittleEndian>().unwrap();
+                Matrix4::new(m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33)
+            }).collect()
+        })
+        .unwrap_or(vec![SquareMatrix::identity(); joint_count]);
+
+        // Get joints
+        let joints = joint_transforms.zip(inverse_bind_matrices)
+            .map(|((parent_world_transform, local_transform), inverse_bind_matrix)| {
+                GltfJoint {
+                    parent_world_transform,
+                    local_transform,
+                    inverse_bind_matrix
+                }
+            })
+            .collect();
+
+        GltfSkin {
+            joints
+        }
     }
 
     /// Remove mipmap part from a texture filter
@@ -519,27 +686,41 @@ impl GltfModel {
     }
 
     // Calculate a billboard matrix
-    fn calc_billboard_matrix(view_mat: &Matrix4<f32>, model_mat: &Matrix4<f32>) -> Matrix4<f32> {
-        let x = model_mat[3][0];
-        let y = model_mat[3][1];
-        let z = model_mat[3][2];
+    fn calc_billboard_matrix(view_mat: &Matrix4<f32>, model_mat: &Matrix4<f32>, keep_upright: bool) -> Matrix4<f32> {
+        // Create billboard matrix without object translation
+        let mut billboard_mat = match keep_upright {
+            false => {
+                // Transpose view matrix to get inverse of rotation, and clear view translation
+                let mut mat = view_mat.transpose();
 
-        let mut billboard_mat = Matrix4::identity();
+                mat[0][3] = 0.0;
+                mat[1][3] = 0.0;
+                mat[2][3] = 0.0;
 
-        billboard_mat[0][0] = view_mat[0][0];
-        billboard_mat[0][1] = view_mat[1][0];
-        billboard_mat[0][2] = view_mat[2][0];
-        billboard_mat[1][0] = view_mat[0][1];
-        billboard_mat[1][1] = view_mat[1][1];
-        billboard_mat[1][2] = view_mat[2][1];
-        billboard_mat[2][0] = view_mat[0][2];
-        billboard_mat[2][1] = view_mat[1][2];
-        billboard_mat[2][2] = view_mat[2][2];
-        billboard_mat[3][0] = x;
-        billboard_mat[3][1] = y;
-        billboard_mat[3][2] = z;
+                mat
+            },
+            true => {
+                panic!("not implemented: keep_upright");
+            }
+        };
+
+        // Add model translation
+        billboard_mat[3][0] = model_mat[3][0];
+        billboard_mat[3][1] = model_mat[3][1];
+        billboard_mat[3][2] = model_mat[3][2];
 
         billboard_mat
+    }
+
+    /// Can be used to deserialize ints to bools
+    fn bool_from_int<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match u8::deserialize(deserializer)? {
+            0 => Ok(false),
+            _ => Ok(true)
+        }
     }
 }
 
@@ -556,21 +737,30 @@ impl GltfDrawable {
 
     /// Get the extra fields
     pub fn extras(&self) -> &Option<Box<RawValue>> {
-        &self.extras
+        &self.raw_extras
     }
 }
 
 impl Drop for GltfModel {
-    /// Clean up gl objects
     fn drop(&mut self) {
-        // Collect VAOs and buffers, and then delete them
-        let vaos: Vec<u32> = self.meshes.iter().flat_map(|mesh| mesh.primitives.iter().map(|prim| prim.vao)).collect();
-
-        println!("Deleting {} VAOs and {} buffers from GltfModel", vaos.len(), self.buffers.len());
-
         unsafe {
-            gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());
             gl::DeleteVertexArrays(self.buffers.len() as i32, self.buffers.as_ptr());
         }
+    }
+}
+
+impl Drop for GltfMesh {
+    fn drop(&mut self) {
+        for prim in self.primitives.iter() {
+            unsafe {
+                gl::DeleteVertexArrays(1, &prim.vao);
+            }
+        }
+    }
+}
+
+impl Drop for GltfMaterial {
+    fn drop(&mut self) {
+        drop(&mut self.uniform_buffer);
     }
 }

@@ -1,6 +1,7 @@
 #ifndef UNIFORMS_GLSL
 #define UNIFORMS_GLSL
 
+// Global
 layout (std140) uniform GlobalParams
 {
     mat4 mat_proj;
@@ -20,12 +21,14 @@ layout (std140) uniform GlobalParams
     vec2 fog_dist;
 };
 
+// Materials
 layout (std140) uniform MaterialParams
 {
     bool has_base_color_texture;
     vec4 base_color;
 };
 
+// Lights
 #define LIGHT_COUNT 20
 #define POINT_LIGHT 0
 #define DIRECTIONAL_LIGHT 1
@@ -51,6 +54,20 @@ layout (std140) uniform LightParams
 {
     vec3 ambient_light;
     Light lights[LIGHT_COUNT];
+};
+
+// Joints
+#define JOINT_COUNT 30
+
+struct Joint
+{
+    mat4 joint_matrix;
+};
+
+layout (std140) uniform JointParams
+{
+    bool skinning_enabled;
+    Joint joints[JOINT_COUNT];
 };
 
 #endif

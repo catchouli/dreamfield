@@ -197,7 +197,7 @@ impl Default for MaterialParams {
 #[derive(UniformSetters)]
 pub struct LightParams {
     pub ambient_light: std140::vec3,
-    pub lights: std140::array<Light, 20>
+    pub lights: std140::array<Light, LIGHT_COUNT>
 }
 
 #[std140::repr_std140]
@@ -239,6 +239,40 @@ impl Default for Light {
             range: (0.0).to_std140(),
             inner_cone_angle: (0.0).to_std140(),
             outer_cone_angle: (0.0).to_std140()
+        }
+    }
+}
+
+/// Joint params
+#[std140::repr_std140]
+#[derive(UniformSetters)]
+pub struct JointParams {
+    pub skinning_enabled: std140::boolean,
+    pub joints: std140::array<Joint, JOINT_COUNT>
+}
+
+#[std140::repr_std140]
+#[derive(Copy, Clone)]
+pub struct Joint {
+    pub joint_matrix: std140::mat4x4
+}
+
+pub const JOINT_COUNT: usize = 30;
+
+impl Default for JointParams {
+    fn default() -> Self {
+        let joint_default = Default::default();
+        JointParams {
+            skinning_enabled: false.to_std140(),
+            joints: [joint_default; JOINT_COUNT].to_std140()
+        }
+    }
+}
+
+impl Default for Joint {
+    fn default() -> Self {
+        Joint {
+            joint_matrix: Matrix4::identity().to_std140()
         }
     }
 }

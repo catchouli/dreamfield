@@ -13,6 +13,8 @@ layout(location = 0) in vec3 vs_pos;
 layout(location = 1) in vec3 vs_normal;
 layout(location = 3) in vec2 vs_uv;
 layout(location = 5) in vec4 vs_col;
+layout(location = 6) in vec4 vs_joint;
+layout(location = 7) in vec4 vs_weight;
 
 out vec4 tcs_clip_pos;
 out vec3 tcs_eye_pos;
@@ -22,7 +24,16 @@ out vec2 tcs_uv;
 out vec3 tcs_col;
 
 void main() {
-    vec4 world_pos = mat_model * vec4(vs_pos, 1.0);
+    mat4 skin_matrix =
+        vs_weight.x * joints[int(vs_joint.x)].joint_matrix +
+        vs_weight.y * joints[int(vs_joint.y)].joint_matrix +
+        vs_weight.z * joints[int(vs_joint.z)].joint_matrix +
+        vs_weight.w * joints[int(vs_joint.w)].joint_matrix;
+
+    vec4 world_pos = skinning_enabled
+        ? mat_model * skin_matrix * vec4(vs_pos, 1.0)
+        : mat_model * vec4(vs_pos, 1.0);
+
     vec4 eye_pos = mat_view * world_pos;
     vec4 clip_pos = mat_proj * eye_pos;
 
@@ -173,6 +184,9 @@ void main() {
 
     out_color = min(out_color, vec3(1.0));
     out_frag_color = vec4(out_color, alpha);
+
+    //if (skinning_enabled)
+        //out_frag_color = vec4(1.0, 0.0, 1.0, 1.0);
 }
 
 #endif

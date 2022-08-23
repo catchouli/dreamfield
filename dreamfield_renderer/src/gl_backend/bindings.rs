@@ -5,7 +5,8 @@ pub enum UniformBlockBinding {
     GlobalParams = 0,
     ModelParams = 1,
     MaterialParams = 2,
-    LightParams = 3
+    LightParams = 3,
+    JointParams = 4
 }
 
 pub enum TextureSlot {
