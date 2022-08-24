@@ -25,7 +25,7 @@ pub struct GltfModel {
     buffers: Vec<u32>,
     drawables: Vec<GltfDrawable>,
     lights: Vec<GltfLight>,
-    transform: Matrix4<f32>,
+    transform: Rc<RefCell<GltfTransform>>,
     ubo_joints: UniformBuffer<JointParams>,
     animations: HashMap<String, GltfAnimation>,
     transform_hierarchy: Vec<Option<Rc<RefCell<GltfTransform>>>>
@@ -33,17 +33,23 @@ pub struct GltfModel {
 
 pub struct GltfTransform {
     parent: Option<Rc<RefCell<GltfTransform>>>,
+
     translation: Vector3<f32>,
     rotation: Quaternion<f32>,
     scale: Vector3<f32>,
-    local_transform: Matrix4<f32>
+
+    local_transform: Matrix4<f32>,
+    local_transform_dirty: bool,
+
+    world_transform: Matrix4<f32>,
+    world_transform_dirty: bool
 }
 
 pub struct GltfDrawable {
     name: String,
+    transform: Option<Rc<RefCell<GltfTransform>>>,
     mesh: Rc<GltfMesh>,
     skin: Option<Rc<RefCell<GltfSkin>>>,
-    transform: Matrix4<f32>,
     raw_extras: Option<Box<RawValue>>
 }
 
@@ -96,6 +102,7 @@ struct GltfAnimationChannel {
     frames: Vec<GltfAnimationKeyframe>
 }
 
+#[derive(Debug)]
 enum GltfAnimationKeyframe {
     Translation(f32, Vector3<f32>),
     Rotation(f32, Quaternion<f32>),
@@ -168,10 +175,11 @@ impl GltfModel {
         }).collect();
 
         // Calculate world transforms
+        let model_transform = Rc::new(RefCell::new(GltfTransform::from_matrix(None, Matrix4::identity())));
         let mut transform_hierarchy = Vec::new();
         for scene in doc.scenes() {
             for node in scene.nodes() {
-                Self::build_transform_hierarchy(&node, None, &mut transform_hierarchy);
+                Self::build_transform_hierarchy(&node, Some(&model_transform), &mut transform_hierarchy);
             }
         }
 
@@ -188,7 +196,8 @@ impl GltfModel {
 
             for scene in doc.scenes() {
                 for node in scene.nodes() {
-                    Self::build_scene_recursive(&node, &Matrix4::identity(), &meshes, &skins, &mut drawables, &mut lights);
+                    Self::build_scene_recursive(&node, &transform_hierarchy, &meshes, &skins, &mut drawables,
+                        &mut lights);
                 }
             }
 
@@ -206,7 +215,7 @@ impl GltfModel {
             buffers,
             drawables,
             lights,
-            transform: SquareMatrix::identity(),
+            transform: model_transform,
             ubo_joints: UniformBuffer::new(),
             animations,
             transform_hierarchy
@@ -247,7 +256,10 @@ impl GltfModel {
         // Render all prims
         for drawable in self.drawables.iter_mut() {
             let mesh = &mut drawable.mesh;
-            let model_mat = self.transform * drawable.transform;
+            let model_mat = drawable.transform
+                .as_ref()
+                .map(|t| t.borrow_mut().world_transform().clone())
+                .unwrap_or(self.transform.borrow_mut().world_transform().clone());
 
             // Set model matrix based on whether this is a billboard or not
             if mesh.parsed_extras.is_billboard {
@@ -265,12 +277,10 @@ impl GltfModel {
                 self.ubo_joints.set_skinning_enabled(&true);
 
                 for (i, joint) in skin.borrow().joints.iter().enumerate() {
-                    let joint_world_transform = if let Some(joint_transform) = &self.transform_hierarchy[joint.joint_index] {
-                        joint_transform.borrow().world_transform()
-                    }
-                    else {
-                        Matrix4::identity()
-                    };
+                    let joint_world_transform = self.transform_hierarchy[joint.joint_index]
+                        .as_ref()
+                        .map(|t| t.borrow_mut().world_transform().clone())
+                        .unwrap_or(Matrix4::identity());
 
                     let joint_matrix = joint_world_transform * joint.inverse_bind_matrix;
                     self.ubo_joints.set_joints(i, &Joint {
@@ -333,7 +343,7 @@ impl GltfModel {
 
     /// Set the model's transform
     pub fn set_transform(&mut self, transform: &Matrix4<f32>) {
-        self.transform = *transform
+        self.transform.borrow_mut().set_transform(*transform)
     }
 
     /// Get the drawables list
@@ -373,8 +383,9 @@ impl GltfModel {
 
                     let left = &channel.frames[left_frame];
                     let right = &channel.frames[right_frame];
+                    let blah = left.interpolate(right, time);
 
-                    match left.interpolate(right, time) {
+                    match blah {
                         GltfAnimationKeyframe::Translation(_, p) => {
                             node.borrow_mut().set_translation(p);
                         },
@@ -647,15 +658,18 @@ impl GltfModel {
     }
 
     /// Build the list of drawables recursively
-    fn build_scene_recursive(node: &gltf::Node, parent_world_transform: &Matrix4<f32>,
+    fn build_scene_recursive(node: &gltf::Node, transform_hierarchy: &Vec<Option<Rc<RefCell<GltfTransform>>>>,
                              meshes: &Vec<Rc<GltfMesh>>, skins: &Vec<Rc<RefCell<GltfSkin>>>,
                              out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
     {
         const WORLD_FORWARD: Vector4<f32> = vec4(0.0, 0.0, -1.0, 0.0);
 
         // Calculate world transform
-        let local_transform = cgmath::Matrix4::from(node.transform().matrix());
-        let world_transform = parent_world_transform * local_transform;
+        let transform = transform_hierarchy[node.index()].clone();
+        let world_transform = transform
+            .as_ref()
+            .map(|t| t.borrow_mut().world_transform().clone())
+            .unwrap_or(Matrix4::identity());
 
         // Add light if this node has a light
         if let Some(light) = node.light() {
@@ -693,7 +707,7 @@ impl GltfModel {
                 name,
                 mesh,
                 skin,
-                transform: world_transform,
+                transform,
                 raw_extras
             };
 
@@ -703,7 +717,7 @@ impl GltfModel {
 
         // Recurse into children
         for child in node.children() {
-            Self::build_scene_recursive(&child, &world_transform, meshes, skins, out_drawables, out_lights);
+            Self::build_scene_recursive(&child, &transform_hierarchy, meshes, skins, out_drawables, out_lights);
         }
     }
 
@@ -972,11 +986,6 @@ impl GltfDrawable {
         &self.name
     }
 
-    /// Get the transform for this drawable
-    pub fn get_transform(&self) -> &Matrix4<f32> {
-        &self.transform
-    }
-
     /// Get the extra fields
     pub fn extras(&self) -> &Option<Box<RawValue>> {
         &self.raw_extras
@@ -990,40 +999,61 @@ impl GltfTransform {
             translation: vec3(0.0, 0.0, 0.0),
             rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
             scale: vec3(1.0, 1.0, 1.0),
-            local_transform: mat
+            local_transform: mat,
+            local_transform_dirty: false,
+            world_transform: Matrix4::identity(),
+            world_transform_dirty: true
         }
     }
 
-    pub fn world_transform(&self) -> Matrix4<f32> {
-        let parent_world_transform = if let Some(parent_transform) = &self.parent {
-            parent_transform.borrow().world_transform()
+    fn local_transform(&mut self) -> &Matrix4<f32> {
+        if self.local_transform_dirty {
+            self.local_transform_dirty = false;
+            self.local_transform =
+                Matrix4::from_translation(self.translation) *
+                Matrix4::from(self.rotation) *
+                Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         }
-        else {
-            Matrix4::identity()
-        };
-        parent_world_transform * self.local_transform
+        &self.local_transform
+    }
+
+    fn world_transform(&mut self) -> &Matrix4<f32> {
+        if self.world_transform_dirty {
+            let parent_world_transform = self.parent
+                .as_ref()
+                .map(|t| *t.borrow_mut().world_transform())
+                .unwrap_or(Matrix4::identity());
+
+            self.world_transform = parent_world_transform * self.local_transform();
+        }
+        &self.world_transform
+    }
+
+    /// Set the local transform, this overrides the translation/rotation/scale and causes them to
+    /// be ignored. We could fix this if we decomposed this every time, but it seems like a bit of
+    /// a waste of cycles, so for now just avoid mixing and matching them.
+    pub fn set_transform(&mut self, transform: Matrix4<f32>) {
+        self.local_transform = transform;
+        self.local_transform_dirty = false;
+        self.world_transform_dirty = true;
     }
 
     pub fn set_translation(&mut self, translation: Vector3<f32>) {
         self.translation = translation;
-        self.recalculate_transform();
+        self.local_transform_dirty = true;
+        self.world_transform_dirty = true;
     }
 
     pub fn set_rotation(&mut self, rotation: Quaternion<f32>) {
         self.rotation = rotation;
-        self.recalculate_transform();
+        self.local_transform_dirty = true;
+        self.world_transform_dirty = true;
     }
 
     pub fn set_scale(&mut self, scale: Vector3<f32>) {
         self.scale = scale;
-        self.recalculate_transform();
-    }
-
-    fn recalculate_transform(&mut self) {
-        self.local_transform =
-            Matrix4::from_translation(self.translation) *
-            Matrix4::from(self.rotation) *
-            Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
+        self.local_transform_dirty = true;
+        self.world_transform_dirty = true;
     }
 }
 

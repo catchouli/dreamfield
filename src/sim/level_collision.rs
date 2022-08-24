@@ -3,8 +3,18 @@ use ncollide3d::{shape::TriMesh, math::{Point, Isometry}, query::{Ray, RayCast, 
 use cgmath::{SquareMatrix, Matrix4, vec4, Vector3};
 use gltf::Semantic;
 
+const GRID_NODE_SIZE: f32 = 10.0;
+
 pub struct LevelCollision {
     pub level_tri_mesh: TriMesh<f32>
+}
+
+pub struct LevelGridNode {
+}
+
+pub struct Aabb {
+    min: Vector3<f32>,
+    max: Vector3<f32>
 }
 
 impl LevelCollision {
