@@ -13,7 +13,7 @@ use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
-use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Quaternion};
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Quaternion, VectorSpace};
 use serde::{Deserialize, Serialize, Deserializer};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -372,10 +372,9 @@ impl GltfModel {
                     };
 
                     let left = &channel.frames[left_frame];
-                    // TODO: interpolation
-                    let _right = &channel.frames[right_frame];
+                    let right = &channel.frames[right_frame];
 
-                    match left {
+                    match left.interpolate(right, time) {
                         GltfAnimationKeyframe::Translation(_, p) => {
                             node.borrow_mut().set_translation(p);
                         },
@@ -397,6 +396,7 @@ impl GltfModel {
         }
     }
 
+    /// Perform a binary search to figure out the current animation frame
     fn cur_frame(channel: &GltfAnimationChannel, time: f32) -> usize {
         let mut min = 0;
         let mut max = channel.frames.len() as i32 - 1;
@@ -1004,18 +1004,18 @@ impl GltfTransform {
         parent_world_transform * self.local_transform
     }
 
-    pub fn set_translation(&mut self, translation: &Vector3<f32>) {
-        self.translation = *translation;
+    pub fn set_translation(&mut self, translation: Vector3<f32>) {
+        self.translation = translation;
         self.recalculate_transform();
     }
 
-    pub fn set_rotation(&mut self, rotation: &Quaternion<f32>) {
-        self.rotation = *rotation;
+    pub fn set_rotation(&mut self, rotation: Quaternion<f32>) {
+        self.rotation = rotation;
         self.recalculate_transform();
     }
 
-    pub fn set_scale(&mut self, scale: &Vector3<f32>) {
-        self.scale = *scale;
+    pub fn set_scale(&mut self, scale: Vector3<f32>) {
+        self.scale = scale;
         self.recalculate_transform();
     }
 
@@ -1038,12 +1038,39 @@ impl GltfAnimation {
 }
 
 impl GltfAnimationKeyframe {
-    pub fn time(&self) -> f32 {
+    fn time(&self) -> f32 {
         match self {
             GltfAnimationKeyframe::Translation(time, _) => *time,
             GltfAnimationKeyframe::Rotation(time, _) => *time,
             GltfAnimationKeyframe::Scale(time, _) => *time
         }
+    }
+
+    /// Interpolate between two keyframes
+    fn interpolate(&self, b: &GltfAnimationKeyframe, time: f32) -> GltfAnimationKeyframe {
+        match (self, b) {
+            (GltfAnimationKeyframe::Translation(t_a, p_a), GltfAnimationKeyframe::Translation(t_b, p_b)) => {
+                let amount = Self::interpolation_amount(time, *t_a, *t_b);
+                let position = p_a.lerp(*p_b, amount);
+                GltfAnimationKeyframe::Translation(time, position)
+            },
+            (GltfAnimationKeyframe::Rotation(t_a, r_a), GltfAnimationKeyframe::Rotation(t_b, r_b)) => {
+                let amount = Self::interpolation_amount(time, *t_a, *t_b);
+                let rotation = r_a.slerp(*r_b, amount);
+                GltfAnimationKeyframe::Rotation(time, rotation)
+            },
+            (GltfAnimationKeyframe::Scale(t_a, s_a), GltfAnimationKeyframe::Scale(t_b, s_b)) => {
+                let amount = Self::interpolation_amount(time, *t_a, *t_b);
+                let scale = s_a.lerp(*s_b, amount);
+                GltfAnimationKeyframe::Scale(time, scale)
+            }
+            _ => panic!("Invalid combination of keyframes to lerp")
+        }
+    }
+
+    /// Get the interpolation amount for a time between two other times
+    fn interpolation_amount(time: f32, a: f32, b: f32) -> f32 {
+        f32::clamp((time - a) / (b - a), 0.0, 1.0)
     }
 }
 
