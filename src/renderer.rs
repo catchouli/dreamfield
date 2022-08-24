@@ -160,6 +160,18 @@ impl Renderer {
         };
         main_shader.use_program();
 
+        // Update animation
+        let first_anim = self.demo_scene_model
+            .animations()
+            .values()
+            .next()
+            .map(|anim| (anim.name().to_string(), anim.length()));
+
+        if let Some((name, length)) = first_anim {
+            let anim_time = (game_state.time as f32) % length;
+            self.demo_scene_model.play_animation(&name, anim_time);
+        }
+
         self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
         self.fire_orb_model.render(&mut self.ubo_global, true);

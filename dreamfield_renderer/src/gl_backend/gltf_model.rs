@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use gl::types::*;
 use gltf::Semantic;
@@ -12,7 +13,7 @@ use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
-use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg, Quaternion};
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg, Quaternion, InnerSpace, Matrix3};
 use serde::{Deserialize, Serialize, Deserializer};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -26,13 +27,17 @@ pub struct GltfModel {
     lights: Vec<GltfLight>,
     transform: Matrix4<f32>,
     ubo_joints: UniformBuffer<JointParams>,
-    animations: Vec<GltfAnimation>,
-    transforms: Vec<Option<Rc<RefCell<GltfTransform>>>>
+    animations: HashMap<String, GltfAnimation>,
+    transform_hierarchy: Vec<Option<Rc<RefCell<GltfTransform>>>>
 }
 
 pub struct GltfTransform {
     parent: Option<Rc<RefCell<GltfTransform>>>,
-    local_transform: Matrix4<f32>
+    translation: Vector3<f32>,
+    rotation: Quaternion<f32>,
+    scale: Vector3<f32>,
+    local_transform: Matrix4<f32>,
+    base_transform: Matrix4<f32>
 }
 
 pub struct GltfDrawable {
@@ -81,8 +86,10 @@ struct GltfJoint {
     inverse_bind_matrix: Matrix4<f32>
 }
 
-struct GltfAnimation {
-   channels: Vec<GltfAnimationChannel> 
+pub struct GltfAnimation {
+    name: String,
+    length: f32,
+    channels: Vec<GltfAnimationChannel> 
 }
 
 struct GltfAnimationChannel {
@@ -162,16 +169,16 @@ impl GltfModel {
         }).collect();
 
         // Calculate world transforms
-        let mut world_transforms = Vec::new();
+        let mut transform_hierarchy = Vec::new();
         for scene in doc.scenes() {
             for node in scene.nodes() {
-                Self::calc_world_transforms_recursive(&node, None, &mut world_transforms);
+                Self::build_transform_hierarchy(&node, None, &mut transform_hierarchy);
             }
         }
 
         // Load all skins
         let skins = doc.skins().map(|skin| {
-            let skin = Self::load_skin(&skin, &buffer_data, &world_transforms);
+            let skin = Self::load_skin(&skin, &buffer_data);
             Rc::new(RefCell::new(skin))
         }).collect();
 
@@ -192,7 +199,9 @@ impl GltfModel {
         // Load animations
         let animations = doc.animations().map(|anim| {
             Self::load_animation(&anim, &buffer_data)
-        }).collect();
+        })
+        .map(|anim| (anim.name.to_string(), anim))
+        .collect();
 
         Ok(GltfModel {
             buffers,
@@ -201,35 +210,28 @@ impl GltfModel {
             transform: SquareMatrix::identity(),
             ubo_joints: UniformBuffer::new(),
             animations,
-            transforms: world_transforms
+            transform_hierarchy
         })
     }
 
-    /// Precalculate all the world transforms, I needed this because I couldn't figure another way to get the world
-    /// transform of a joint.
-    pub fn calc_world_transforms_recursive(node: &gltf::Node, parent: Option<&Rc<RefCell<GltfTransform>>>,
-        out_world_transforms: &mut Vec<Option<Rc<RefCell<GltfTransform>>>>)
+    /// Build transform hierarchy
+    pub fn build_transform_hierarchy(node: &gltf::Node, parent: Option<&Rc<RefCell<GltfTransform>>>,
+        out_transform_hierarchy: &mut Vec<Option<Rc<RefCell<GltfTransform>>>>)
     {
-        //log::debug!("node index: {}", node.index());
-
         let node_index = node.index();
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
-        //let world_transform = parent_world_transform * local_transform;
 
-        if out_world_transforms.len() <= node_index {
-            out_world_transforms.resize(node_index + 1, None);
+        if out_transform_hierarchy.len() <= node_index {
+            out_transform_hierarchy.resize(node_index + 1, None);
         }
 
-        let transform = Rc::new(RefCell::new(GltfTransform {
-            parent: parent.map(|rc| rc.clone()),
-            local_transform
-        }));
+        let transform = Rc::new(RefCell::new(GltfTransform::from_matrix(parent.map(|rc| rc.clone()), local_transform)));
 
         for child in node.children() {
-            Self::calc_world_transforms_recursive(&child, Some(&transform), out_world_transforms);
+            Self::build_transform_hierarchy(&child, Some(&transform), out_transform_hierarchy);
         }
 
-        out_world_transforms[node_index] = Some(transform);
+        out_transform_hierarchy[node_index] = Some(transform);
     }
 
     /// Render a model
@@ -266,13 +268,13 @@ impl GltfModel {
                 let skin_mut = skin.borrow_mut();
                 let rot = Matrix4::from_angle_y(Deg(1.0));
 
-                if let Some(joint_transform) = &self.transforms[skin_mut.joints[8].joint_index] {
+                if let Some(joint_transform) = &self.transform_hierarchy[skin_mut.joints[8].joint_index] {
                     let mut joint_transform = joint_transform.borrow_mut();
                     joint_transform.local_transform = rot * joint_transform.local_transform;
                 }
 
                 for (i, joint) in skin_mut.joints.iter().enumerate() {
-                    let joint_world_transform = if let Some(joint_transform) = &self.transforms[joint.joint_index] {
+                    let joint_world_transform = if let Some(joint_transform) = &self.transform_hierarchy[joint.joint_index] {
                         joint_transform.borrow().world_transform()
                     }
                     else {
@@ -351,6 +353,80 @@ impl GltfModel {
     /// Get the model's lights
     pub fn lights(&self) -> &Vec<GltfLight> {
         &self.lights
+    }
+
+    /// Get the model's animations
+    pub fn animations(&self) -> &HashMap<String, GltfAnimation> {
+        &self.animations
+    }
+
+    /// Update an animation
+    pub fn play_animation(&mut self, name: &str, time: f32) {
+        if let Some(anim) = self.animations.get(name) {
+            log::info!("Playing animation {name} at time {time}");
+
+            for channel in anim.channels.iter() {
+                if let Some(node) = &self.transform_hierarchy[channel.target_node] {
+                    let cur_frame = Self::cur_frame(channel, time);
+                    let total_frames = channel.frames.len();
+
+                    let (left_frame, right_frame) = if cur_frame == 0 {
+                        (0, 0)
+                    }
+                    else if cur_frame == total_frames {
+                        (cur_frame - 1, cur_frame - 1)
+                    }
+                    else {
+                        (cur_frame - 1, cur_frame)
+                    };
+
+                    let left = &channel.frames[left_frame];
+                    let right = &channel.frames[right_frame];
+
+                    match left {
+                        GltfAnimationKeyframe::Translation(_, p) => {
+                            node.borrow_mut().set_translation(p);
+                        },
+                        GltfAnimationKeyframe::Rotation(_, r) => {
+                            node.borrow_mut().set_rotation(r);
+                        },
+                        GltfAnimationKeyframe::Scale(_, s) => {
+                            node.borrow_mut().set_scale(s);
+                        }
+                    }
+
+                    println!("updating node, frame: {cur_frame}");
+                }
+                else {
+                    log::error!("No such target node {}", channel.target_node);
+                }
+            }
+        }
+        else {
+            log::error!("No such animation {name}");
+        }
+    }
+
+    fn cur_frame(channel: &GltfAnimationChannel, time: f32) -> usize {
+        let mut min = 0;
+        let mut max = channel.frames.len() - 1;
+
+        while min <= max {
+            let mid = min + (max - min) / 2;
+            let frame_time = channel.frames[mid].time();
+
+            if frame_time == time {
+                return mid;
+            }
+            else if frame_time < time {
+                min = mid + 1;
+            }
+            else {
+                max = mid - 1;
+            }
+        }
+
+        max + 1
     }
 
     /// Load a mesh into a vao
@@ -656,8 +732,7 @@ impl GltfModel {
     }
 
     /// Load a skin
-    fn load_skin(skin: &gltf::Skin, buffer_data: &[gltf::buffer::Data],
-        world_transforms: &[Option<Rc<RefCell<GltfTransform>>>]) -> GltfSkin
+    fn load_skin(skin: &gltf::Skin, buffer_data: &[gltf::buffer::Data]) -> GltfSkin
     {
         // Get joint indices
         let joint_indices = skin.joints().map(|joint| {
@@ -726,7 +801,11 @@ impl GltfModel {
     fn load_animation(anim: &gltf::Animation, buffer_data: &[gltf::buffer::Data]) -> GltfAnimation {
         log::debug!("Loading animation {}", anim.name().unwrap());
 
+        // Get name
+        let name = anim.name().unwrap_or(&format!("unnamed_{}", anim.index())).to_string();
+
         // Load channels
+        let mut length = 0.0;
         let channels = anim.channels().map(|channel| {
             // Get target node
             let target = &channel.target();
@@ -734,8 +813,12 @@ impl GltfModel {
 
             // Load frames
             let sampler = &channel.sampler();
-            let frames = Self::load_animation_frames(&sampler.input(), &sampler.output(), target.property(),
-                &buffer_data);
+            let (channel_length, frames) = Self::load_animation_frames(&sampler.input(), &sampler.output(),
+                target.property(), &buffer_data);
+
+            if channel_length > length {
+                length = channel_length;
+            }
 
             GltfAnimationChannel {
                 target_node,
@@ -744,13 +827,15 @@ impl GltfModel {
         }).collect();
 
         GltfAnimation {
+            name,
+            length,
             channels
         }
     }
 
     /// Load animation frames
     fn load_animation_frames(input: &gltf::Accessor, output: &gltf::Accessor, property: Property,
-        buffer_data: &[gltf::buffer::Data]) -> Vec<GltfAnimationKeyframe>
+        buffer_data: &[gltf::buffer::Data]) -> (f32, Vec<GltfAnimationKeyframe>)
     {
         // Get buffer view and data
         let frame_count = input.count();
@@ -791,33 +876,44 @@ impl GltfModel {
         };
 
         let mut res = Vec::new();
+        let mut length = 0.0;
 
-        for i in 0..frame_count {
+        for _ in 0..frame_count {
+            let frame_time = input_reader.read_f32::<LittleEndian>().unwrap();
+
             let frame = match property {
-                Property::Translation => GltfAnimationKeyframe::Translation(
-                    input_reader.read_f32::<LittleEndian>().unwrap(),
-                    vec3(
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap()
-                    )),
-                Property::Rotation => GltfAnimationKeyframe::Rotation(
-                    input_reader.read_f32::<LittleEndian>().unwrap(),
-                    Quaternion::new(
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap()
-                    )),
-                Property::Scale => GltfAnimationKeyframe::Scale(
-                    input_reader.read_f32::<LittleEndian>().unwrap(),
-                    vec3(
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap(),
-                        output_reader.read_f32::<LittleEndian>().unwrap()
-                    )),
+                Property::Translation => {
+                    GltfAnimationKeyframe::Translation(
+                        frame_time,
+                        vec3(
+                            output_reader.read_f32::<LittleEndian>().unwrap(),
+                            output_reader.read_f32::<LittleEndian>().unwrap(),
+                            output_reader.read_f32::<LittleEndian>().unwrap()
+                            ))
+                },
+                Property::Rotation => {
+                    let x = output_reader.read_f32::<LittleEndian>().unwrap();
+                    let y = output_reader.read_f32::<LittleEndian>().unwrap();
+                    let z = output_reader.read_f32::<LittleEndian>().unwrap();
+                    let w = output_reader.read_f32::<LittleEndian>().unwrap();
+
+                    GltfAnimationKeyframe::Rotation(frame_time, Quaternion::new(w, x, y, z))
+                },
+                Property::Scale => {
+                    GltfAnimationKeyframe::Scale(
+                        frame_time,
+                        vec3(
+                            output_reader.read_f32::<LittleEndian>().unwrap(),
+                            output_reader.read_f32::<LittleEndian>().unwrap(),
+                            output_reader.read_f32::<LittleEndian>().unwrap()
+                            ))
+                },
                 Property::MorphTargetWeights => panic!("not implemented")
             };
+
+            if frame_time > length {
+                length = frame_time;
+            }
 
             res.push(frame);
         }
@@ -826,7 +922,7 @@ impl GltfModel {
         assert!(input_reader.len() == 0);
         assert!(output_reader.len() == 0);
 
-        res
+        (length, res)
     }
 
     /// Remove mipmap part from a texture filter
@@ -898,6 +994,30 @@ impl GltfDrawable {
 }
 
 impl GltfTransform {
+    fn from_matrix(parent: Option<Rc<RefCell<GltfTransform>>>, mat: Matrix4<f32>) -> Self {
+        let translation = mat.w.truncate();
+
+        let scale = vec3(
+            mat.x.truncate().magnitude(),
+            mat.y.truncate().magnitude(),
+            mat.z.truncate().magnitude());
+
+        let rotation = Quaternion::from(
+            Matrix3::from_cols(
+                mat.x.truncate() / scale.x,
+                mat.y.truncate() / scale.y,
+                mat.z.truncate() / scale.z));
+
+        GltfTransform {
+            parent,
+            translation,
+            rotation,
+            scale,
+            local_transform: mat,
+            base_transform: mat
+        }
+    }
+
     pub fn world_transform(&self) -> Matrix4<f32> {
         let parent_world_transform = if let Some(parent_transform) = &self.parent {
             parent_transform.borrow().world_transform()
@@ -906,6 +1026,48 @@ impl GltfTransform {
             Matrix4::identity()
         };
         parent_world_transform * self.local_transform
+    }
+
+    pub fn set_translation(&mut self, translation: &Vector3<f32>) {
+        self.translation = *translation;
+        self.recalculate_transform();
+    }
+
+    pub fn set_rotation(&mut self, rotation: &Quaternion<f32>) {
+        self.rotation = *rotation;
+        self.recalculate_transform();
+    }
+
+    pub fn set_scale(&mut self, scale: &Vector3<f32>) {
+        self.scale = *scale;
+        self.recalculate_transform();
+    }
+
+    fn recalculate_transform(&mut self) {
+        self.local_transform =
+            Matrix4::from_translation(self.translation) *
+            Matrix4::from(self.rotation) *
+            Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
+    }
+}
+
+impl GltfAnimation {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn length(&self) -> f32 {
+        self.length
+    }
+}
+
+impl GltfAnimationKeyframe {
+    pub fn time(&self) -> f32 {
+        match self {
+            GltfAnimationKeyframe::Translation(time, _) => *time,
+            GltfAnimationKeyframe::Rotation(time, _) => *time,
+            GltfAnimationKeyframe::Scale(time, _) => *time
+        }
     }
 }
 
