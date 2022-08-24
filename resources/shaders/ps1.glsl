@@ -31,7 +31,7 @@ void main() {
         vs_weight.w * joints[int(vs_joint.w)].joint_matrix;
 
     vec4 world_pos = skinning_enabled
-        ? mat_model * skin_matrix * vec4(vs_pos, 1.0)
+        ? skin_matrix * vec4(vs_pos, 1.0)
         : mat_model * vec4(vs_pos, 1.0);
 
     vec4 eye_pos = mat_view * world_pos;
@@ -184,9 +184,6 @@ void main() {
 
     out_color = min(out_color, vec3(1.0));
     out_frag_color = vec4(out_color, alpha);
-
-    //if (skinning_enabled)
-        //out_frag_color = vec4(1.0, 0.0, 1.0, 1.0);
 }
 
 #endif

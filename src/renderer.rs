@@ -163,8 +163,7 @@ impl Renderer {
         // Update animation
         let first_anim = self.demo_scene_model
             .animations()
-            .values()
-            .next()
+            .get("Idle")
             .map(|anim| (anim.name().to_string(), anim.length()));
 
         if let Some((name, length)) = first_anim {

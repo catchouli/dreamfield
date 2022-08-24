@@ -13,7 +13,7 @@ use super::texture::{Texture, TextureParams};
 use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
-use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Deg, Quaternion, InnerSpace, Matrix3};
+use cgmath::{SquareMatrix, Matrix4, Vector3, vec3, vec4, Vector4, Matrix, Quaternion};
 use serde::{Deserialize, Serialize, Deserializer};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -36,8 +36,7 @@ pub struct GltfTransform {
     translation: Vector3<f32>,
     rotation: Quaternion<f32>,
     scale: Vector3<f32>,
-    local_transform: Matrix4<f32>,
-    base_transform: Matrix4<f32>
+    local_transform: Matrix4<f32>
 }
 
 pub struct GltfDrawable {
@@ -265,15 +264,7 @@ impl GltfModel {
             if let Some(skin) = &drawable.skin {
                 self.ubo_joints.set_skinning_enabled(&true);
 
-                let skin_mut = skin.borrow_mut();
-                let rot = Matrix4::from_angle_y(Deg(1.0));
-
-                if let Some(joint_transform) = &self.transform_hierarchy[skin_mut.joints[8].joint_index] {
-                    let mut joint_transform = joint_transform.borrow_mut();
-                    joint_transform.local_transform = rot * joint_transform.local_transform;
-                }
-
-                for (i, joint) in skin_mut.joints.iter().enumerate() {
+                for (i, joint) in skin.borrow().joints.iter().enumerate() {
                     let joint_world_transform = if let Some(joint_transform) = &self.transform_hierarchy[joint.joint_index] {
                         joint_transform.borrow().world_transform()
                     }
@@ -363,7 +354,7 @@ impl GltfModel {
     /// Update an animation
     pub fn play_animation(&mut self, name: &str, time: f32) {
         if let Some(anim) = self.animations.get(name) {
-            log::info!("Playing animation {name} at time {time}");
+            log::trace!("Playing animation {} at time {}", anim.name, time);
 
             for channel in anim.channels.iter() {
                 if let Some(node) = &self.transform_hierarchy[channel.target_node] {
@@ -381,7 +372,8 @@ impl GltfModel {
                     };
 
                     let left = &channel.frames[left_frame];
-                    let right = &channel.frames[right_frame];
+                    // TODO: interpolation
+                    let _right = &channel.frames[right_frame];
 
                     match left {
                         GltfAnimationKeyframe::Translation(_, p) => {
@@ -394,8 +386,6 @@ impl GltfModel {
                             node.borrow_mut().set_scale(s);
                         }
                     }
-
-                    println!("updating node, frame: {cur_frame}");
                 }
                 else {
                     log::error!("No such target node {}", channel.target_node);
@@ -409,14 +399,14 @@ impl GltfModel {
 
     fn cur_frame(channel: &GltfAnimationChannel, time: f32) -> usize {
         let mut min = 0;
-        let mut max = channel.frames.len() - 1;
+        let mut max = channel.frames.len() as i32 - 1;
 
         while min <= max {
             let mid = min + (max - min) / 2;
-            let frame_time = channel.frames[mid].time();
+            let frame_time = channel.frames[mid as usize].time();
 
             if frame_time == time {
-                return mid;
+                return mid as usize;
             }
             else if frame_time < time {
                 min = mid + 1;
@@ -426,7 +416,7 @@ impl GltfModel {
             }
         }
 
-        max + 1
+        (max + 1) as usize
     }
 
     /// Load a mesh into a vao
@@ -839,7 +829,7 @@ impl GltfModel {
     {
         // Get buffer view and data
         let frame_count = input.count();
-        log::debug!("Loading {} {:?} animation frames", frame_count, property);
+        log::trace!("Loading {} {:?} animation frames", frame_count, property);
 
         let property_components = match property {
             Property::Translation => 3,
@@ -995,26 +985,12 @@ impl GltfDrawable {
 
 impl GltfTransform {
     fn from_matrix(parent: Option<Rc<RefCell<GltfTransform>>>, mat: Matrix4<f32>) -> Self {
-        let translation = mat.w.truncate();
-
-        let scale = vec3(
-            mat.x.truncate().magnitude(),
-            mat.y.truncate().magnitude(),
-            mat.z.truncate().magnitude());
-
-        let rotation = Quaternion::from(
-            Matrix3::from_cols(
-                mat.x.truncate() / scale.x,
-                mat.y.truncate() / scale.y,
-                mat.z.truncate() / scale.z));
-
         GltfTransform {
             parent,
-            translation,
-            rotation,
-            scale,
-            local_transform: mat,
-            base_transform: mat
+            translation: vec3(0.0, 0.0, 0.0),
+            rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            scale: vec3(1.0, 1.0, 1.0),
+            local_transform: mat
         }
     }
 
