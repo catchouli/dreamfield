@@ -156,10 +156,6 @@ impl GltfModel {
 
         // Render all prims
         for drawable in self.drawables.iter_mut() {
-            let has_skin = drawable.skin.is_some();
-            if has_skin {
-                println!("drawing lady");
-            }
             let mesh = &mut drawable.mesh;
             let model_mat = drawable.transform
                 .as_ref()
@@ -316,8 +312,6 @@ impl GltfModel {
             let skin = node.skin().map(|skin| skins[skin.index()].clone());
             let raw_extras = node.extras().clone();
 
-            println!("loading mesh {}, skin: {}, skins: {}, is_some: {}", name, node.skin().map(|s| s.index()).unwrap_or(555), skins.len(), skin.is_some());
-
             let drawable = GltfDrawable {
                 name,
                 mesh,
@@ -350,6 +344,10 @@ impl GltfModel {
             ));
         }
 
+        // Recurse into children
+        for child in node.children() {
+            Self::build_scene_recursive(&child, transform_hierarchy, meshes, skins, out_drawables, out_lights);
+        }
     }
 
     /// Remove mipmap part from a texture filter
