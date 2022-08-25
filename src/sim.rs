@@ -1,14 +1,11 @@
 pub mod input;
 pub mod level_collision;
 
+//use ncollide3d::shape::Capsule;
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
 use dreamfield_renderer::camera::{FpsCamera, Camera};
-use ncollide3d::math::{Isometry, Point};
-use ncollide3d::na::Translation3;
-use ncollide3d::query::{self, Proximity};
-use ncollide3d::shape::{Capsule, Shape};
+use ncollide3d::{na::Translation3, math::Isometry, shape::Capsule};
 use crate::renderer::resources;
-
 use self::input::{InputName, InputState};
 use self::level_collision::LevelCollision;
 
@@ -44,7 +41,7 @@ struct PlayerMove {
 impl Default for PlayerMove {
     fn default() -> Self {
         PlayerMove {
-            collider: Capsule::new(1.7 / 2.0, 0.25)
+            collider: Capsule::new(1.7 / 2.0, 0.50)
         }
     }
 }
@@ -64,7 +61,7 @@ impl GameState {
         // Looking at corridor
         //let camera = FpsCamera::new_with_pos_rot(vec3(5.2, 0.8, 12.8), 0.03, 2.0, 0.0);
         // Default dungeon pos
-        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), -0.17, 0.0, 0.0);
+        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 2.0, 10.0), -0.17, 0.0, 0.0);
         // Going outside
         //let camera = FpsCamera::new_with_pos_rot(vec3(-53.925, 5.8, 19.56), 0.097, 1.57, 0.0);
 
@@ -182,48 +179,58 @@ impl GameState {
         // Print the camera position
         log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
 
-        // Resolve horizontal motion
-        let mut movement = time_delta * vec3(self.velocity.x, 0.0, self.velocity.z);
-        for _ in 0..2 {
-            if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-                movement = self.resolve_horizontal_movement(&pos, &movement);
-            }
-        }
-        pos += movement;
+        //// Resolve horizontal motion
+        //let mut movement = time_delta * vec3(self.velocity.x, 0.0, self.velocity.z);
+        //for _ in 0..2 {
+        //    if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
+        //        movement = self.resolve_horizontal_movement(&pos, &movement);
+        //    }
+        //}
+        //pos += movement;
 
-        // Resolve vertical motion
-        if self.velocity.y < 0.0 {
-            let movement_y = self.velocity.y * time_delta;
-            (pos, self.velocity.y) = self.resolve_vertical_movement(&pos, &movement_y);
-        }
+        //// Resolve vertical motion
+        //if self.velocity.y < 0.0 {
+        //    let movement_y = self.velocity.y * time_delta;
+        //    (pos, self.velocity.y) = self.resolve_vertical_movement(&pos, &movement_y);
+        //}
 
         // Some other attempts
-        //let start = *self.camera.pos();
-        //let end = start + self.velocity * time_delta;
         //let mut end_pos = self.playermove(&start, &end);
 
         // Contact
-        //let collider = &self.playermove.collider;
-        //let velocity_magnitude = self.velocity.magnitude();
-
-        //let tra = Translation3::new(end.x, end.y, end.z);
-        //let m2 = Isometry::from(tra);
-        //let m1 = Isometry::identity();
+        let collider = &self.playermove.collider;
+        let velocity_magnitude = self.velocity.magnitude();
 
         //let is_hull = self.level_collision.level_tri_mesh.is_convex_polyhedron();
         //let as_hull = self.level_collision.level_tri_mesh.as_convex_polyhedron();
         //println!("is hull: {}", as_hull.is_some());
 
         //let result = query::contact_composite_shape_shape(&m1, &self.level_collision.level_tri_mesh, &m2, collider, velocity_magnitude);
+        for dist in 1..=2 {
+            let dist = dist as f32 / 10.0;
 
-        //if let Some(result) = result {
-        //    log::info!("got level intersection");
-        //    let normal = vec3(result.normal.x, result.normal.y, result.normal.z);
-        //    end_pos += normal * result.depth;
-        //}
-        //else {
-        //    log::info!("no");
-        //}
+            let start = *self.camera.pos();
+            let end = start + self.velocity * time_delta * dist;
+            let direction = (end - start).normalize();
+
+            let tra = Translation3::new(end.x, end.y, end.z);
+            let m2 = Isometry::from(tra);
+
+            let result = self.level_collision.contact(&start, &direction, collider, m2, velocity_magnitude);
+
+            if result.is_none() {
+                pos = end;
+            }
+
+            //if let Some(result) = result {
+                //log::info!("got level intersection");
+                //let normal = vec3(result.normal.x, result.normal.y, result.normal.z);
+                //pos = end + normal * result.depth;
+            //}
+            //else {
+                //log::info!("no");
+            //}
+        }
 
         // Proximity
         //let result = query::proximity_composite_shape_shape(&m1, &self.level_collision.level_tri_mesh, &m2, collider, velocity_magnitude);
@@ -245,9 +252,9 @@ impl GameState {
         self.camera.update();
     }
 
-    fn playermove(&mut self, start: &Vector3<f32>, end: &Vector3<f32>) -> Vector3<f32> {
-        *end
-    }
+    //fn playermove(&mut self, start: &Vector3<f32>, end: &Vector3<f32>) -> Vector3<f32> {
+        //*end
+    //}
 
     fn resolve_vertical_movement(&self, pos: &Vector3<f32>, movement_y: &f32) -> (Vector3<f32>, f32) {
         /// The character height

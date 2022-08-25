@@ -179,7 +179,15 @@ impl Renderer {
 
         self.demo_scene_model.render(&mut self.ubo_global, true);
         //self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
-        //self.fire_orb_model.render(&mut self.ubo_global, true);
+        self.fire_orb_model.render(&mut self.ubo_global, true);
+
+        // Draw aabb nodes
+        let aabb_node = game_state.level_collision.get_aabb_node(game_state.camera.pos());
+        if let Some(aabb_node) = aabb_node {
+            let (x, y) = aabb_node.index();
+            println!("cur aabb node {}, {} (bounds: {:?} {:?}) (objects: {})", x, y, aabb_node.aabb().mins,
+                aabb_node.aabb().maxs, aabb_node.tri_meshes.len());
+        }
 
         // Disable depth test for blitting operations
         unsafe {
