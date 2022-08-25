@@ -3,10 +3,12 @@ pub mod level_collision;
 
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
 use dreamfield_renderer::camera::{FpsCamera, Camera};
-use ncollide3d::math::{Isometry, Point};
+use ncollide3d::bounding_volume::BoundingSphere;
+use ncollide3d::interpolation::{ConstantVelocityRigidMotion, ConstantLinearVelocityRigidMotion};
+use ncollide3d::math::{Isometry, Point, Vector, Translation};
 use ncollide3d::na::Translation3;
-use ncollide3d::query::{self, Proximity};
-use ncollide3d::shape::{Capsule, Shape};
+use ncollide3d::query::{self, Proximity, DefaultTOIDispatcher};
+use ncollide3d::shape::{Capsule, Shape, Ball};
 use crate::renderer::resources;
 
 use self::input::{InputName, InputState};
@@ -38,13 +40,13 @@ pub struct GameState {
 }
 
 struct PlayerMove {
-    collider: Capsule<f32>
+    collider: Ball<f32>
 }
 
 impl Default for PlayerMove {
     fn default() -> Self {
         PlayerMove {
-            collider: Capsule::new(1.7 / 2.0, 0.25)
+            collider: Ball::new(0.5)
         }
     }
 }
@@ -182,6 +184,12 @@ impl GameState {
         // Print the camera position
         log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
 
+        // Resolve vertical motion
+        if self.velocity.y < 0.0 {
+            let movement_y = self.velocity.y * time_delta;
+            (pos, self.velocity.y) = self.resolve_vertical_movement(&pos, &movement_y);
+        }
+
         // Resolve horizontal motion
         let mut movement = time_delta * vec3(self.velocity.x, 0.0, self.velocity.z);
         for _ in 0..2 {
@@ -190,12 +198,6 @@ impl GameState {
             }
         }
         pos += movement;
-
-        // Resolve vertical motion
-        if self.velocity.y < 0.0 {
-            let movement_y = self.velocity.y * time_delta;
-            (pos, self.velocity.y) = self.resolve_vertical_movement(&pos, &movement_y);
-        }
 
         // Some other attempts
         //let start = *self.camera.pos();
@@ -277,26 +279,46 @@ impl GameState {
         let ray_start = pos;
         let ray_dist = movement_len;
 
-        match self.level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
-            Some(ray_hit) => {
-                let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
+        let collider = &self.playermove.collider;
 
-                // Calculate angle to world up
-                // TODO: don't let player walk up slopes that are too slopey
-                //let up_vector = vec3(0.0, 1.0, 0.0);
-                //let hit_dot_up = hit_normal.dot(up_vector);
-                //let slope_angle = hit_dot_up.acos();
+        let dispatcher = DefaultTOIDispatcher { };
 
-                // Allow sliding up slope
-                let movement_to_wall = ray_hit.toi * movement_dir;
-                let remaining_movement = movement - movement_to_wall;
-                let subtracted_movement = hit_normal * remaining_movement.dot(hit_normal);
+        //let no_motion = ConstantVelocityRigidMotion::new(0.0, Isometry::identity(), Point::new(0.0, 0.0, 0.0),
+            //Vector::new(0.0, 0.0, 0.0), Vector::new(0.0, 0.0, 0.0));
 
-                movement_to_wall + remaining_movement - subtracted_movement
-            },
-            _ => {
-                *movement
-            }
-        }
+        //let palyer_motion = ConstantVelocityRigidMotion::new(0.0, Isometry::identity(), Point::new(0.0, 0.0, 0.0),
+            //Vector::new(0.0, 0.0, 0.0), Vector::new(0.0, 0.0, 0.0));
+
+        let no_motion = ConstantLinearVelocityRigidMotion::new(0.0, Isometry::identity(), Vector::identity());
+        let player_motion = ConstantLinearVelocityRigidMotion::new(0.0, Isometry::from(Translation::new(pos.x, pos.y, pos.z)),
+            Vector::new(movement.x, movement.y, movement.z));
+
+        let mesh = &self.level_collision.level_tri_mesh;
+
+        let res = query::nonlinear_time_of_impact(&dispatcher, &no_motion, mesh, &no_motion, collider, movement_len, movement_len);
+
+        *movement
+
+        //match self.level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
+        //    Some(ray_hit) => {
+        //        let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
+
+        //        // Calculate angle to world up
+        //        // TODO: don't let player walk up slopes that are too slopey
+        //        //let up_vector = vec3(0.0, 1.0, 0.0);
+        //        //let hit_dot_up = hit_normal.dot(up_vector);
+        //        //let slope_angle = hit_dot_up.acos();
+
+        //        // Allow sliding up slope
+        //        let movement_to_wall = ray_hit.toi * movement_dir;
+        //        let remaining_movement = movement - movement_to_wall;
+        //        let subtracted_movement = hit_normal * remaining_movement.dot(hit_normal);
+
+        //        movement_to_wall + remaining_movement - subtracted_movement
+        //    },
+        //    _ => {
+        //        *movement
+        //    }
+        //}
     }
 }
