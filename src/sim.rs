@@ -1,16 +1,17 @@
 pub mod input;
 pub mod level_collision;
 
+use std::f32::consts::PI;
+
 use cgmath::{vec3, Vector3, Zero, InnerSpace};
 use dreamfield_renderer::camera::{FpsCamera, Camera};
-use ncollide3d::math::{Isometry, Point};
-use ncollide3d::na::Translation3;
-use ncollide3d::query::{self, Proximity};
-use ncollide3d::shape::{Capsule, Shape};
 use crate::renderer::resources;
 
 use self::input::{InputName, InputState};
 use self::level_collision::LevelCollision;
+
+/// The character height
+const CHAR_HEIGHT: f32 = 1.7;
 
 /// The camera look speed
 const CAM_LOOK_SPEED: f32 = 0.5;
@@ -33,20 +34,7 @@ pub struct GameState {
     pub camera: FpsCamera,
     pub ball_pos: Vector3<f32>,
     pub level_collision: LevelCollision,
-    pub velocity: Vector3<f32>,
-    playermove: PlayerMove
-}
-
-struct PlayerMove {
-    collider: Capsule<f32>
-}
-
-impl Default for PlayerMove {
-    fn default() -> Self {
-        PlayerMove {
-            collider: Capsule::new(1.7 / 2.0, 0.25)
-        }
-    }
+    pub velocity: Vector3<f32>
 }
 
 impl GameState {
@@ -76,8 +64,7 @@ impl GameState {
             camera,
             ball_pos: vec3(-9.0, 0.0, 9.0),
             level_collision,
-            velocity: Vector3::zero(),
-            playermove: Default::default()
+            velocity: Vector3::zero()
         }
     }
 
@@ -197,62 +184,39 @@ impl GameState {
             (pos, self.velocity.y) = self.resolve_vertical_movement(&pos, &movement_y);
         }
 
-        // Some other attempts
-        //let start = *self.camera.pos();
-        //let end = start + self.velocity * time_delta;
-        //let mut end_pos = self.playermove(&start, &end);
+        // Bump out of wall
+        const BUMP_STEPS: i32 = 4;
+        const BUMP_RADIUS: f32 = 0.5;
+        for i in 0..BUMP_STEPS {
+            let angle = (i as f32 / BUMP_STEPS as f32) * 2.0 * PI;
 
-        // Contact
-        //let collider = &self.playermove.collider;
-        //let velocity_magnitude = self.velocity.magnitude();
+            let x_offset = f32::sin(angle);
+            let z_offset = f32::cos(angle);
 
-        //let tra = Translation3::new(end.x, end.y, end.z);
-        //let m2 = Isometry::from(tra);
-        //let m1 = Isometry::identity();
+            let collider_dir = vec3(x_offset, 0.0, z_offset);
 
-        //let is_hull = self.level_collision.level_tri_mesh.is_convex_polyhedron();
-        //let as_hull = self.level_collision.level_tri_mesh.as_convex_polyhedron();
-        //println!("is hull: {}", as_hull.is_some());
+            if let Some(hit) = self.level_collision.raycast_normal(&pos, &collider_dir, BUMP_RADIUS) {
+                let normal = vec3(hit.normal.x, 0.0, hit.normal.z).normalize();
+                let hit_pos = pos + hit.toi * collider_dir;
+                let horz_movement_dir = vec3(movement.x, 0.0, movement.y).normalize();
+                let collider_pos = pos + collider_dir;
+                let collider_wall_dir = (hit_pos - collider_pos).normalize();
 
-        //let result = query::contact_composite_shape_shape(&m1, &self.level_collision.level_tri_mesh, &m2, collider, velocity_magnitude);
-
-        //if let Some(result) = result {
-        //    log::info!("got level intersection");
-        //    let normal = vec3(result.normal.x, result.normal.y, result.normal.z);
-        //    end_pos += normal * result.depth;
-        //}
-        //else {
-        //    log::info!("no");
-        //}
-
-        // Proximity
-        //let result = query::proximity_composite_shape_shape(&m1, &self.level_collision.level_tri_mesh, &m2, collider, velocity_magnitude);
-
-        //match result {
-        //    Proximity::Intersecting => {
-        //        println!("intersecting");
-        //    },
-        //    Proximity::Disjoint => {
-        //        println!("disjoint");
-        //    },
-        //    Proximity::WithinMargin => {
-        //        println!("margin");
-        //    },
-        //}
+                // Various options, (1) and (3) work well, (2) not so much
+                // (1) pos = hit_pos + normal * BUMP_RADIUS;
+                // (2) pos = pos + collider_dir * (hit.toi - BUMP_RADIUS);
+                // (3) pos = hit_pos - collider_dir * BUMP_RADIUS;
+                pos = hit_pos + collider_wall_dir * BUMP_RADIUS;
+                log::info!("still in wall");
+            }
+        }
 
         // Update camera position
         self.camera.set_pos(&pos);
         self.camera.update();
     }
 
-    fn playermove(&mut self, start: &Vector3<f32>, end: &Vector3<f32>) -> Vector3<f32> {
-        *end
-    }
-
     fn resolve_vertical_movement(&self, pos: &Vector3<f32>, movement_y: &f32) -> (Vector3<f32>, f32) {
-        /// The character height
-        const CHAR_HEIGHT: f32 = 1.7;
-
         let movement_y_len = f32::abs(*movement_y);
         let movement_y_dir = vec3(0.0, -1.0, 0.0);
 
@@ -281,13 +245,6 @@ impl GameState {
             Some(ray_hit) => {
                 let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
 
-                // Calculate angle to world up
-                // TODO: don't let player walk up slopes that are too slopey
-                //let up_vector = vec3(0.0, 1.0, 0.0);
-                //let hit_dot_up = hit_normal.dot(up_vector);
-                //let slope_angle = hit_dot_up.acos();
-
-                // Allow sliding up slope
                 let movement_to_wall = ray_hit.toi * movement_dir;
                 let remaining_movement = movement - movement_to_wall;
                 let subtracted_movement = hit_normal * remaining_movement.dot(hit_normal);
