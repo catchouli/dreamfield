@@ -161,22 +161,10 @@ impl Renderer {
         main_shader.use_program();
 
         // Update animations
-        let idle_anim_length = self.demo_scene_model
-            .animations()
-            .get("Idle")
-            .map(|anim| anim.length())
-            .expect("Failed to find idle animation");
+        Self::update_animation(&self.demo_scene_model, "Idle", game_state.time as f32);
+        Self::update_animation(&self.fire_orb_model, "Orb", game_state.time as f32);
 
-        Self::play_animation(&self.demo_scene_model, "Idle", (game_state.time as f32) % idle_anim_length);
-
-        let orb_anim_length = self.fire_orb_model
-            .animations()
-            .get("Orb")
-            .map(|anim| anim.length())
-            .expect("Failed to find orb animation");
-
-        Self::play_animation(&self.fire_orb_model, "Orb", (game_state.time as f32) % orb_anim_length);
-
+        // Draw models
         self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
         self.fire_orb_model.render(&mut self.ubo_global, true);
@@ -210,13 +198,13 @@ impl Renderer {
     }
 
     /// Update an animation
-    pub fn play_animation(model: &GltfModel, name: &str, time: f32) {
+    pub fn update_animation(model: &GltfModel, name: &str, time: f32) {
         if let Some(anim) = model.animations().get(name) {
             log::trace!("Playing animation {} at time {}", anim.name(), time);
 
             for channel in anim.channels().iter() {
                 if let Some(node) = &channel.target() {
-                    match channel.sample(time) {
+                    match channel.sample(time % anim.length()) {
                         GltfAnimationKeyframe::Translation(_, p) => {
                             node.borrow_mut().set_translation(p);
                         },
