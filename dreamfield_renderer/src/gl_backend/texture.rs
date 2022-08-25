@@ -158,20 +158,17 @@ impl Texture {
             let mut r = buf[i * 4] as f32;
             let mut g = buf[i * 4 + 1] as f32;
             let mut b = buf[i * 4 + 2] as f32;
+            let mut a = buf[i * 4 + 3] as f32;
 
             r = f32::floor(r * multiplier) / multiplier;
             g = f32::floor(g * multiplier) / multiplier;
             b = f32::floor(b * multiplier) / multiplier;
-
-            let a = match buf[i * 4 + 3] {
-                0 => 0,
-                _ => 1
-            };
+            a = f32::floor(a * multiplier) / multiplier;
 
             out_vec[i * 4] = r as u8;
             out_vec[i * 4 + 1] = g as u8;
             out_vec[i * 4 + 2] = b as u8;
-            out_vec[i * 4 + 3] = a;
+            out_vec[i * 4 + 3] = a as u8;
         }
     }
 }

@@ -167,7 +167,7 @@ impl Renderer {
             .map(|anim| anim.length())
             .expect("Failed to find idle animation");
 
-        self.demo_scene_model.play_animation("Idle", (game_state.time as f32) % idle_anim_length);
+        Self::play_animation(&self.demo_scene_model, "Idle", (game_state.time as f32) % idle_anim_length);
 
         let orb_anim_length = self.fire_orb_model
             .animations()
@@ -175,7 +175,7 @@ impl Renderer {
             .map(|anim| anim.length())
             .expect("Failed to find orb animation");
 
-        self.fire_orb_model.play_animation("Orb", (game_state.time as f32) % orb_anim_length);
+        Self::play_animation(&self.fire_orb_model, "Orb", (game_state.time as f32) % orb_anim_length);
 
         self.demo_scene_model.render(&mut self.ubo_global, true);
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
@@ -207,6 +207,35 @@ impl Renderer {
         self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
         self.blit_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+    }
+
+    /// Update an animation
+    pub fn play_animation(model: &GltfModel, name: &str, time: f32) {
+        if let Some(anim) = model.animations().get(name) {
+            log::trace!("Playing animation {} at time {}", anim.name(), time);
+
+            for channel in anim.channels().iter() {
+                if let Some(node) = &channel.target() {
+                    match channel.sample(time) {
+                        GltfAnimationKeyframe::Translation(_, p) => {
+                            node.borrow_mut().set_translation(p);
+                        },
+                        GltfAnimationKeyframe::Rotation(_, r) => {
+                            node.borrow_mut().set_rotation(r);
+                        },
+                        GltfAnimationKeyframe::Scale(_, s) => {
+                            node.borrow_mut().set_scale(s);
+                        }
+                    }
+                }
+                else {
+                    log::error!("No such target node for animation {}", name);
+                }
+            }
+        }
+        else {
+            log::error!("No such animation {name}");
+        }
     }
 
     /// Toggle ps1 graphics mode
