@@ -161,25 +161,25 @@ impl Renderer {
         main_shader.use_program();
 
         // Update animations
-        //let idle_anim_length = self.demo_scene_model
-        //    .animations()
-        //    .get("Idle")
-        //    .map(|anim| anim.length())
-        //    .expect("Failed to find idle animation");
+        let idle_anim_length = self.demo_scene_model
+            .animations()
+            .get("Idle")
+            .map(|anim| anim.length())
+            .expect("Failed to find idle animation");
 
-        //self.demo_scene_model.play_animation("Idle", (game_state.time as f32) % idle_anim_length);
+        self.demo_scene_model.play_animation("Idle", (game_state.time as f32) % idle_anim_length);
 
-        //let orb_anim_length = self.fire_orb_model
-            //.animations()
-            //.get("Orb")
-            //.map(|anim| anim.length())
-            //.expect("Failed to find orb animation");
+        let orb_anim_length = self.fire_orb_model
+            .animations()
+            .get("Orb")
+            .map(|anim| anim.length())
+            .expect("Failed to find orb animation");
 
-        //self.fire_orb_model.play_animation("Orb", (game_state.time as f32) % orb_anim_length);
+        self.fire_orb_model.play_animation("Orb", (game_state.time as f32) % orb_anim_length);
 
         self.demo_scene_model.render(&mut self.ubo_global, true);
-        //self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
-        //self.fire_orb_model.render(&mut self.ubo_global, true);
+        self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
+        self.fire_orb_model.render(&mut self.ubo_global, true);
 
         // Disable depth test for blitting operations
         unsafe {

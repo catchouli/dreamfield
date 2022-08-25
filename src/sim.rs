@@ -23,7 +23,7 @@ const CAM_LOOK_SPEED_FAST: f32 = 1.5;
 const CAM_MOVE_SPEED: f32 = 4.0;
 
 /// The camera fast move speed
-const CAM_MOVE_SPEED_FAST: f32 = 50.0;
+const CAM_MOVE_SPEED_FAST: f32 = 12.0;
 
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
@@ -42,7 +42,7 @@ impl GameState {
     pub fn new() -> GameState {
         // Create camera
         // Entrance to village
-        //let camera = FpsCamera::new_with_pos_rot(vec3(-125.1, 5.8, 123.8), 0.063, 0.099, 0.0);
+        let camera = FpsCamera::new_with_pos_rot(vec3(-125.1, 5.8, 123.8), 0.063, 0.099, 0.0);
         // Entrance to cathedral
         //let camera = FpsCamera::new_with_pos_rot(vec3(-99.988, 6.567, 75.533), -0.0367, 0.8334, 0.0);
         // In corridor, going out
@@ -52,7 +52,7 @@ impl GameState {
         // Looking at corridor
         //let camera = FpsCamera::new_with_pos_rot(vec3(5.2, 0.8, 12.8), 0.03, 2.0, 0.0);
         // Default dungeon pos
-        let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), -0.17, 0.0, 0.0);
+        //let camera = FpsCamera::new_with_pos_rot(vec3(0.0, 1.0, 10.0), -0.17, 0.0, 0.0);
         // Going outside
         //let camera = FpsCamera::new_with_pos_rot(vec3(-53.925, 5.8, 19.56), 0.097, 1.57, 0.0);
 
@@ -196,18 +196,7 @@ impl GameState {
             let collider_dir = vec3(x_offset, 0.0, z_offset);
 
             if let Some(hit) = self.level_collision.raycast_normal(&pos, &collider_dir, BUMP_RADIUS) {
-                let normal = vec3(hit.normal.x, 0.0, hit.normal.z).normalize();
-                let hit_pos = pos + hit.toi * collider_dir;
-                let horz_movement_dir = vec3(movement.x, 0.0, movement.y).normalize();
-                let collider_pos = pos + collider_dir;
-                let collider_wall_dir = (hit_pos - collider_pos).normalize();
-
-                // Various options, (1) and (3) work well, (2) not so much
-                // (1) pos = hit_pos + normal * BUMP_RADIUS;
-                // (2) pos = pos + collider_dir * (hit.toi - BUMP_RADIUS);
-                // (3) pos = hit_pos - collider_dir * BUMP_RADIUS;
-                pos = hit_pos + collider_wall_dir * BUMP_RADIUS;
-                log::info!("still in wall");
+                pos = pos + (hit.toi - BUMP_RADIUS) * collider_dir;
             }
         }
 
@@ -245,7 +234,7 @@ impl GameState {
             Some(ray_hit) => {
                 let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
 
-                let movement_to_wall = ray_hit.toi * movement_dir;
+                let movement_to_wall = ray_hit.toi * movement_dir * 0.99;
                 let remaining_movement = movement - movement_to_wall;
                 let subtracted_movement = hit_normal * remaining_movement.dot(hit_normal);
 
