@@ -16,7 +16,7 @@ const NEAR_CLIP: f32 = 0.01;
 const FAR_CLIP: f32 = 35.0;
 
 const FOG_START: f32 = FAR_CLIP - 10.0;
-const FOG_END: f32 = FAR_CLIP - 5.0;
+const FOG_END: f32 = FAR_CLIP - 0.0;
 
 /// The renderer
 pub struct Renderer {

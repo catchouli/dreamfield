@@ -223,15 +223,12 @@ impl GltfModel {
         let sampler = tex.sampler();
 
         // Downscale textures to RGBA5551 if selected
-        let mut new_pixel_vec = Vec::<u8>::new();
         let (format, ty, pixels) = match downscale {
             true => {
                 if data.format != Format::R8G8B8A8 {
                     panic!("load_texture: must be RGBA8 to be downscaled");
                 }
-                Texture::convert_rgba8_to_rgba5551(&data.pixels, &mut new_pixel_vec);
-                //Texture::quantize_to_bit_depth(&data.pixels, &mut new_pixel_vec, 4);
-                (gl::RGBA, gl::UNSIGNED_SHORT_5_5_5_1, &new_pixel_vec)
+                (gl::RGBA, gl::UNSIGNED_BYTE, &data.pixels)
             }
             false => {
                 let (format, ty) = Self::source_format(data.format);

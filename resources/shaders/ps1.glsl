@@ -170,7 +170,7 @@ void main() {
     if (alpha < 0.1)
         discard;
 
-    const float BLENDER_BAKED_LIGHT_SCALE = 1.5;
+    const float BLENDER_BAKED_LIGHT_SCALE = 0.75;
     const vec3 AMBIENT_LIGHT = vec3(0.05);
     const vec3 MAX_LIGHT = vec3(1.0);
     vec3 light = min(MAX_LIGHT, frag_light * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
@@ -183,6 +183,10 @@ void main() {
         + fog_factor * fog_color;
 
     out_color = min(out_color, vec3(1.0));
+
+    // Apply dithering
+    out_color = dither(out_color, ivec2(gl_FragCoord.xy));
+
     out_frag_color = vec4(out_color, alpha);
 }
 
