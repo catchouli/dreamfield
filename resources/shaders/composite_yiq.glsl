@@ -1,6 +1,7 @@
 #version 330 core
 
 #include resources/shaders/include/uniforms.glsl
+#include resources/shaders/include/utils.glsl
 
 #ifdef BUILDING_VERTEX_SHADER
 
@@ -28,7 +29,10 @@ void main() {
     const mat3 rgb_to_yiq = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
 
     // Sample texture
-    vec3 rgb = texture(tex, var_uv).rgb;
+    vec3 rgb = linear_to_srgb(texture(tex, var_uv).rgb);
+
+    // Downsample to 5-bit (32 colors)
+    rgb = floor(rgb * 32.0) / 32.0;
 
     // Convert to yiq
     vec3 yiq = rgb_to_yiq * rgb;

@@ -16,7 +16,9 @@ const NEAR_CLIP: f32 = 0.01;
 const FAR_CLIP: f32 = 35.0;
 
 const FOG_START: f32 = FAR_CLIP - 10.0;
-const FOG_END: f32 = FAR_CLIP - 0.0;
+const FOG_END: f32 = FAR_CLIP - 5.0;
+
+const DITHER_STRENGTH: f32 = 0.05;
 
 /// The renderer
 pub struct Renderer {
@@ -47,6 +49,8 @@ impl Renderer {
         let mut ubo_global = UniformBuffer::<GlobalParams>::new();
         ubo_global.set_fog_color(&vec3(0.0, 0.0, 0.0));
         ubo_global.set_fog_dist(&vec2(FOG_START, FOG_END));
+
+        ubo_global.set_dither_strength(&DITHER_STRENGTH);
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
@@ -81,17 +85,17 @@ impl Renderer {
             ]);
 
         // Load textures
-        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, Texture::NEAREST_WRAP)
+        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, Texture::NEAREST_WRAP, true)
             .expect("Failed to load sky texture");
 
         // Load models
-        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE, true).unwrap();
-        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB, true).unwrap();
+        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
+        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Create framebuffer
-        let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
+        let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8);
         let yiq_framebuffer = Framebuffer::new_with_color_min_filter(RENDER_WIDTH, RENDER_HEIGHT,
-            gl::LINEAR_MIPMAP_LINEAR);
+            gl::RGBA32F, gl::LINEAR_MIPMAP_LINEAR);
 
         // Create renderer struct
         let mut renderer = Renderer {
@@ -128,6 +132,7 @@ impl Renderer {
         // Bind framebuffer and clear
         self.set_gl_viewport(RENDER_WIDTH, RENDER_HEIGHT);
         self.framebuffer.bind_draw();
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
 
         // Enable or disable wireframe mode
         let polygon_mode = match self.wireframe_enabled {
@@ -172,16 +177,23 @@ impl Renderer {
         // Disable depth test for blitting operations
         unsafe {
             gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
-            gl::Disable(gl::DEPTH_TEST)
+            gl::Disable(gl::DEPTH_TEST);
         }
 
         // Composite simulation: convert rgb to yiq color space
+        // No SRGB conversion, since we're outputting colors in the YIQ color space. Additionally
+        // we're writing to an f32 framebuffer already anyway to avoid precision issues.
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB) };
         self.yiq_framebuffer.bind_draw();
         self.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
         self.composite_yiq_shader.use_program();
         self.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
         // Composite simulation: resolve back to regular framebuffer
+        // This time we're outputting back to our srgb framebuffer so we enable sRGB again.
+        // Annoyingly the YIQ conversion already outputs sRGB colors, so we have to convert them
+        // back to linear in the shader, just for them to be converted back into sRGB. Oh well.
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
         self.framebuffer.bind_draw();
         self.yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
         unsafe { gl::GenerateMipmap(gl::TEXTURE_2D) };

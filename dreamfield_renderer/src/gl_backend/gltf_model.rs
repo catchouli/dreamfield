@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use gl::types::*;
-use gltf::image::Format;
 use gltf::json::extras::RawValue;
 use gltf::khr_lights_punctual::Kind;
 use super::texture::{Texture, TextureParams};
@@ -17,11 +16,12 @@ use super::uniform_buffer::{UniformBuffer, GlobalParams, MaterialParams};
 use super::{bindings, JointParams, Joint, ToStd140};
 use super::lights::LightType;
 use cgmath::{Matrix4, Vector3, Matrix};
+use serde::{Deserialize, Serialize};
 
+pub use gltf_animation::{GltfAnimation, GltfAnimationKeyframe};
 use gltf_transform::{GltfTransformHierarchy, GltfTransform};
 use gltf_mesh::GltfMesh;
 use gltf_material::GltfMaterial;
-pub use gltf_animation::{GltfAnimation, GltfAnimationKeyframe};
 use gltf_skin::GltfSkin;
 use gltf_light::GltfLight;
 
@@ -41,24 +41,46 @@ pub struct GltfDrawable {
     transform: Option<Rc<RefCell<GltfTransform>>>,
     mesh: Rc<GltfMesh>,
     skin: Option<Rc<RefCell<GltfSkin>>>,
+    parsed_extras: GltfNodeExtras,
     raw_extras: Option<Box<RawValue>>
+}
+
+/// Extras for a gltf node
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GltfNodeExtras {
+    #[serde(default = "GltfNodeExtras::default_lighting_strength")]
+    pub lighting_strength: f32
+}
+
+impl GltfNodeExtras {
+    fn default_lighting_strength() -> f32 {
+        1.0
+    }
+}
+
+impl Default for GltfNodeExtras {
+    fn default() -> Self {
+        GltfNodeExtras {
+            lighting_strength: Self::default_lighting_strength()
+        }
+    }
 }
 
 impl GltfModel {
     /// Load a model from a gltf file
-    pub fn from_file(path: &str, downscale_textures: bool) -> Result<GltfModel, gltf::Error> {
-        Self::import(gltf::import(path)?, downscale_textures)
+    pub fn from_file(path: &str) -> Result<GltfModel, gltf::Error> {
+        Self::import(gltf::import(path)?)
     }
 
     /// Load a model from a gltf file embedded in a buffer
-    pub fn from_buf(data: &[u8], downscale_textures: bool) -> Result<GltfModel, gltf::Error> {
-        Self::import(gltf::import_slice(data)?, downscale_textures)
+    pub fn from_buf(data: &[u8]) -> Result<GltfModel, gltf::Error> {
+        Self::import(gltf::import_slice(data)?)
     }
 
     /// Load from a (doc, buffer_data, image_data)
     /// https://kcoley.github.io/glTF/specification/2.0/figures/gltfOverview-2.0.0a.png
-    fn import((doc, buffer_data, image_data): (gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>),
-              downscale_textures: bool) -> Result<GltfModel, gltf::Error>
+    fn import((doc, buffer_data, image_data): (gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>))
+        -> Result<GltfModel, gltf::Error>
     {
         // Load all buffers
         let buffers: Vec<u32> = unsafe {
@@ -93,7 +115,7 @@ impl GltfModel {
         // Load all textures
         let textures = doc.textures()
             .map(|tex| {
-                Rc::new(Self::load_texture(&tex, &image_data, downscale_textures))
+                Rc::new(Self::load_texture(&tex, &image_data))
             })
             .collect();
 
@@ -132,7 +154,7 @@ impl GltfModel {
 
             for scene in doc.scenes() {
                 for node in scene.nodes() {
-                    Self::build_scene_recursive(&node, &transform_hierarchy, &meshes, &skins, &mut drawables, &mut lights);
+                    Self::build_scene_recursive(&node, &transform_hierarchy, &meshes, &skins, None, &mut drawables, &mut lights);
                 }
             }
 
@@ -171,6 +193,12 @@ impl GltfModel {
             else {
                 ubo_global.set_mat_model_derive(&model_mat);
             }
+
+            // Set lighting strength
+            let lighting_strength = &drawable.parsed_extras.lighting_strength;
+            ubo_global.set_lighting_strength(lighting_strength);
+
+            // Update global uniforms
             ubo_global.upload_changed();
 
             // Update joint matrices for skinned drawables
@@ -218,23 +246,12 @@ impl GltfModel {
     }
 
     /// Load a gltf texture
-    fn load_texture(tex: &gltf::Texture, image_data: &[gltf::image::Data], downscale: bool) -> Texture {
+    fn load_texture(tex: &gltf::Texture, image_data: &[gltf::image::Data]) -> Texture {
         let data = &image_data[tex.source().index()];
         let sampler = tex.sampler();
 
-        // Downscale textures to RGBA5551 if selected
-        let (format, ty, pixels) = match downscale {
-            true => {
-                if data.format != Format::R8G8B8A8 {
-                    panic!("load_texture: must be RGBA8 to be downscaled");
-                }
-                (gl::RGBA, gl::UNSIGNED_BYTE, &data.pixels)
-            }
-            false => {
-                let (format, ty) = Self::source_format(data.format);
-                (format, ty, &data.pixels)
-            }
-        };
+        let (format, ty, pixels) = (gl::RGBA, gl::UNSIGNED_BYTE, &data.pixels);
+        let dest_format = gl::SRGB8_ALPHA8;
 
         // Load texture
         let mut tex_params = TextureParams {
@@ -250,29 +267,13 @@ impl GltfModel {
 
         let width = data.width as i32;
         let height = data.height as i32;
-        let tex = Texture::new_from_buf(&pixels, width, height, format, ty, gl::RGBA, tex_params)
+        let tex = Texture::new_from_buf(&pixels, width, height, format, ty, dest_format, tex_params)
             .expect("Failed to load gltf texture");
 
         // Generate mipmaps - the mag_filter is often on which needs them
         tex.gen_mipmaps();
 
         tex
-    }
-
-    /// Get gl format and type from gltf::image::Format
-    fn source_format(format: gltf::image::Format) -> (u32, u32) {
-        match format {
-            Format::R8 => (gl::RED, gl::UNSIGNED_BYTE),
-            Format::R8G8 => (gl::RG, gl::UNSIGNED_BYTE),
-            Format::R8G8B8 => (gl::RGB, gl::UNSIGNED_BYTE),
-            Format::R8G8B8A8 => (gl::RGBA, gl::UNSIGNED_BYTE),
-            Format::B8G8R8 => (gl::BGR, gl::UNSIGNED_BYTE),
-            Format::B8G8R8A8 => (gl::BGRA, gl::UNSIGNED_BYTE),
-            Format::R16 => (gl::RED, gl::UNSIGNED_SHORT),
-            Format::R16G16 => (gl::RG, gl::UNSIGNED_SHORT),
-            Format::R16G16B16 => (gl::RGB, gl::UNSIGNED_SHORT),
-            Format::R16G16B16A16 => (gl::RGBA, gl::UNSIGNED_SHORT),
-        }
     }
 
     /// build the transform hierarchy
@@ -296,10 +297,13 @@ impl GltfModel {
 
     /// Build the list of drawables recursively
     fn build_scene_recursive(node: &gltf::Node, transform_hierarchy: &GltfTransformHierarchy,
-        meshes: &Vec<Rc<GltfMesh>>, skins: &Vec<Rc<RefCell<GltfSkin>>>, out_drawables: &mut Vec<GltfDrawable>,
-        out_lights: &mut Vec<GltfLight>)
+        meshes: &Vec<Rc<GltfMesh>>, skins: &Vec<Rc<RefCell<GltfSkin>>>, parent_extras: Option<&Box<RawValue>>,
+        out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
     {
         let transform = transform_hierarchy.node_by_index(node.index());
+
+        // Get node extras or the parent extras so that they 'inherit' through nodes/collections until overridden
+        let node_extras = node.extras().as_ref().or(parent_extras);
 
         // Load drawable from node
         if let Some(mesh) = node.mesh() {
@@ -307,13 +311,19 @@ impl GltfModel {
             let name = mesh.name().unwrap_or("").to_string();
             let mesh = meshes[mesh.index()].clone();
             let skin = node.skin().map(|skin| skins[skin.index()].clone());
-            let raw_extras = node.extras().clone();
+            let raw_extras = node_extras.map(|raw_value| raw_value.clone());
+
+            // Parse node extras if they're present
+            let parsed_extras = node_extras.map(|extras| {
+                serde_json::from_str(extras.get()).unwrap()
+            }).unwrap_or(Default::default());
 
             let drawable = GltfDrawable {
                 name,
                 mesh,
                 skin,
                 transform: transform.as_ref().map(Clone::clone),
+                parsed_extras,
                 raw_extras
             };
 
@@ -343,7 +353,8 @@ impl GltfModel {
 
         // Recurse into children
         for child in node.children() {
-            Self::build_scene_recursive(&child, transform_hierarchy, meshes, skins, out_drawables, out_lights);
+            Self::build_scene_recursive(&child, transform_hierarchy, meshes, skins, node_extras, out_drawables,
+                out_lights);
         }
     }
 

@@ -28,25 +28,39 @@ impl Texture {
     };
 
     /// Load a new texture from a file
-    pub fn new_from_file(path: &str, params: TextureParams) -> Result<Texture, Box<dyn Error>> {
+    pub fn new_from_file(path: &str, params: TextureParams, srgb_to_linear: bool) -> Result<Texture, Box<dyn Error>> {
         let img = image::open(&Path::new(path))?;
         let width = img.width() as i32;
         let height = img.height() as i32;
         let data = img.into_bytes();
 
-        Texture::new_from_buf(&data, width, height, gl::RGB, gl::UNSIGNED_BYTE, gl::RGB, params)
+        let (source_format, source_type) = (gl::RGBA, gl::UNSIGNED_BYTE);
+        let dest_format = match srgb_to_linear {
+            true => gl::SRGB8_ALPHA8,
+            false => gl::RGBA
+        };
+
+        Texture::new_from_buf(&data, width, height, source_format, source_type, dest_format, params)
     }
 
     /// Load a new texture from an image in a buffer
-    pub fn new_from_image_buf(buf: &[u8], params: TextureParams) -> Result<Texture, Box<dyn Error>> {
+    pub fn new_from_image_buf(buf: &[u8], params: TextureParams, srgb_to_linear: bool)
+        -> Result<Texture, Box<dyn Error>>
+    {
         let img = Reader::new(Cursor::new(buf)).with_guessed_format()?.decode()?;
-        let rgb_img = img.to_rgb8();
+        let rgb_img = img.to_rgba8();
 
         let width = rgb_img.width() as i32;
         let height = rgb_img.height() as i32;
         let data = rgb_img.as_bytes();
 
-        Texture::new_from_buf(&data, width, height, gl::RGB, gl::UNSIGNED_BYTE, gl::RGB, params)
+        let (source_format, source_type) = (gl::RGBA, gl::UNSIGNED_BYTE);
+        let dest_format = match srgb_to_linear {
+            true => gl::SRGB8_ALPHA8,
+            false => gl::RGBA
+        };
+
+        Texture::new_from_buf(&data, width, height, source_format, source_type, dest_format, params)
     }
 
     /// Load a new texture from a buffer

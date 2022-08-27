@@ -9,12 +9,12 @@ pub struct Framebuffer
 }
 
 impl Framebuffer {
-    pub fn new(width: i32, height: i32) -> Self {
-        Self::new_with_color_min_filter(width, height, gl::NEAREST)
+    pub fn new(width: i32, height: i32, color_format: u32) -> Self {
+        Self::new_with_color_min_filter(width, height, color_format, gl::NEAREST)
     }
 
     /// Create a new framebuffer with a specific opengl color filter
-    pub fn new_with_color_min_filter(width: i32, height: i32, min_filter: u32) -> Self {
+    pub fn new_with_color_min_filter(width: i32, height: i32, color_format: u32, min_filter: u32) -> Self {
         // Create framebuffer object
         let mut framebuffer_object: u32 = 0;
         unsafe {
@@ -35,7 +35,7 @@ impl Framebuffer {
 
             gl::TexImage2D(gl::TEXTURE_2D,
                            0,
-                           gl::RGB32F as i32,
+                           color_format as i32,
                            width,
                            height,
                            0,

@@ -2,6 +2,7 @@
 
 #include resources/shaders/include/constants.glsl
 #include resources/shaders/include/uniforms.glsl
+#include resources/shaders/include/utils.glsl
 
 #ifdef BUILDING_VERTEX_SHADER
 
@@ -58,6 +59,7 @@ void main() {
     vec2 tex_coords = vec2(atan(rd.z, rd.x) + M_PI, acos(rd.y)) / vec2(2.0 * M_PI, M_PI);
 
     vec3 out_color = texture(tex_skybox, tex_coords).rgb;
+    //out_color = dither(out_color, ivec2(gl_FragCoord.xy), 0.3);
 
     out_frag_color = vec4(out_color, 1.0);
 }

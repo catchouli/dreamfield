@@ -19,6 +19,9 @@ layout (std140) uniform GlobalParams
 
     vec3 fog_color;
     vec2 fog_dist;
+
+    float dither_strength;
+    float lighting_strength;
 };
 
 // Materials

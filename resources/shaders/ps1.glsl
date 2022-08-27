@@ -162,32 +162,40 @@ noperspective in vec3 frag_light;
 out vec4 out_frag_color;
 
 void main() {
+    // Sample base color texture and calculate base color and alpha
     vec4 base_color_tex = has_base_color_texture ? texture(tex_base_color, frag_uv) : vec4(1.0);
     vec3 albedo = base_color.rgb * base_color_tex.rgb;
-
     float alpha = base_color.a * base_color_tex.a;
 
+    // Alpha clip low opacity fragments
     if (alpha < 0.1)
         discard;
 
-    const float BLENDER_BAKED_LIGHT_SCALE = 0.75;
-    const vec3 AMBIENT_LIGHT = vec3(0.05);
-    const vec3 MAX_LIGHT = vec3(1.0);
-    vec3 light = min(MAX_LIGHT, frag_light * BLENDER_BAKED_LIGHT_SCALE + AMBIENT_LIGHT);
+    // Calculate vertex lighting for fragment
+    const vec3 AMBIENT_LIGHT = vec3(0.01);
+    vec3 light = frag_light * lighting_strength + AMBIENT_LIGHT;
 
+    // Calculate foggedness of fragment
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?
         clamp((frag_dist - fog_dist.x)/(fog_dist.y - fog_dist.x), 0.0, 1.0)
         : 1.0;
 
-    vec3 out_color = light * albedo * (1.0 - fog_factor)
+    // Multiply the light by the albedo and get the fragment's color and value
+    vec3 pre_dither_color = light * albedo;
+    float pre_dither_value = luma(pre_dither_color);
+
+    // Calculate the dithering strength using the value, skewing it exponentially towards 1
+    const float DITHER_EXPONENT = 0.5;
+    float dither_strength = pow(pre_dither_value, DITHER_EXPONENT);
+
+    // Apply dithering to fragment
+    vec3 post_dither_color = dither(pre_dither_color, ivec2(gl_FragCoord.xy), dither_strength);
+
+    // Apply fog to fragment
+    vec3 post_fog_color = post_dither_color * (1.0 - fog_factor)
         + fog_factor * fog_color;
 
-    out_color = min(out_color, vec3(1.0));
-
-    // Apply dithering
-    out_color = dither(out_color, ivec2(gl_FragCoord.xy));
-
-    out_frag_color = vec4(out_color, alpha);
+    out_frag_color = vec4(post_fog_color, alpha);
 }
 
 #endif
