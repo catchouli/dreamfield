@@ -6,6 +6,7 @@ layout (std140) uniform GlobalParams
 {
     mat4 mat_proj;
     mat4 mat_view;
+    mat4 mat_view_inv;
     mat4 mat_view_proj;
     mat4 mat_view_proj_inv;
     mat4 mat_model;
@@ -15,6 +16,7 @@ layout (std140) uniform GlobalParams
     float sim_time;
     float target_aspect;
     float window_aspect;
+    float render_fov;
     vec2 render_res;
 
     vec3 fog_color;

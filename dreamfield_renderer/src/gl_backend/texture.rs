@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::path::Path;
 use std::error::Error;
 use gl::types::*;
-use image::EncodableLayout;
+use image::DynamicImage;
 use image::io::Reader;
 use super::bindings;
 
@@ -18,41 +18,46 @@ pub struct TextureParams {
     pub mag_filter: u32
 }
 
+impl TextureParams {
+    pub fn new(horz_wrap: u32, vert_wrap: u32, min_filter: u32, mag_filter: u32) -> Self {
+        TextureParams { horz_wrap, vert_wrap, min_filter, mag_filter }
+    }
+
+    pub fn repeat_nearest() -> Self {
+        Self::new(gl::REPEAT, gl::REPEAT, gl::NEAREST, gl::NEAREST)
+    }
+}
+
 impl Texture {
-    /// Texture params with repeat wrapping and nearest filtering
-    pub const NEAREST_WRAP: TextureParams = TextureParams {
-        horz_wrap: gl::REPEAT,
-        vert_wrap: gl::REPEAT,
-        min_filter: gl::NEAREST,
-        mag_filter: gl::NEAREST
-    };
-
     /// Load a new texture from a file
-    pub fn new_from_file(path: &str, params: TextureParams, srgb_to_linear: bool) -> Result<Texture, Box<dyn Error>> {
+    pub fn new_from_file(path: &str, params: TextureParams, srgb_to_linear: bool, downsample_to_bits: Option<u8>)
+        -> Result<Texture, Box<dyn Error>>
+    {
         let img = image::open(&Path::new(path))?;
-        let width = img.width() as i32;
-        let height = img.height() as i32;
-        let data = img.into_bytes();
-
-        let (source_format, source_type) = (gl::RGBA, gl::UNSIGNED_BYTE);
-        let dest_format = match srgb_to_linear {
-            true => gl::SRGB8_ALPHA8,
-            false => gl::RGBA
-        };
-
-        Texture::new_from_buf(&data, width, height, source_format, source_type, dest_format, params)
+        Self::new_from_dynamic_image(img, params, srgb_to_linear, downsample_to_bits)
     }
 
     /// Load a new texture from an image in a buffer
-    pub fn new_from_image_buf(buf: &[u8], params: TextureParams, srgb_to_linear: bool)
+    pub fn new_from_image_buf(buf: &[u8], params: TextureParams, srgb_to_linear: bool, downsample_to_bits: Option<u8>)
         -> Result<Texture, Box<dyn Error>>
     {
         let img = Reader::new(Cursor::new(buf)).with_guessed_format()?.decode()?;
-        let rgb_img = img.to_rgba8();
+        Self::new_from_dynamic_image(img, params, srgb_to_linear, downsample_to_bits)
+    }
 
-        let width = rgb_img.width() as i32;
-        let height = rgb_img.height() as i32;
-        let data = rgb_img.as_bytes();
+    /// Load from an rgba image
+    fn new_from_dynamic_image(image: DynamicImage, params: TextureParams, srgb_to_linear: bool,
+        downsample_to_bits: Option<u8>) -> Result<Self, Box<dyn Error>>
+    {
+        let image_rgba8 = image.into_rgba8();
+
+        let width = image_rgba8.width() as i32;
+        let height = image_rgba8.height() as i32;
+        let mut data = image_rgba8.into_vec();
+
+        if let Some(downsample_to_bits) = downsample_to_bits {
+            Self::quantize_to_bit_depth(&mut data, downsample_to_bits);
+        }
 
         let (source_format, source_type) = (gl::RGBA, gl::UNSIGNED_BYTE);
         let dest_format = match srgb_to_linear {
@@ -153,7 +158,7 @@ impl Texture {
     }
 
     /// Quantize a RGBA888 texture to a certain bit depth, leaving it as RGBA8888
-    pub fn quantize_to_bit_depth(buf: &[u8], out_vec: &mut Vec<u8>, target_component_depth: u8) {
+    pub fn quantize_to_bit_depth(buf: &mut [u8], target_component_depth: u8) {
         if target_component_depth < 1 || target_component_depth > 8 {
             panic!("quantize_to_bit_depth: target_component_depth should be (1..8)");
         }
@@ -162,11 +167,7 @@ impl Texture {
             panic!("quantize_to_bit_depth: Input buffer needs to be a multiple of 4");
         }
 
-        out_vec.resize(buf.len(), 0);
-
-        const DEFAULT_DOMAIN: i32 = 256;
-        let target_domain = 1 << target_component_depth as i32;
-        let multiplier = (target_domain as f32) / (DEFAULT_DOMAIN as f32);
+        let multiplier = (1 << target_component_depth) as f32 / 255.0;
 
         for i in 0 .. buf.len() / 4 {
             let mut r = buf[i * 4] as f32;
@@ -179,11 +180,16 @@ impl Texture {
             b = f32::floor(b * multiplier) / multiplier;
             a = f32::floor(a * multiplier) / multiplier;
 
-            out_vec[i * 4] = r as u8;
-            out_vec[i * 4 + 1] = g as u8;
-            out_vec[i * 4 + 2] = b as u8;
-            out_vec[i * 4 + 3] = a as u8;
+            buf[i * 4] = r as u8;
+            buf[i * 4 + 1] = g as u8;
+            buf[i * 4 + 2] = b as u8;
+            buf[i * 4 + 3] = a as u8;
         }
     }
 }
 
+impl Drop for Texture {
+    fn drop(&mut self) {
+        unsafe { gl::DeleteTextures(1, &self.id) }
+    }
+}

@@ -1,4 +1,5 @@
 use super::bindings;
+use super::TextureParams;
 
 /// A framebuffer
 pub struct Framebuffer
@@ -9,12 +10,7 @@ pub struct Framebuffer
 }
 
 impl Framebuffer {
-    pub fn new(width: i32, height: i32, color_format: u32) -> Self {
-        Self::new_with_color_min_filter(width, height, color_format, gl::NEAREST)
-    }
-
-    /// Create a new framebuffer with a specific opengl color filter
-    pub fn new_with_color_min_filter(width: i32, height: i32, color_format: u32, min_filter: u32) -> Self {
+    pub fn new(width: i32, height: i32, color_format: u32, texture_params: TextureParams) -> Self {
         // Create framebuffer object
         let mut framebuffer_object: u32 = 0;
         unsafe {
@@ -28,10 +24,10 @@ impl Framebuffer {
         unsafe {
             gl::GenTextures(1, &mut color_tex);
             gl::BindTexture(gl::TEXTURE_2D, color_tex);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, min_filter as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, texture_params.horz_wrap as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, texture_params.vert_wrap as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, texture_params.min_filter as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, texture_params.mag_filter as i32);
 
             gl::TexImage2D(gl::TEXTURE_2D,
                            0,

@@ -25,6 +25,9 @@ use gltf_material::GltfMaterial;
 use gltf_skin::GltfSkin;
 use gltf_light::GltfLight;
 
+/// How many bits to downsample textures to
+const TEXTURE_BITS: Option<u8> = Some(5);
+
 /// A gltf model
 pub struct GltfModel {
     transform_hierarchy: GltfTransformHierarchy,
@@ -250,7 +253,14 @@ impl GltfModel {
         let data = &image_data[tex.source().index()];
         let sampler = tex.sampler();
 
-        let (format, ty, pixels) = (gl::RGBA, gl::UNSIGNED_BYTE, &data.pixels);
+        let mut pixels = data.pixels.to_vec();
+
+        // Downsample if enabled
+        if let Some(downsample_bits) = TEXTURE_BITS {
+            Texture::quantize_to_bit_depth(&mut pixels, downsample_bits);
+        }
+
+        let (format, ty, pixels) = (gl::RGBA, gl::UNSIGNED_BYTE, &pixels);
         let dest_format = gl::SRGB8_ALPHA8;
 
         // Load texture

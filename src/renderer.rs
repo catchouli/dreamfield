@@ -54,6 +54,7 @@ impl Renderer {
 
         ubo_global.set_target_aspect(&RENDER_ASPECT);
         ubo_global.set_render_res(&vec2(RENDER_WIDTH as f32, RENDER_HEIGHT as f32));
+        ubo_global.set_render_fov(&(FOV * std::f32::consts::PI / 180.0));
 
         ubo_global.set_mat_proj(&perspective(Deg(FOV), RENDER_ASPECT, NEAR_CLIP, FAR_CLIP));
 
@@ -85,7 +86,8 @@ impl Renderer {
             ]);
 
         // Load textures
-        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, Texture::NEAREST_WRAP, true)
+        let sky_params = TextureParams::repeat_nearest();
+        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, sky_params, true, Some(5))
             .expect("Failed to load sky texture");
 
         // Load models
@@ -93,9 +95,10 @@ impl Renderer {
         let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
 
         // Create framebuffer
-        let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8);
-        let yiq_framebuffer = Framebuffer::new_with_color_min_filter(RENDER_WIDTH, RENDER_HEIGHT,
-            gl::RGBA32F, gl::LINEAR_MIPMAP_LINEAR);
+        let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8,
+            TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::NEAREST, gl::NEAREST));
+        let yiq_framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::RGBA32F,
+            TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::LINEAR_MIPMAP_LINEAR, gl::NEAREST));
 
         // Create renderer struct
         let mut renderer = Renderer {

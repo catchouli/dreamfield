@@ -173,7 +173,7 @@ void main() {
 
     // Calculate vertex lighting for fragment
     const vec3 AMBIENT_LIGHT = vec3(0.01);
-    vec3 light = frag_light * lighting_strength + AMBIENT_LIGHT;
+    vec3 light = 1.5 * frag_light * lighting_strength + AMBIENT_LIGHT;
 
     // Calculate foggedness of fragment
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?

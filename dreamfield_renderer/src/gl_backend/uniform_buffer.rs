@@ -108,6 +108,7 @@ impl<T: Default + UniformSetters> Drop for UniformBuffer<T> {
 pub struct GlobalParams {
     pub mat_proj: std140::mat4x4,
     pub mat_view: std140::mat4x4,
+    pub mat_view_inv: std140::mat4x4,
     pub mat_view_proj: std140::mat4x4,
     pub mat_view_proj_inv: std140::mat4x4,
     pub mat_model: std140::mat4x4,
@@ -116,6 +117,7 @@ pub struct GlobalParams {
     pub sim_time: std140::float,
     pub target_aspect: std140::float,
     pub window_aspect: std140::float,
+    pub render_fov: std140::float,
     pub render_res: std140::vec2,
     pub fog_color: std140::vec3,
     pub fog_dist: std140::vec2,
@@ -128,6 +130,7 @@ impl Default for GlobalParams {
         GlobalParams {
             mat_proj: Matrix4::identity().to_std140(),
             mat_view: Matrix4::identity().to_std140(),
+            mat_view_inv: Matrix4::identity().to_std140(),
             mat_view_proj: Matrix4::identity().to_std140(),
             mat_view_proj_inv: Matrix4::identity().to_std140(),
             mat_model: Matrix4::identity().to_std140(),
@@ -137,6 +140,7 @@ impl Default for GlobalParams {
             target_aspect: (1.0).to_std140(),
             window_aspect: (1.0).to_std140(),
             render_res: vec2(0.0, 0.0).to_std140(),
+            render_fov: (std::f32::consts::PI).to_std140(),
             fog_color: vec3(0.0, 0.0, 0.0).to_std140(),
             fog_dist: vec2(0.0, 0.0).to_std140(),
             dither_strength: (1.0).to_std140(),
@@ -154,10 +158,12 @@ impl UniformBuffer<GlobalParams> {
     /// that the projection matrix must be set first.
     pub fn set_mat_view_derive(&mut self, view: &Matrix4<f32>) {
         let proj = self.data.mat_proj.from_std140();
+        let view_inv = view.invert().unwrap();
         let view_proj = proj * view;
         let view_proj_inv = view_proj.invert().unwrap();
 
         self.set_mat_view(view);
+        self.set_mat_view_inv(&view_inv);
         self.set_mat_view_proj(&view_proj);
         self.set_mat_view_proj_inv(&view_proj_inv);
     }

@@ -6,14 +6,10 @@
 
 #ifdef BUILDING_VERTEX_SHADER
 
-layout (location = 0) in vec3 in_pos;
-layout (location = 1) in vec2 in_uv;
-
-out vec2 var_uv;
+layout (location = 0) in vec3 vs_pos;
 
 void main() {
-    var_uv = in_uv;
-    gl_Position = vec4(in_pos.x, in_pos.y, in_pos.z, 1.0);
+    gl_Position = vec4(vs_pos.x, vs_pos.y, vs_pos.z, 1.0);
 }
 
 #endif
@@ -22,44 +18,54 @@ void main() {
 
 uniform sampler2D tex_skybox;
 
-in vec2 var_uv;
-
 out vec4 out_frag_color;
 
-vec3 calc_ray_dir() {
-    vec2 pos = var_uv * 2.0 - 1.0;
+// Calculate a ray direction from a -1..1 pixel position
+vec3 calc_ray_dir(vec2 pixel_pos) {
+    float aspect = render_res.x / render_res.y;
 
-    vec4 v = mat_view_proj_inv * vec4(pos, -1.0, 1.0);
-    vec3 start = v.xyz / v.w;
+    // Calculate ray direction
+    vec3 ray_dir = vec3(
+        pixel_pos.x * tan(render_fov * 0.5) * aspect,
+        pixel_pos.y * tan(render_fov * 0.5),
+        -1.0
+    );
 
-    v = mat_view_proj_inv * vec4(pos, 0.0, 1.0);
-    vec3 end = v.xyz / v.w;
+    // Apply camera rotation
+    ray_dir = mat3(mat_view_inv) * ray_dir;
 
-    return normalize(end - start);
+    return normalize(ray_dir);
 }
 
-vec2 project_equilateral(vec3 ray_dir) {
-    float longitude = ray_dir.x;
-    float latitude = ray_dir.y;
-
-    float x = longitude / M_PI;
-    float y = log((1 + sin(latitude))/(1 - sin(latitude))) / (4.0 * M_PI);
-
-    return vec2(x, y);
+// Project a ray direction to equirectangular texture coordinates
+vec2 project_equirectangular(vec3 ray_dir) {
+    return vec2(atan(ray_dir.z, ray_dir.x) + M_PI, acos(ray_dir.y)) / vec2(2.0 * M_PI, M_PI);
 }
 
 void main() {
-    float horz_fov = M_PI / 2.0 * target_aspect;
-    float vert_fov = M_PI / 2.0;
+    // Map pixel pos from -1 to 1
+    vec2 pixel_pos = 2.0 * gl_FragCoord.xy / render_res - vec2(1.0);
 
-    vec3 ray_dir = calc_ray_dir();
-    vec3 rd = ray_dir;
-    //vec2 tex_coords = project_equilateral(ray_dir);
+    // Jiggle
+    const float JIGGLE_PIXELS = 0.25;
+    float jiggle_amount = (mod(mat_view[3][0], 1.0) + mod(mat_view[3][1], 1.0) + mod(mat_view[3][2], 1.0)) / 3.0;
+    float jiggle_amount_norm = 2.0 * jiggle_amount - 1.0;
+    pixel_pos.x += jiggle_amount_norm / render_res.x * JIGGLE_PIXELS;
+    pixel_pos.y += jiggle_amount_norm / render_res.y * JIGGLE_PIXELS;
 
-    vec2 tex_coords = vec2(atan(rd.z, rd.x) + M_PI, acos(rd.y)) / vec2(2.0 * M_PI, M_PI);
+    // Calculate ray
+    vec3 ray_dir = calc_ray_dir(pixel_pos);
 
-    vec3 out_color = texture(tex_skybox, tex_coords).rgb;
-    //out_color = dither(out_color, ivec2(gl_FragCoord.xy), 0.3);
+    // Project ray to equirectangular
+    vec2 uv = project_equirectangular(ray_dir); 
+
+    // Sample skybox texture
+    vec3 out_color = texture(tex_skybox, uv).rgb;
+
+    // Add dithering
+    const float DITHER_EXPONENT = 0.5;
+    float dither_strength = pow(luma(out_color), DITHER_EXPONENT);
+    out_color = dither(out_color, ivec2(gl_FragCoord.xy), dither_strength);
 
     out_frag_color = vec4(out_color, 1.0);
 }
