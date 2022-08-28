@@ -87,7 +87,7 @@ impl Renderer {
 
         // Load textures
         let sky_params = TextureParams::repeat_nearest();
-        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, sky_params, true, Some(5))
+        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, sky_params, true, None)
             .expect("Failed to load sky texture");
 
         // Load models

@@ -59,8 +59,11 @@ void main() {
     // Project ray to equirectangular
     vec2 uv = project_equirectangular(ray_dir); 
 
-    // Sample skybox texture
-    vec3 out_color = texture(tex_skybox, uv).rgb;
+    // Sample skybox texture. To save storing the bottom half of the equirectangular skybox image, which is black, we
+    // black out the lower part of the view here, and scale the uv accordingly
+    vec3 out_color = uv.y > 0.5
+        ? vec3(0.0)
+        : texture(tex_skybox, vec2(uv.x, uv.y * 2.0)).rgb;
 
     // Add dithering
     const float DITHER_EXPONENT = 0.5;
