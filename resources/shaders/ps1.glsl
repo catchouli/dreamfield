@@ -96,7 +96,7 @@ void main() {
     float eye_dist = length(tes_eye_pos[gl_InvocationID]);
 
     float min_tess_level = 1.0;
-    float max_tess_level = 4.0;
+    float max_tess_level = 6.0;
     float tess_end = 10.0;
 
     float tess_level_range = max_tess_level - min_tess_level;
