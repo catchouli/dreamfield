@@ -12,7 +12,7 @@ const RENDER_ASPECT: f32 = 4.0 / 3.0;
 
 const FOV: f32 = 60.0;
 
-const NEAR_CLIP: f32 = 0.01;
+const NEAR_CLIP: f32 = 0.1;
 const FAR_CLIP: f32 = 35.0;
 
 const FOG_START: f32 = FAR_CLIP - 10.0;
@@ -24,8 +24,8 @@ const DITHER_STRENGTH: f32 = 0.05;
 pub struct Renderer {
     full_screen_rect: Mesh,
     sky_shader: ShaderProgram,
-    pbr_shader: ShaderProgram,
     ps1_shader: ShaderProgram,
+    ps1_shader_tess: ShaderProgram,
     blit_shader: ShaderProgram,
     composite_yiq_shader: ShaderProgram,
     composite_resolve_shader: ShaderProgram,
@@ -36,8 +36,7 @@ pub struct Renderer {
     framebuffer: Framebuffer,
     yiq_framebuffer: Framebuffer,
     window_viewport: (i32, i32),
-    ps1_mode: bool,
-    wireframe_enabled: bool,
+    wireframe_enabled: bool
 }
 
 impl Renderer {
@@ -62,8 +61,8 @@ impl Renderer {
 
         // Load shaders
         let sky_shader = ShaderProgram::new_from_vf(shaders::SHADER_SKY);
-        let pbr_shader = ShaderProgram::new_from_vf(shaders::SHADER_PBR);
-        let ps1_shader = ShaderProgram::new_from_vtf(shaders::SHADER_PS1);
+        let ps1_shader = ShaderProgram::new_from_vf(shaders::SHADER_PS1);
+        let ps1_shader_tess = ShaderProgram::new_from_vtf(shaders::SHADER_PS1_TESSELLATE);
         let blit_shader = ShaderProgram::new_from_vf(shaders::SHADER_BLIT);
         let composite_yiq_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_YIQ);
         let composite_resolve_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_RESOLVE);
@@ -104,9 +103,9 @@ impl Renderer {
         let mut renderer = Renderer {
            full_screen_rect,
            sky_shader,
-           pbr_shader,
            sky_texture,
            ps1_shader,
+           ps1_shader_tess,
            blit_shader,
            composite_yiq_shader,
            composite_resolve_shader,
@@ -116,7 +115,6 @@ impl Renderer {
            framebuffer,
            yiq_framebuffer,
            window_viewport: (width, height),
-           ps1_mode: true,
            wireframe_enabled: false
         };
 
@@ -162,20 +160,18 @@ impl Renderer {
             gl::Enable(gl::DEPTH_TEST);
         }
 
-        let main_shader = match self.ps1_mode {
-            true => &self.ps1_shader,
-            false => &self.pbr_shader
-        };
-        main_shader.use_program();
-
         // Update animations
         Self::update_animation(&self.demo_scene_model, "Idle", game_state.time as f32);
         Self::update_animation(&self.fire_orb_model, "Orb", game_state.time as f32);
 
-        // Draw models
+        // Draw world
+        self.ps1_shader_tess.use_program();
         self.demo_scene_model.render(&mut self.ubo_global, true);
+
+        // Draw other models
+        self.ps1_shader.use_program();
         self.fire_orb_model.set_transform(&Matrix4::from_translation(game_state.ball_pos));
-        self.fire_orb_model.render(&mut self.ubo_global, true);
+        self.fire_orb_model.render(&mut self.ubo_global, false);
 
         // Disable depth test for blitting operations
         unsafe {
@@ -239,14 +235,6 @@ impl Renderer {
         else {
             log::error!("No such animation {name}");
         }
-    }
-
-    /// Toggle ps1 graphics mode
-    /// TODO: fix the non-ps1 mode, which broke because it doesn't support tesselation. at the same
-    /// time I can also make it so tesselation is optional, for character models and such.
-    pub fn toggle_graphics_mode(&mut self) {
-        self.ps1_mode = !self.ps1_mode;
-        log::info!("PS1 shader {}", if self.ps1_mode { "enabled" } else { "disabled "});
     }
 
     /// Update the window viewport

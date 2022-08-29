@@ -81,6 +81,7 @@ pub fn preprocess_shader_vtf(args: TokenStream) -> TokenStream {
     println!("Preprocessing vertex shader source");
     let vertex_shader = {
         let mut context = gpp::Context::new();
+        context.macros.insert("TESSELLATION_ENABLED".to_string(), "1".to_string());
         context.macros.insert("BUILDING_VERTEX_SHADER".to_string(), "1".to_string());
         let processed = gpp::process_str(&rest, &mut context)
             .expect("failed to preprocess vertex shader");
@@ -91,6 +92,7 @@ pub fn preprocess_shader_vtf(args: TokenStream) -> TokenStream {
     println!("Preprocessing tessellation control shader source");
     let tess_control_shader = {
         let mut context = gpp::Context::new();
+        context.macros.insert("TESSELLATION_ENABLED".to_string(), "1".to_string());
         context.macros.insert("BUILDING_TESS_CONTROL_SHADER".to_string(), "1".to_string());
         let processed = gpp::process_str(&rest, &mut context)
             .expect("failed to preprocess tessellation control shader");
@@ -101,6 +103,7 @@ pub fn preprocess_shader_vtf(args: TokenStream) -> TokenStream {
     println!("Preprocessing tessellation evaluation shader source");
     let tess_eval_shader = {
         let mut context = gpp::Context::new();
+        context.macros.insert("TESSELLATION_ENABLED".to_string(), "1".to_string());
         context.macros.insert("BUILDING_TESS_EVAL_SHADER".to_string(), "1".to_string());
         let processed = gpp::process_str(&rest, &mut context)
             .expect("failed to preprocess tessellation evaluation shader");
@@ -111,6 +114,7 @@ pub fn preprocess_shader_vtf(args: TokenStream) -> TokenStream {
     println!("Preprocessing fragment shader source");
     let fragment_shader = {
         let mut context = gpp::Context::new();
+        context.macros.insert("TESSELLATION_ENABLED".to_string(), "1".to_string());
         context.macros.insert("BUILDING_FRAGMENT_SHADER".to_string(), "1".to_string());
         let processed = gpp::process_str(&rest, &mut context)
             .expect("failed to preprocess fragment shader");

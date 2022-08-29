@@ -108,9 +108,6 @@ fn handle_window_event(window: &mut Window, renderer: &mut Renderer, event: glfw
                 input_state.cursor_captured = false;
             }
         }
-        glfw::WindowEvent::Key(Key::F1, _, Action::Press, _) => {
-            renderer.toggle_graphics_mode();
-        }
         glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
             renderer.toggle_wireframe_mode();
         }

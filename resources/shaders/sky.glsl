@@ -66,7 +66,7 @@ void main() {
         : texture(tex_skybox, vec2(uv.x, uv.y * 2.0)).rgb;
 
     // Add dithering
-    const float DITHER_EXPONENT = 0.5;
+    const float DITHER_EXPONENT = 0.65;
     float dither_strength = pow(luma(out_color), DITHER_EXPONENT);
     out_color = dither(out_color, ivec2(gl_FragCoord.xy), dither_strength);
 

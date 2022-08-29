@@ -1,6 +1,5 @@
 #version 400 core
 
-//#define REALTIME_LIGHTING
 #define SNAP_VERTEX_POS
 
 #include resources/shaders/include/uniforms.glsl
@@ -16,12 +15,20 @@ layout(location = 5) in vec4 vs_col;
 layout(location = 6) in vec4 vs_joint;
 layout(location = 7) in vec4 vs_weight;
 
+#ifdef TESSELLATION_ENABLED
 out vec4 tcs_clip_pos;
 out vec3 tcs_eye_pos;
 out vec3 tcs_world_pos;
 out vec3 tcs_normal;
 out vec2 tcs_uv;
 out vec3 tcs_col;
+#else
+noperspective out float frag_dist;
+noperspective out vec3 frag_world_pos;
+noperspective out vec3 frag_nrm;
+noperspective out vec2 frag_uv;
+noperspective out vec3 frag_light;
+#endif
 
 void main() {
     mat4 skin_matrix =
@@ -41,6 +48,7 @@ void main() {
     clip_pos = snap_pos(clip_pos, render_res);
 #endif
 
+#ifdef TESSELLATION_ENABLED
     tcs_clip_pos = clip_pos;
     tcs_eye_pos = eye_pos.xyz;
     tcs_world_pos = world_pos.xyz;
@@ -48,6 +56,14 @@ void main() {
     tcs_normal = vs_normal;
     tcs_uv = vs_uv;
     tcs_col = vs_col.rgb;
+#else
+    frag_world_pos = world_pos.xyz;
+    frag_nrm = normalize(mat_normal * vs_normal);
+    frag_uv = vs_uv;
+    frag_dist = length(eye_pos);
+    gl_Position = clip_pos;
+    frag_light = vs_col.rgb;
+#endif
 }
 
 #endif
@@ -80,14 +96,11 @@ void main() {
     float eye_dist = length(tes_eye_pos[gl_InvocationID]);
 
     float min_tess_level = 1.0;
-    float max_tess_level = 8.0;
-    float tess_level_steps = 2.0;
+    float max_tess_level = 4.0;
+    float tess_end = 10.0;
 
     float tess_level_range = max_tess_level - min_tess_level;
-
-    float tess_end = 10.0;
     float dist_norm = min(eye_dist, tess_end) / tess_end;
-
     float tess_level = min_tess_level + (1.0 - dist_norm) * tess_level_range;
 
     gl_TessLevelInner[0] = tess_level;
@@ -138,12 +151,7 @@ void main() {
     frag_uv = uv;
     frag_dist = length(eye_pos);
     gl_Position = clip_pos;
-
-#ifdef REALTIME_LIGHTING
-    frag_light = calculate_lighting(frag_world_pos, frag_nrm);
-#else
     frag_light = col;
-#endif
 }
 
 #endif
@@ -156,7 +164,6 @@ noperspective in float frag_dist;
 noperspective in vec3 frag_world_pos;
 noperspective in vec3 frag_nrm;
 noperspective in vec2 frag_uv;
-
 noperspective in vec3 frag_light;
 
 out vec4 out_frag_color;

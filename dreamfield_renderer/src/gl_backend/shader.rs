@@ -28,30 +28,6 @@ impl ShaderProgram {
         program
     }
 
-    /// Create a new shader program from a vertex, tesselation, geometry and fragment shader source
-    pub fn new_from_vtgf((vertex, tess_control, tess_eval, geometry, fragment): (&str, &str, &str, &str, &str))
-        -> ShaderProgram
-    {
-        // Build shaders
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vertex);
-        let tess_control_shader = ShaderProgram::compile_shader(gl::TESS_CONTROL_SHADER, &tess_control);
-        let tess_eval_shader = ShaderProgram::compile_shader(gl::TESS_EVALUATION_SHADER, &tess_eval);
-        let geometry_shader = ShaderProgram::compile_shader(gl::GEOMETRY_SHADER, &geometry);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fragment);
-
-        // Link shader program
-        let shader_program = ShaderProgram::link_program(&vec![vertex_shader, tess_control_shader, tess_eval_shader,
-                                                         geometry_shader, fragment_shader]);
-
-        // Create ShaderProgram instance
-        let program = ShaderProgram { id: shader_program };
-
-        // Set standard uniform block bindings
-        program.set_standard_uniform_block_bindings();
-
-        program
-    }
-
     /// Create a new shader program from a vertex, tesselation and fragment shader source
     pub fn new_from_vtf((vertex, tess_control, tess_eval, fragment): (&str, &str, &str, &str)) -> ShaderProgram {
         // Build shaders
