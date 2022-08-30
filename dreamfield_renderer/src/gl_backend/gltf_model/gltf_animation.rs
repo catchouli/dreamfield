@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use cgmath::{VectorSpace, Vector3, vec3, Quaternion};
 use gltf::animation::Property;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -14,7 +13,7 @@ pub struct GltfAnimation {
 
 /// One channel of an animation
 pub struct GltfAnimationChannel {
-    target_node: Option<Rc<RefCell<GltfTransform>>>,
+    target_node: Option<Arc<Mutex<GltfTransform>>>,
     frames: Vec<GltfAnimationKeyframe>
 }
 
@@ -178,7 +177,7 @@ impl GltfAnimation {
 
 impl GltfAnimationChannel {
     /// Get target node
-    pub fn target(&self) -> &Option<Rc<RefCell<GltfTransform>>> {
+    pub fn target(&self) -> &Option<Arc<Mutex<GltfTransform>>> {
         &self.target_node
     }
 

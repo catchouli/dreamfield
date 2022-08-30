@@ -16,6 +16,7 @@ std140 = { git = "https://github.com/catchouli/std140.rs" }
 nalgebra = "0.31.1"
 ncollide3d = "0.33.0"
 byteorder = "1.4.3"
+bevy_ecs = "0.8.1"
 gltf = { version = "1.0", features = ["extras", "names", "KHR_lights_punctual"] }
 dreamfield_renderer = { path = "dreamfield_renderer" }
 dreamfield_macros = { path = "dreamfield_macros" }

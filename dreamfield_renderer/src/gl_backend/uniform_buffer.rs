@@ -121,7 +121,6 @@ pub struct GlobalParams {
     pub render_res: std140::vec2,
     pub fog_color: std140::vec3,
     pub fog_dist: std140::vec2,
-    pub dither_strength: std140::float,
     pub lighting_strength: std140::float
 }
 
@@ -143,7 +142,6 @@ impl Default for GlobalParams {
             render_fov: (std::f32::consts::PI).to_std140(),
             fog_color: vec3(0.0, 0.0, 0.0).to_std140(),
             fog_dist: vec2(0.0, 0.0).to_std140(),
-            dither_strength: (1.0).to_std140(),
             lighting_strength: (1.0).to_std140()
         }
     }

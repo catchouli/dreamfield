@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use cgmath::{Vector3, Vector4, vec4, Matrix4};
 
 use super::LightType;
@@ -7,7 +6,7 @@ use super::gltf_transform::GltfTransform;
 
 /// A light (KHR_PUNCTUAL_LIGHTS)
 pub struct GltfLight {
-    transform: Option<Rc<RefCell<GltfTransform>>>,
+    transform: Option<Arc<Mutex<GltfTransform>>>,
     light_type: LightType,
     color: Vector3<f32>,
     intensity: f32,
@@ -18,7 +17,7 @@ pub struct GltfLight {
 
 impl GltfLight {
     /// Create a new light
-    pub fn new(transform: Option<Rc<RefCell<GltfTransform>>>, light_type: LightType, color: Vector3<f32>,
+    pub fn new(transform: Option<Arc<Mutex<GltfTransform>>>, light_type: LightType, color: Vector3<f32>,
         intensity: f32, range: Option<f32>, inner_cone_angle: Option<f32>, outer_cone_angle: Option<f32>)
         -> Self
     {
@@ -35,7 +34,7 @@ impl GltfLight {
 
     /// Get the light's world transform
     pub fn world_transform(&self) -> Option<Matrix4<f32>> {
-        self.transform.as_ref().map(|t| t.borrow_mut().world_transform().clone())
+        self.transform.as_ref().map(|t| t.lock().unwrap().world_transform().clone())
     }
 
     /// Get the light's position

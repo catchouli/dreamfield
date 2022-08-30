@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use cgmath::{SquareMatrix, Matrix4};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -12,7 +11,7 @@ pub struct GltfSkin {
 
 /// One joint in a skin
 pub struct GltfJoint {
-    joint_transform: Rc<RefCell<GltfTransform>>,
+    joint_transform: Arc<Mutex<GltfTransform>>,
     inverse_bind_matrix: Matrix4<f32>
 }
 
@@ -97,7 +96,7 @@ impl GltfSkin {
 
 impl GltfJoint {
     /// Get the joint transform
-    pub fn transform(&self) -> &Rc<RefCell<GltfTransform>> {
+    pub fn transform(&self) -> &Arc<Mutex<GltfTransform>> {
         &self.joint_transform
     }
 

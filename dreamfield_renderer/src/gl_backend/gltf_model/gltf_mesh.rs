@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use super::GltfMaterial;
 use super::Texture;
 use gltf::{Semantic, material::AlphaMode};
@@ -17,8 +16,8 @@ pub struct GltfMesh {
 pub struct GltfMeshPrimitive {
     vao: u32,
     indexed_offset_length: Option<(i32, i32)>,
-    material: Rc<RefCell<GltfMaterial>>,
-    base_color_texture: Option<Rc<Texture>>,
+    material: Arc<Mutex<GltfMaterial>>,
+    base_color_texture: Option<Arc<Texture>>,
     primitive_count: Option<i32>,
     alpha_blend: bool
 }
@@ -34,8 +33,8 @@ pub struct GltfMeshExtras {
 
 impl GltfMesh {
     /// Load a mesh from a gltf document
-    pub fn load(materials: &Vec<Rc<RefCell<GltfMaterial>>>, default_material: &Rc<RefCell<GltfMaterial>>,
-        textures: &Vec<Rc<Texture>>, mesh: &gltf::Mesh, buffers: &[u32])
+    pub fn load(materials: &Vec<Arc<Mutex<GltfMaterial>>>, default_material: &Arc<Mutex<GltfMaterial>>,
+        textures: &Vec<Arc<Texture>>, mesh: &gltf::Mesh, buffers: &[u32])
         -> GltfMesh
     {
         log::trace!("Loading mesh {}", mesh.name().unwrap_or("no-name"));
@@ -208,7 +207,7 @@ impl GltfMeshPrimitive {
         };
 
         // Bind material
-        self.material.borrow_mut().bind();
+        self.material.lock().unwrap().bind();
 
         // Enable or disable alpha blending
         unsafe {

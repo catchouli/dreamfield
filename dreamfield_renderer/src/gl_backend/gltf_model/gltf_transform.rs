@@ -1,16 +1,15 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use cgmath::{SquareMatrix, Vector3, Matrix4, Quaternion, vec3};
 
 /// The transform hierarchy for gltf nodes
 pub struct GltfTransformHierarchy {
-    root: Rc<RefCell<GltfTransform>>,
-    nodes_by_index: Vec<Option<Rc<RefCell<GltfTransform>>>>
+    root: Arc<Mutex<GltfTransform>>,
+    nodes_by_index: Vec<Option<Arc<Mutex<GltfTransform>>>>
 }
 
 /// A single node's transform, forming a tree
 pub struct GltfTransform {
-    parent: Option<Rc<RefCell<GltfTransform>>>,
+    parent: Option<Arc<Mutex<GltfTransform>>>,
 
     translation: Vector3<f32>,
     rotation: Quaternion<f32>,
@@ -27,18 +26,18 @@ impl GltfTransformHierarchy {
     /// Create a new transform hierarchy with its root transform at the origin and no child nodes
     pub fn new() -> Self {
         GltfTransformHierarchy {
-            root: Rc::new(RefCell::new(GltfTransform::from_local(None, Matrix4::identity()))),
+            root: Arc::new(Mutex::new(GltfTransform::from_local(None, Matrix4::identity()))),
             nodes_by_index: Vec::new()
         }
     }
 
     /// Get the root transform
-    pub fn root(&self) -> &Rc<RefCell<GltfTransform>> {
+    pub fn root(&self) -> &Arc<Mutex<GltfTransform>> {
         &self.root
     }
 
     /// Add a new child node
-    pub fn add_at_index(&mut self, index: usize, transform: Rc<RefCell<GltfTransform>>) {
+    pub fn add_at_index(&mut self, index: usize, transform: Arc<Mutex<GltfTransform>>) {
         if self.nodes_by_index.len() <= index {
             self.nodes_by_index.resize(index + 1, None);
         }
@@ -47,14 +46,14 @@ impl GltfTransformHierarchy {
     }
 
     /// Get a node's transform from its json index
-    pub fn node_by_index(&self, index: usize) -> &Option<Rc<RefCell<GltfTransform>>> {
+    pub fn node_by_index(&self, index: usize) -> &Option<Arc<Mutex<GltfTransform>>> {
         self.nodes_by_index.get(index).unwrap_or(&None)
     }
 }
 
 impl GltfTransform {
     /// Create a new GltfTransform from a local transformation matrix
-    pub fn from_local(parent: Option<Rc<RefCell<GltfTransform>>>, mat: Matrix4<f32>) -> Self {
+    pub fn from_local(parent: Option<Arc<Mutex<GltfTransform>>>, mat: Matrix4<f32>) -> Self {
         GltfTransform {
             parent,
             translation: vec3(0.0, 0.0, 0.0),
@@ -84,7 +83,7 @@ impl GltfTransform {
         if self.world_transform_dirty {
             let parent_world_transform = self.parent
                 .as_ref()
-                .map(|t| *t.borrow_mut().world_transform())
+                .map(|t| *t.lock().unwrap().world_transform())
                 .unwrap_or(Matrix4::identity());
 
             self.world_transform = parent_world_transform * self.local_transform();

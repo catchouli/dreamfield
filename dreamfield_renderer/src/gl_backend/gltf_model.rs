@@ -5,9 +5,8 @@ mod gltf_animation;
 mod gltf_skin;
 mod gltf_light;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use gl::types::*;
 use gltf::json::extras::RawValue;
 use gltf::khr_lights_punctual::Kind;
@@ -41,9 +40,9 @@ pub struct GltfModel {
 /// A single drawable, with a transform, mesh, and optionally skin
 pub struct GltfDrawable {
     name: String,
-    transform: Option<Rc<RefCell<GltfTransform>>>,
-    mesh: Rc<GltfMesh>,
-    skin: Option<Rc<RefCell<GltfSkin>>>,
+    transform: Option<Arc<Mutex<GltfTransform>>>,
+    mesh: Arc<GltfMesh>,
+    skin: Option<Arc<Mutex<GltfSkin>>>,
     parsed_extras: GltfNodeExtras,
     raw_extras: Option<Box<RawValue>>
 }
@@ -118,29 +117,29 @@ impl GltfModel {
         // Load all textures
         let textures = doc.textures()
             .map(|tex| {
-                Rc::new(Self::load_texture(&tex, &image_data))
+                Arc::new(Self::load_texture(&tex, &image_data))
             })
             .collect();
 
         // Load all materials
-        let materials: Vec<Rc<RefCell<GltfMaterial>>> = doc.materials().map(|mat| {
+        let materials: Vec<Arc<Mutex<GltfMaterial>>> = doc.materials().map(|mat| {
             let mat = GltfMaterial::load(&mat);
-            Rc::new(RefCell::new(mat))
+            Arc::new(Mutex::new(mat))
         }).collect();
 
         // Create default material
-        let default_material = Rc::new(RefCell::new(GltfMaterial::new()));
+        let default_material = Arc::new(Mutex::new(GltfMaterial::new()));
 
         // Load all meshes
         let meshes = doc.meshes().map(|mesh| {
             let mesh = GltfMesh::load(&materials, &default_material, &textures, &mesh, &buffers);
-            Rc::new(mesh)
+            Arc::new(mesh)
         }).collect();
 
         // Load all skins
         let skins = doc.skins().map(|skin| {
             let skin = GltfSkin::load(&skin, &buffer_data, &transform_hierarchy);
-            Rc::new(RefCell::new(skin))
+            Arc::new(Mutex::new(skin))
         }).collect();
 
         // Load all animations
@@ -184,8 +183,8 @@ impl GltfModel {
             let mesh = &mut drawable.mesh;
             let model_mat = drawable.transform
                 .as_ref()
-                .map(|t| t.borrow_mut().world_transform().clone())
-                .unwrap_or(self.transform_hierarchy.root().borrow_mut().world_transform().clone());
+                .map(|t| t.lock().unwrap().world_transform().clone())
+                .unwrap_or(self.transform_hierarchy.root().lock().unwrap().world_transform().clone());
 
             // Set model matrix based on whether this is a billboard or not
             if mesh.extras().is_billboard {
@@ -208,8 +207,8 @@ impl GltfModel {
             if let Some(skin) = &drawable.skin {
                 self.ubo_joints.set_skinning_enabled(&true);
 
-                for (i, joint) in skin.borrow().joints().iter().enumerate() {
-                    let mut joint_transform = joint.transform().borrow_mut();
+                for (i, joint) in skin.lock().unwrap().joints().iter().enumerate() {
+                    let mut joint_transform = joint.transform().lock().unwrap();
                     let joint_world_transform = joint_transform.world_transform();
 
                     let joint_matrix = joint_world_transform * joint.inverse_bind_matrix();
@@ -230,7 +229,7 @@ impl GltfModel {
 
     /// Set the model's transform
     pub fn set_transform(&mut self, transform: &Matrix4<f32>) {
-        self.transform_hierarchy.root().borrow_mut().set_transform(*transform)
+        self.transform_hierarchy.root().lock().unwrap().set_transform(*transform)
     }
 
     /// Get the drawables list
@@ -287,14 +286,14 @@ impl GltfModel {
     }
 
     /// build the transform hierarchy
-    fn build_hierarchy_recursive(node: &gltf::Node, parent: &Rc<RefCell<GltfTransform>>,
+    fn build_hierarchy_recursive(node: &gltf::Node, parent: &Arc<Mutex<GltfTransform>>,
         transform_hierarchy: &mut GltfTransformHierarchy)
     {
         // Get node local transform
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
 
         // Create transform node
-        let transform = Rc::new(RefCell::new(GltfTransform::from_local(Some(parent.clone()), local_transform)));
+        let transform = Arc::new(Mutex::new(GltfTransform::from_local(Some(parent.clone()), local_transform)));
 
         // Recurse into children
         for child in node.children() {
@@ -307,7 +306,7 @@ impl GltfModel {
 
     /// Build the list of drawables recursively
     fn build_scene_recursive(node: &gltf::Node, transform_hierarchy: &GltfTransformHierarchy,
-        meshes: &Vec<Rc<GltfMesh>>, skins: &Vec<Rc<RefCell<GltfSkin>>>, parent_extras: Option<&Box<RawValue>>,
+        meshes: &Vec<Arc<GltfMesh>>, skins: &Vec<Arc<Mutex<GltfSkin>>>, parent_extras: Option<&Box<RawValue>>,
         out_drawables: &mut Vec<GltfDrawable>, out_lights: &mut Vec<GltfLight>)
     {
         let transform = transform_hierarchy.node_by_index(node.index());
