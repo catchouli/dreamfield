@@ -4,16 +4,16 @@ use gl::types::*;
 use glfw::Context;
 
 /// A window
-pub struct Window {
+pub struct GlfwWindow {
     pub glfw: glfw::Glfw,
     pub window: glfw::Window,
     pub events: Receiver<(f64, glfw::WindowEvent)>,
     mouse_captured: bool
 }
 
-impl Window {
+impl GlfwWindow {
     /// Create a new window with an opengl context with the given width and height
-    pub fn new_with_context(width: u32, height: u32, title: &str, debug_log_level: u32) -> Window {
+    pub fn new_with_context(width: i32, height: i32, title: &str, debug_log_level: u32) -> GlfwWindow {
         log::info!("Creating window");
 
         // Initialise glfw
@@ -22,7 +22,7 @@ impl Window {
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
 
         // Create window and gl context
-        let (mut window, events) = glfw.create_window(width, height, title, glfw::WindowMode::Windowed)
+        let (mut window, events) = glfw.create_window(width as u32, height as u32, title, glfw::WindowMode::Windowed)
             .expect("Failed to create GLFW window.");
 
         window.set_key_polling(true);
@@ -37,7 +37,7 @@ impl Window {
         // Enable debug output
         Self::set_debug_log_level(debug_log_level);
 
-        Window {
+        GlfwWindow {
             glfw,
             window,
             events,
@@ -74,7 +74,7 @@ impl Window {
         unsafe {
             if debug_log_level != 0 {
                 gl::Enable(gl::DEBUG_OUTPUT);
-                gl::DebugMessageCallback(Some(Window::handle_debug_message), debug_log_level as *const GLvoid);
+                gl::DebugMessageCallback(Some(GlfwWindow::handle_debug_message), debug_log_level as *const GLvoid);
             }
         }
     }

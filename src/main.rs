@@ -1,23 +1,23 @@
 pub mod renderer;
 pub mod sim;
 mod fixed_timestep;
+mod bevy_ecs_game_host;
 
 use cgmath::vec3;
-use glfw::{Action, Context, Key};
-use dreamfield_renderer::gl_backend::glfw_system::Window;
 use sim::{SimTime, PlayerCamera, PlayerMovement, Ball};
-use sim::input::{InputState, InputName};
+use sim::input::InputState;
 use sim::level_collision::LevelCollision;
 use renderer::RendererSettings;
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
-use fixed_timestep::FixedTimestep;
+
+use crate::bevy_ecs_game_host::BevyEcsGameHost;
 
 /// The width of the window
-const WINDOW_WIDTH: u32 = 1024 * 2;
+const WINDOW_WIDTH: i32 = 1024 * 2;
 
 /// The height of the window
-const WINDOW_HEIGHT: u32 = 768 * 2;
+const WINDOW_HEIGHT: i32 = 768 * 2;
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
@@ -63,68 +63,6 @@ fn init_world() -> World {
     world
 }
 
-/// Entry point
-fn main() {
-    // Initialise logging
-    env_logger::init();
-    log::info!("Welcome to Dreamfield!");
-
-    // Create window
-    let mut window = Window::new_with_context(WINDOW_WIDTH, WINDOW_HEIGHT, "Dreamfield", gl::DEBUG_SEVERITY_LOW - 500);
-
-    // Initialise bevy ecs world
-    let mut world = init_world();
-
-    // Create update schedule
-    let mut update_schedule = create_update_schedule();
-
-    // Create render schedule
-    // (this is separate from the update schedule, as we update at a fixed rate which is separate from the render)
-    let mut render_schedule = create_render_schedule();
-
-    // Set up fixed timestep
-    let mut fixed_timestep = FixedTimestep::new(FIXED_UPDATE_TIME, window.glfw.get_time());
-
-    // Mouse movement
-    let (mut mouse_x, mut mouse_y) = window.window.get_cursor_pos();
-
-    // Colemak mode for luci (hax)
-    // TODO: make this more modular (a system?) and refactor it out
-    let mut colemak_mode = false;
-
-    // Start main loop
-    while !window.window.should_close() {
-        // Handle events
-        for event in window.poll_events() {
-            world.resource_scope(|world, mut input_state| {
-                world.resource_scope(|_, mut render_settings| {
-                    handle_window_event(&mut window, event, &mut input_state, &mut render_settings, &mut colemak_mode);
-                });
-            });
-        }
-
-        // Handle mouse movement
-        world.resource_scope(|_, mut input_state| {
-            (mouse_x, mouse_y) = handle_mouse_movement(&window, (mouse_x, mouse_y), &mut input_state);
-        });
-
-        // Update at fixed timestep
-        fixed_timestep.update_actual_time(window.glfw.get_time());
-        while fixed_timestep.should_update() {
-            // Update sim time
-            let mut sim_time_res: Mut<SimTime> = world.get_resource_mut().unwrap();
-            sim_time_res.sim_time = fixed_timestep.sim_time();
-
-            // Simulate game state
-            update_schedule.run(&mut world);
-        }
-
-        // Render
-        render_schedule.run(&mut world);
-        window.window.swap_buffers();
-    }
-}
-
 /// Create update schedule
 fn create_update_schedule() -> Schedule {
     let mut update_schedule = Schedule::default();
@@ -147,105 +85,26 @@ fn create_render_schedule() -> Schedule {
     render_schedule
 }
 
-/// Handle events
-fn handle_window_event(window: &mut Window, event: glfw::WindowEvent, input_state: &mut Mut<InputState>,
-    renderer_settings: &mut Mut<RendererSettings>, colemak_mode: &mut bool)
-{
-    let input_map_func = match colemak_mode {
-        true => map_game_inputs_colemak,
-        false => map_game_inputs_default
-    };
 
-    match event {
-        glfw::WindowEvent::FramebufferSize(width, height) => {
-            renderer_settings.window_size = (width, height);
-        }
-        glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-            window.window.set_should_close(true)
-        }
-        glfw::WindowEvent::MouseButton(_, Action::Press, _) => {
-            if !window.is_mouse_captured() {
-                window.set_mouse_captured(true);
-                input_state.cursor_captured = true;
-            }
-        }
-        glfw::WindowEvent::Key(Key::LeftAlt, _, Action::Press, _) | glfw::WindowEvent::Focus(false) => {
-            if window.is_mouse_captured() {
-                window.set_mouse_captured(false);
-                input_state.cursor_captured = false;
-            }
-        }
-        glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
-            renderer_settings.wireframe_enabled = !renderer_settings.wireframe_enabled;
-        }
-        glfw::WindowEvent::Key(Key::F9, _, Action::Press, _) => {
-            *colemak_mode = !(*colemak_mode);
-            log::info!("Colemak mode {}", if *colemak_mode { "enabled" } else { "disabled "});
-        }
-        glfw::WindowEvent::Key(key, _, Action::Press, _) => {
-            if let Some(input) = input_map_func(key) {
-                input_state.inputs[input as usize] = true;
-            }
-        }
-        glfw::WindowEvent::Key(key, _, Action::Release, _) => {
-            if let Some(input) = input_map_func(key) {
-                input_state.inputs[input as usize] = false;
-            }
-        }
-        _ => {}
-    }
-}
+/// Entry point
+fn main() {
+    // Initialise logging
+    env_logger::init();
+    log::info!("Welcome to Dreamfield!");
 
-/// Map game inputs from the keyboard
-fn map_game_inputs_default(key: Key) -> Option<InputName> {
-    match key {
-        Key::W => Some(InputName::CamForwards),
-        Key::A => Some(InputName::CamStrafeLeft),
-        Key::S => Some(InputName::CamBackwards),
-        Key::D => Some(InputName::CamStrafeRight),
-        Key::I => Some(InputName::CamLookUp),
-        Key::J => Some(InputName::CamLookLeft),
-        Key::K => Some(InputName::CamLookDown),
-        Key::L => Some(InputName::CamLookRight),
-        Key::Up => Some(InputName::CamLookUp),
-        Key::Left => Some(InputName::CamLookLeft),
-        Key::Down => Some(InputName::CamLookDown),
-        Key::Right => Some(InputName::CamLookRight),
-        Key::LeftShift => Some(InputName::CamSpeed),
-        Key::Z => Some(InputName::Rewind),
-        _ => None
-    }
-}
+    // Create game host
+    let mut host = BevyEcsGameHost::new(WINDOW_WIDTH, WINDOW_HEIGHT, FIXED_UPDATE_TIME);
 
-/// Map game inputs from colemak (hax)
-fn map_game_inputs_colemak(key: Key) -> Option<InputName> {
-    match key {
-        Key::W => Some(InputName::CamForwards),
-        Key::A => Some(InputName::CamStrafeLeft),
-        Key::R => Some(InputName::CamBackwards),
-        Key::S => Some(InputName::CamStrafeRight),
-        Key::U => Some(InputName::CamLookUp),
-        Key::N => Some(InputName::CamLookLeft),
-        Key::E => Some(InputName::CamLookDown),
-        Key::I => Some(InputName::CamLookRight),
-        Key::Up => Some(InputName::CamLookUp),
-        Key::Left => Some(InputName::CamLookLeft),
-        Key::Down => Some(InputName::CamLookDown),
-        Key::Right => Some(InputName::CamLookRight),
-        Key::LeftShift => Some(InputName::CamSpeed),
-        Key::Z => Some(InputName::Rewind),
-        _ => None
-    }
-}
+    // Initialise bevy ecs world
+    let world = init_world();
 
-/// Handle mouse movement
-fn handle_mouse_movement(window: &Window, (old_mouse_x, old_mouse_y): (f64, f64),
-                         input_state: &mut InputState) -> (f64, f64)
-{
-    let (mouse_x, mouse_y) = window.window.get_cursor_pos();
-    let (mouse_dx, mouse_dy) = (mouse_x - old_mouse_x, mouse_y - old_mouse_y);
+    // Create update schedule
+    let update_schedule = create_update_schedule();
 
-    input_state.mouse_diff = (mouse_dx, mouse_dy);
+    // Create render schedule
+    // (this is separate from the update schedule, as we update at a fixed rate which is separate from the render)
+    let render_schedule = create_render_schedule();
 
-    (mouse_x, mouse_y)
+    // Run game
+    host.run(world, update_schedule, render_schedule);
 }
