@@ -1,14 +1,15 @@
-mod renderer_settings;
 mod renderer_resources;
 
 use bevy_ecs::schedule::SystemSet;
 use bevy_ecs::system::{Local, Res, Query};
-use cgmath::*;
-use dreamfield_renderer::gl_backend::*;
-use dreamfield_renderer::camera::Camera;
-pub use renderer_settings::RendererSettings;
+use cgmath::Matrix4;
+use crate::gl_backend::*;
+use crate::camera::Camera;
+use crate::resources::ModelManager;
+use dreamfield_system::WindowSettings;
 use renderer_resources::{RendererResources, RENDER_WIDTH, RENDER_HEIGHT};
-use crate::sim::{PlayerCamera, SimTime, Ball};
+use dreamfield_system::resources::SimTime;
+use crate::components::{PlayerCamera, Position, Visual};
 
 /// The render systems
 pub fn systems() -> SystemSet {
@@ -17,14 +18,15 @@ pub fn systems() -> SystemSet {
 }
 
 /// The renderer system
-fn renderer_system(mut local: Local<RendererResources>, renderer_settings: Res<RendererSettings>,
-    sim_time: Res<SimTime>, player_query: Query<&PlayerCamera>, ball_query: Query<&Ball>)
+fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
+    sim_time: Res<SimTime>, models: Res<ModelManager>, player_query: Query<&PlayerCamera>,
+    visuals_query: Query<(&Position, &Visual)>)
 {
     let local = &mut *local;
 
     // Update window size if it's changed
-    if renderer_settings.is_changed() {
-        let (width, height) = renderer_settings.window_size;
+    if window_settings.is_changed() {
+        let (width, height) = window_settings.window_size;
         local.ubo_global.set_window_aspect(&(width as f32 / height as f32));
     }
 
@@ -43,7 +45,7 @@ fn renderer_system(mut local: Local<RendererResources>, renderer_settings: Res<R
     unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
 
     // Enable or disable wireframe mode
-    let polygon_mode = match renderer_settings.wireframe_enabled {
+    let polygon_mode = match window_settings.wireframe_enabled {
         true => gl::LINE,
         false => gl::FILL
     };
@@ -62,28 +64,41 @@ fn renderer_system(mut local: Local<RendererResources>, renderer_settings: Res<R
     local.sky_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
+    // Update animations
+    // TODO: make this nice
+    if let Some(model) = local.models.get_mut("demo_scene") {
+        update_animation(&model, "Idle", sim_time.sim_time as f32);
+    }
+    if let Some(model) = local.models.get_mut("fire_orb") {
+        update_animation(&model, "Orb", sim_time.sim_time as f32);
+    }
+
     // Draw glfw models
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
     }
 
-    // Update animations
-    update_animation(&local.demo_scene_model, "Idle", sim_time.sim_time as f32);
-    update_animation(&local.fire_orb_model, "Orb", sim_time.sim_time as f32);
-
-    // Draw world
-    local.ps1_tess_shader.use_program();
     let ubo_global = &mut local.ubo_global;
-    let demo_scene_model = &mut local.demo_scene_model;
-    demo_scene_model.render(ubo_global, true);
+    for (pos, visual) in visuals_query.iter() {
+        let model_name = &visual.model_name;
 
-    // Draw other models
-    local.ps1_no_tess_shader.use_program();
+        let model = local.models
+            .entry(model_name.to_string())
+            .or_insert_with(|| {
+                let data = models.get(model_name).unwrap();
+                GltfModel::from_buf(data).unwrap()
+            });
 
-    // Draw balls
-    for ball in ball_query.iter() {
-        local.fire_orb_model.set_transform(&Matrix4::from_translation(ball.pos));
-        local.fire_orb_model.render(&mut local.ubo_global, false);
+        let shader = match visual.tessellate {
+            true => &local.ps1_tess_shader,
+            false => &local.ps1_no_tess_shader
+        };
+
+        // TODO: probably not efficient
+        let transform = Matrix4::from_translation(pos.pos);
+        model.set_transform(&transform);
+        shader.use_program();
+        model.render(ubo_global, visual.tessellate);
     }
 
     // Disable depth test for blitting operations
@@ -114,7 +129,7 @@ fn renderer_system(mut local: Local<RendererResources>, renderer_settings: Res<R
     local.framebuffer.unbind();
 
     // Render framebuffer to screen
-    let (window_width, window_height) = renderer_settings.window_size;
+    let (window_width, window_height) = window_settings.window_size;
     unsafe { gl::Viewport(0, 0, window_width, window_height) };
     local.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
     local.blit_shader.use_program();

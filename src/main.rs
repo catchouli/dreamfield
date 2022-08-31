@@ -1,18 +1,18 @@
-pub mod renderer;
-pub mod sim;
-mod fixed_timestep;
-mod game_host;
+mod sim;
 mod resources;
 
 use cgmath::vec3;
-use dreamfield_renderer::resources::ModelManager;
-use sim::{SimTime, PlayerCamera, PlayerMovement, Ball};
-use sim::input::InputState;
-use sim::level_collision::LevelCollision;
-use renderer::RendererSettings;
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
-use game_host::GameHost;
+
+use dreamfield_renderer::renderer;
+use dreamfield_renderer::components::{PlayerCamera, Visual, Position};
+use dreamfield_renderer::resources::ModelManager;
+use dreamfield_system::{GameHost, WindowSettings};
+use dreamfield_system::resources::{InputState, SimTime};
+
+use sim::{PlayerMovement, Ball};
+use sim::level_collision::LevelCollision;
 
 /// The width of the window
 const WINDOW_WIDTH: i32 = 1024 * 2;
@@ -49,7 +49,7 @@ fn init_sim(world: &mut World) -> Schedule {
 /// Initialise renderer, returning the render bevy schedule
 fn init_renderer(world: &mut World) -> Schedule {
     // Renderer resources
-    world.insert_resource(RendererSettings::with_window_size((WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32)));
+    world.insert_resource(WindowSettings::with_window_size((WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32)));
     world.insert_resource(resources::create_shader_manager());
     world.insert_resource(resources::create_texture_manager());
     world.insert_resource(resources::create_model_manager());
@@ -66,6 +66,11 @@ fn init_renderer(world: &mut World) -> Schedule {
 
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
+    // Create world entity
+    world.spawn()
+        .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+        .insert(Visual::new("demo_scene", true));
+
     // Create player entity
     world.spawn()
         // Entrance to village
@@ -86,7 +91,9 @@ fn init_entities(world: &mut World) {
 
     // Create ball entity
     world.spawn()
-        .insert(Ball::default());
+        .insert(Ball::default())
+        .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
+        .insert(Visual::new("fire_orb", false));
 }
 
 /// Entry point

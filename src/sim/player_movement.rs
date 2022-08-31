@@ -3,11 +3,10 @@ use std::f32::consts::PI;
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, Query};
 use cgmath::{Vector3, vec3, InnerSpace};
-use dreamfield_renderer::camera::{FpsCamera, Camera};
 
-use super::sim_time::SimTime;
-use super::input::{InputName, InputState};
 use super::level_collision::LevelCollision;
+use dreamfield_renderer::components::{PlayerCamera, Camera};
+use dreamfield_system::resources::{SimTime, InputName, InputState};
 
 /// The character height
 const CHAR_HEIGHT: f32 = 1.7;
@@ -26,20 +25,6 @@ const CAM_MOVE_SPEED_FAST: f32 = 12.0;
 
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
-
-/// The player character component
-#[derive(Component)]
-pub struct PlayerCamera {
-    pub camera: FpsCamera
-}
-
-impl PlayerCamera {
-    pub fn new(pos: Vector3<f32>, pitch: f32, yaw: f32) -> Self {
-        PlayerCamera {
-            camera: FpsCamera::new_with_pos_rot(pos, pitch, yaw, 0.0)
-        }
-    }
-}
 
 /// The PlayerMovement component
 #[derive(Component)]

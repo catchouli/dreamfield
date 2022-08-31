@@ -1,12 +1,26 @@
 use bevy_ecs::{world::World, schedule::Schedule};
-use dreamfield_renderer::gl_backend::GlfwWindow;
 use glfw::{Action, Context, Key};
 use crate::fixed_timestep::FixedTimestep;
-use crate::sim::SimTime;
-use crate::sim::input::{InputState, InputName};
-use crate::renderer::RendererSettings;
+use crate::resources::SimTime;
+use crate::input::{InputState, InputName};
+use crate::glfw_system::GlfwWindow;
 
 use bevy_ecs::prelude::*;
+
+/// The window settings resource
+pub struct WindowSettings {
+    pub window_size: (i32, i32),
+    pub wireframe_enabled: bool
+}
+
+impl WindowSettings {
+    pub fn with_window_size(window_size: (i32, i32)) -> Self {
+        Self {
+            window_size,
+            wireframe_enabled: false
+        }
+    }
+}
 
 /// A game host that creates a window, and then runs updates at a fixed timestep,
 /// while rendering as fast as it can (or at the user's vsync setting)  
@@ -72,7 +86,7 @@ impl GameHost {
 
     /// Handle events
     fn handle_window_event(window: &mut GlfwWindow, event: glfw::WindowEvent, input_state: &mut Mut<InputState>,
-                           renderer_settings: &mut Mut<RendererSettings>, colemak_mode: &mut bool)
+                           renderer_settings: &mut Mut<WindowSettings>, colemak_mode: &mut bool)
     {
         let input_map_func = match colemak_mode {
             true => Self::map_game_inputs_colemak,

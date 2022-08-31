@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use bevy_ecs::world::{FromWorld, World};
 use cgmath::{vec3, vec2, Deg, perspective};
-use dreamfield_renderer::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel,
+use crate::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel,
     UniformBuffer, Framebuffer, GlobalParams, bindings, ShaderProgram};
-use dreamfield_renderer::resources::{ShaderManager, TextureManager, ModelManager};
+use crate::resources::{ShaderManager, TextureManager};
 
 pub const RENDER_WIDTH: i32 = 320;
 pub const RENDER_HEIGHT: i32 = 240;
@@ -22,8 +23,6 @@ pub const FOG_END: f32 = FAR_CLIP - 5.0;
 pub struct RendererResources {
     pub full_screen_rect: Mesh,
     pub sky_texture: Arc<Texture>,
-    pub demo_scene_model: GltfModel,
-    pub fire_orb_model: GltfModel,
     pub ubo_global: UniformBuffer<GlobalParams>,
     pub framebuffer: Framebuffer,
     pub yiq_framebuffer: Framebuffer,
@@ -32,7 +31,8 @@ pub struct RendererResources {
     pub ps1_no_tess_shader: Arc<ShaderProgram>,
     pub composite_yiq_shader: Arc<ShaderProgram>,
     pub composite_resolve_shader: Arc<ShaderProgram>,
-    pub blit_shader: Arc<ShaderProgram>
+    pub blit_shader: Arc<ShaderProgram>,
+    pub models: HashMap<String, GltfModel>
 }
 
 impl FromWorld for RendererResources {
@@ -73,11 +73,6 @@ impl FromWorld for RendererResources {
         let textures = world.get_resource::<TextureManager>().expect("Failed to get texture manager");
         let sky_texture = textures.get("sky").unwrap().clone();
 
-        // Load models
-        let models = world.get_resource::<ModelManager>().expect("Failed to get model manager");
-        let demo_scene_model = GltfModel::from_buf(models.get("demo_scene").unwrap()).unwrap();
-        let fire_orb_model = GltfModel::from_buf(models.get("fire_orb").unwrap()).unwrap();
-
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8,
             TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::NEAREST, gl::NEAREST));
@@ -96,8 +91,6 @@ impl FromWorld for RendererResources {
         RendererResources {
             full_screen_rect,
             sky_texture,
-            demo_scene_model,
-            fire_orb_model,
             ubo_global,
             framebuffer,
             yiq_framebuffer,
@@ -106,7 +99,8 @@ impl FromWorld for RendererResources {
             ps1_no_tess_shader,
             composite_yiq_shader,
             composite_resolve_shader,
-            blit_shader
+            blit_shader,
+            models: HashMap::new()
         }
     }
 }

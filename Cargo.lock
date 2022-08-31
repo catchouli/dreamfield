@@ -419,6 +419,7 @@ dependencies = [
  "byteorder",
  "cgmath",
  "dreamfield_macros",
+ "dreamfield_system",
  "dreamfield_traits",
  "env_logger",
  "gl",
@@ -437,6 +438,12 @@ dependencies = [
 [[package]]
 name = "dreamfield_system"
 version = "0.1.0"
+dependencies = [
+ "bevy_ecs",
+ "gl",
+ "glfw",
+ "log",
+]
 
 [[package]]
 name = "dreamfield_traits"

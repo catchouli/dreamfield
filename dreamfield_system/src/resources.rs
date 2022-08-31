@@ -1,4 +1,6 @@
-/// The SimTime component
+pub use crate::input::{InputState, InputName};
+
+/// The SimTime resource
 pub struct SimTime {
     pub sim_time: f64,
     pub sim_time_delta: f64
