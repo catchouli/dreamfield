@@ -6,7 +6,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
-use dreamfield_renderer::components::{PlayerCamera, Visual, Position};
+use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position};
 use dreamfield_renderer::resources::ModelManager;
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
@@ -69,7 +69,7 @@ fn init_entities(world: &mut World) {
     // Create world entity
     world.spawn()
         .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-        .insert(Visual::new("demo_scene", true));
+        .insert(Visual::new_with_anim("demo_scene", true, Animation::Loop("Idle".to_string())));
 
     // Create player entity
     world.spawn()
@@ -93,7 +93,7 @@ fn init_entities(world: &mut World) {
     world.spawn()
         .insert(Ball::default())
         .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
-        .insert(Visual::new("fire_orb", false));
+        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 }
 
 /// Entry point

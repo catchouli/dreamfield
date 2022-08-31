@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use bevy_ecs::world::{FromWorld, World};
 use cgmath::{vec3, vec2, Deg, perspective};
-use crate::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel,
-    UniformBuffer, Framebuffer, GlobalParams, bindings, ShaderProgram};
+use crate::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel, UniformBuffer, Framebuffer,
+    GlobalParams, JointParams, ShaderProgram};
 use crate::resources::{ShaderManager, TextureManager};
 
 pub const RENDER_WIDTH: i32 = 320;
@@ -24,6 +24,7 @@ pub struct RendererResources {
     pub full_screen_rect: Mesh,
     pub sky_texture: Arc<Texture>,
     pub ubo_global: UniformBuffer<GlobalParams>,
+    pub ubo_joints: UniformBuffer<JointParams>,
     pub framebuffer: Framebuffer,
     pub yiq_framebuffer: Framebuffer,
     pub sky_shader: Arc<ShaderProgram>,
@@ -32,7 +33,7 @@ pub struct RendererResources {
     pub composite_yiq_shader: Arc<ShaderProgram>,
     pub composite_resolve_shader: Arc<ShaderProgram>,
     pub blit_shader: Arc<ShaderProgram>,
-    pub models: HashMap<String, GltfModel>
+    pub models: HashMap<String, Arc<GltfModel>>
 }
 
 impl FromWorld for RendererResources {
@@ -50,7 +51,7 @@ impl FromWorld for RendererResources {
 
         ubo_global.set_mat_proj(&perspective(Deg(FOV), RENDER_ASPECT, NEAR_CLIP, FAR_CLIP));
 
-        ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
+        let ubo_joints = UniformBuffer::<JointParams>::new();
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -92,6 +93,7 @@ impl FromWorld for RendererResources {
             full_screen_rect,
             sky_texture,
             ubo_global,
+            ubo_joints,
             framebuffer,
             yiq_framebuffer,
             sky_shader,

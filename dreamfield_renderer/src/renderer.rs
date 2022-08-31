@@ -1,5 +1,7 @@
 mod renderer_resources;
 
+use std::sync::Arc;
+
 use bevy_ecs::schedule::SystemSet;
 use bevy_ecs::system::{Local, Res, Query};
 use cgmath::Matrix4;
@@ -20,7 +22,7 @@ pub fn systems() -> SystemSet {
 /// The renderer system
 fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>, models: Res<ModelManager>, player_query: Query<&PlayerCamera>,
-    visuals_query: Query<(&Position, &Visual)>)
+    mut visuals_query: Query<(&Position, &mut Visual)>)
 {
     let local = &mut *local;
 
@@ -64,41 +66,49 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     local.sky_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
-    // Update animations
-    // TODO: make this nice
-    if let Some(model) = local.models.get_mut("demo_scene") {
-        update_animation(&model, "Idle", sim_time.sim_time as f32);
-    }
-    if let Some(model) = local.models.get_mut("fire_orb") {
-        update_animation(&model, "Orb", sim_time.sim_time as f32);
-    }
-
     // Draw glfw models
-    unsafe {
-        gl::Enable(gl::DEPTH_TEST);
-    }
+    unsafe { gl::Enable(gl::DEPTH_TEST); }
 
     let ubo_global = &mut local.ubo_global;
-    for (pos, visual) in visuals_query.iter() {
-        let model_name = &visual.model_name;
+    let ubo_joints = &mut local.ubo_joints;
+    for (pos, mut visual) in visuals_query.iter_mut() {
+        let anim_changed = visual.animate(sim_time.sim_time as f32);
 
-        let model = local.models
-            .entry(model_name.to_string())
-            .or_insert_with(|| {
-                let data = models.get(model_name).unwrap();
-                GltfModel::from_buf(data).unwrap()
-            });
+        // Get model, loading it if it isn't already loaded
+        let model = {
+            // Initialise model if it's not already
+            if visual.model.is_none() {
+                // Get reference to model from the renderer resources cache, loading it if it's not in there
+                let model = local.models
+                    .entry(visual.model_name.to_string())
+                    .or_insert_with(|| {
+                        let data = models.get(&visual.model_name).unwrap();
+                        Arc::new(GltfModel::from_buf(data).unwrap())
+                    });
 
+                visual.model = Some(model.clone());
+            }
+            visual.model.as_ref().unwrap()
+        };
+
+        // Animate model if an animation is playing
+        if anim_changed {
+            if let Some(anim_state) = &visual.anim_state {
+                let anim_time = anim_state.anim_time;
+                update_animation(&model, &anim_state.cur_anim.name(), anim_time);
+            }
+        }
+
+        // Bind shader
         let shader = match visual.tessellate {
             true => &local.ps1_tess_shader,
             false => &local.ps1_no_tess_shader
         };
-
-        // TODO: probably not efficient
-        let transform = Matrix4::from_translation(pos.pos);
-        model.set_transform(&transform);
         shader.use_program();
-        model.render(ubo_global, visual.tessellate);
+
+        // Draw model
+        let transform = Matrix4::from_translation(pos.pos);
+        model.render(&transform, ubo_global, ubo_joints, visual.tessellate);
     }
 
     // Disable depth test for blitting operations

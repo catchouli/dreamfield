@@ -33,7 +33,6 @@ pub struct GltfModel {
     buffers: Vec<u32>,
     drawables: Vec<GltfDrawable>,
     lights: Vec<GltfLight>,
-    ubo_joints: UniformBuffer<JointParams>,
     animations: HashMap<String, GltfAnimation>,
 }
 
@@ -168,20 +167,21 @@ impl GltfModel {
             buffers,
             drawables,
             lights,
-            ubo_joints: UniformBuffer::new(),
             animations
         })
     }
 
     /// Render a model
-    pub fn render(&mut self, ubo_global: &mut UniformBuffer<GlobalParams>, patches: bool) {
+    pub fn render(&self, object_world_transform: &Matrix4<f32>, ubo_global: &mut UniformBuffer<GlobalParams>,
+        ubo_joints: &mut UniformBuffer<JointParams>, patches: bool)
+    {
         // Bind global ubo
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
         // Render all prims
-        for drawable in self.drawables.iter_mut() {
-            let mesh = &mut drawable.mesh;
-            let model_mat = drawable.transform
+        for drawable in self.drawables.iter() {
+            let mesh = &drawable.mesh;
+            let model_mat = object_world_transform * drawable.transform
                 .as_ref()
                 .map(|t| t.lock().unwrap().world_transform().clone())
                 .unwrap_or(self.transform_hierarchy.root().lock().unwrap().world_transform().clone());
@@ -205,22 +205,22 @@ impl GltfModel {
 
             // Update joint matrices for skinned drawables
             if let Some(skin) = &drawable.skin {
-                self.ubo_joints.set_skinning_enabled(&true);
+                ubo_joints.set_skinning_enabled(&true);
 
                 for (i, joint) in skin.lock().unwrap().joints().iter().enumerate() {
                     let mut joint_transform = joint.transform().lock().unwrap();
-                    let joint_world_transform = joint_transform.world_transform();
+                    let joint_world_transform = object_world_transform * joint_transform.world_transform();
 
                     let joint_matrix = joint_world_transform * joint.inverse_bind_matrix();
-                    self.ubo_joints.set_joints(i, &Joint {
+                    ubo_joints.set_joints(i, &Joint {
                         joint_matrix: joint_matrix.to_std140()
                     });
                 }
             }
             else {
-                self.ubo_joints.set_skinning_enabled(&false);
+                ubo_joints.set_skinning_enabled(&false);
             }
-            self.ubo_joints.bind(bindings::UniformBlockBinding::JointParams);
+            ubo_joints.bind(bindings::UniformBlockBinding::JointParams);
 
             // Draw mesh
             mesh.draw(patches);
