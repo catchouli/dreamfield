@@ -389,6 +389,7 @@ dependencies = [
  "cgmath",
  "dreamfield_macros",
  "dreamfield_renderer",
+ "dreamfield_system",
  "dreamfield_traits",
  "env_logger",
  "gl",
@@ -432,6 +433,10 @@ dependencies = [
  "strum",
  "strum_macros",
 ]
+
+[[package]]
+name = "dreamfield_system"
+version = "0.1.0"
 
 [[package]]
 name = "dreamfield_traits"

@@ -1,5 +1,3 @@
-pub mod resources;
-pub mod shaders;
 mod renderer_settings;
 mod renderer_resources;
 
@@ -8,7 +6,6 @@ use bevy_ecs::system::{Local, Res, Query};
 use cgmath::*;
 use dreamfield_renderer::gl_backend::*;
 use dreamfield_renderer::camera::Camera;
-
 pub use renderer_settings::RendererSettings;
 use renderer_resources::{RendererResources, RENDER_WIDTH, RENDER_HEIGHT};
 use crate::sim::{PlayerCamera, SimTime, Ball};
@@ -75,13 +72,13 @@ fn renderer_system(mut local: Local<RendererResources>, renderer_settings: Res<R
     update_animation(&local.fire_orb_model, "Orb", sim_time.sim_time as f32);
 
     // Draw world
-    local.ps1_shader_tess.use_program();
+    local.ps1_tess_shader.use_program();
     let ubo_global = &mut local.ubo_global;
     let demo_scene_model = &mut local.demo_scene_model;
     demo_scene_model.render(ubo_global, true);
 
     // Draw other models
-    local.ps1_shader.use_program();
+    local.ps1_no_tess_shader.use_program();
 
     // Draw balls
     for ball in ball_query.iter() {

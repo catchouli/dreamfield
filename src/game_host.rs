@@ -2,23 +2,20 @@ use bevy_ecs::{world::World, schedule::Schedule};
 use dreamfield_renderer::gl_backend::GlfwWindow;
 use glfw::{Action, Context, Key};
 use crate::fixed_timestep::FixedTimestep;
-// TODO: these should be in the host and not the sim
 use crate::sim::SimTime;
 use crate::sim::input::{InputState, InputName};
-// TODO: would be nice if this didn't know about the renderer, maybe this should just be a general
-// fixed framerate game host intsead of a bevy one, and main should do this stuff instead
 use crate::renderer::RendererSettings;
 
 use bevy_ecs::prelude::*;
 
-/// A game host for bevy_ecs that creates a window, and then runs updates at a fixed timestep,
+/// A game host that creates a window, and then runs updates at a fixed timestep,
 /// while rendering as fast as it can (or at the user's vsync setting)  
-pub struct BevyEcsGameHost {
+pub struct GameHost {
     window: GlfwWindow,
     update_timestep: f64
 }
 
-impl BevyEcsGameHost {
+impl GameHost {
     pub fn new(window_width: i32, window_height: i32, update_timestep: f64) -> Self {
         // Create window
         let gl_debug_level = gl::DEBUG_SEVERITY_LOW - 500;

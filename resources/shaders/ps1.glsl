@@ -3,7 +3,6 @@
 #define SNAP_VERTEX_POS
 
 #include resources/shaders/include/uniforms.glsl
-#include resources/shaders/include/lighting.glsl
 #include resources/shaders/include/utils.glsl
 
 #ifdef BUILDING_VERTEX_SHADER

@@ -3,6 +3,7 @@ use std::ffi::CString;
 use gl::types::*;
 use super::bindings;
 use strum::IntoEnumIterator;
+use crate::resources::ShaderSource;
 
 /// A shader program
 pub struct ShaderProgram {
@@ -10,43 +11,42 @@ pub struct ShaderProgram {
 }
 
 impl ShaderProgram {
-    /// Create a new shader program from a vertex and fragment shader source
-    pub fn new_from_vf((vertex, fragment): (&str, &str)) -> ShaderProgram {
+    /// Build a shader program from the provided shader sources
+    pub fn build(sources: &ShaderSource) -> Option<Self> {
         // Build shaders
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vertex);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fragment);
+        let shaders = match sources {
+            ShaderSource::VertexFragment(vs, fs) => vec![
+                ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vs),
+                ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fs)
+            ],
+            ShaderSource::VertexTessFragment(vs, tcs, tes, fs) => vec![
+                ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vs),
+                ShaderProgram::compile_shader(gl::TESS_CONTROL_SHADER, &tcs),
+                ShaderProgram::compile_shader(gl::TESS_EVALUATION_SHADER, &tes),
+                ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fs)
+            ]
+        };
 
         // Link shader program
-        let shader_program = ShaderProgram::link_program(&vec![vertex_shader, fragment_shader]);
+        let program_id = ShaderProgram::link_program(&shaders);
 
-        // Create ShaderProgram instance
-        let program = ShaderProgram { id: shader_program };
+        // Delete shaders, they are no longer needed once the program is linked
+        for shader in shaders {
+            if let Some(shader) = shader {
+                unsafe { gl::DeleteShader(shader) }
+            }
+        }
 
-        // Set standard uniform block bindings
-        program.set_standard_uniform_block_bindings();
+        // Create ShaderProgram struct
+        program_id.map(|id| {
+            // Create ShaderProgram instance
+            let program = ShaderProgram { id };
 
-        program
-    }
+            // Set standard uniform block bindings
+            program.set_standard_uniform_block_bindings();
 
-    /// Create a new shader program from a vertex, tesselation and fragment shader source
-    pub fn new_from_vtf((vertex, tess_control, tess_eval, fragment): (&str, &str, &str, &str)) -> ShaderProgram {
-        // Build shaders
-        let vertex_shader = ShaderProgram::compile_shader(gl::VERTEX_SHADER, &vertex);
-        let tess_control_shader = ShaderProgram::compile_shader(gl::TESS_CONTROL_SHADER, &tess_control);
-        let tess_eval_shader = ShaderProgram::compile_shader(gl::TESS_EVALUATION_SHADER, &tess_eval);
-        let fragment_shader = ShaderProgram::compile_shader(gl::FRAGMENT_SHADER, &fragment);
-
-        // Link shader program
-        let shader_program = ShaderProgram::link_program(&vec![vertex_shader, tess_control_shader, tess_eval_shader,
-                                                         fragment_shader]);
-
-        // Create ShaderProgram instance
-        let program = ShaderProgram { id: shader_program };
-
-        // Set standard uniform block bindings
-        program.set_standard_uniform_block_bindings();
-
-        program
+            program
+        })
     }
 
     /// Get the gl id of the shader
@@ -84,7 +84,7 @@ impl ShaderProgram {
     }
 
     /// Compile a shader
-    fn compile_shader(shader_type: u32, shader_source: &str) -> u32 {
+    fn compile_shader(shader_type: u32, shader_source: &str) -> Option<u32> {
         unsafe {
             // Create new shader
             let shader = gl::CreateShader(shader_type);
@@ -125,21 +125,31 @@ impl ShaderProgram {
 
                 log::error!("\n{message}\n");
 
-            }
+                gl::DeleteShader(shader);
 
-            shader
+                None
+            }
+            else {
+                Some(shader)
+            }
         }
     }
 
     /// Link a shader program, deletes the passed in shaders automatically
-    fn link_program(shaders: &[u32]) -> u32 {
+    fn link_program(shaders: &[Option<u32>]) -> Option<u32> {
         unsafe {
             // Create shader program
             let shader_program = gl::CreateProgram();
 
             // Attach each shader
-            for &shader in shaders {
-                gl::AttachShader(shader_program, shader);
+            for shader in shaders.iter() {
+                if let Some(shader) = shader {
+                    gl::AttachShader(shader_program, *shader);
+                }
+                else {
+                    gl::DeleteProgram(shader_program);
+                    return None;
+                }
             }
 
             // Link the program
@@ -160,14 +170,14 @@ impl ShaderProgram {
                 info_log.set_len(length as usize);
 
                 log::error!("Shader program failed to link\n{}", std::str::from_utf8(&info_log).unwrap());
-            }
 
-            // Delete shaders
-            for shader in shaders {
-                gl::DeleteShader(*shader);
-            }
+                gl::DeleteProgram(shader_program);
 
-            shader_program
+                None
+            }
+            else {
+                Some(shader_program)
+            }
         }
     }
 }

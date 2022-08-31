@@ -1,7 +1,9 @@
+use std::sync::Arc;
+use bevy_ecs::world::{FromWorld, World};
 use cgmath::{vec3, vec2, Deg, perspective};
-use crate::renderer::{shaders, resources};
-use dreamfield_renderer::gl_backend::{Mesh, VertexAttrib, ShaderProgram, Texture, TextureParams, GltfModel,
-    UniformBuffer, Framebuffer, GlobalParams, bindings};
+use dreamfield_renderer::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel,
+    UniformBuffer, Framebuffer, GlobalParams, bindings, ShaderProgram};
+use dreamfield_renderer::resources::{ShaderManager, TextureManager, ModelManager};
 
 pub const RENDER_WIDTH: i32 = 320;
 pub const RENDER_HEIGHT: i32 = 240;
@@ -19,22 +21,22 @@ pub const FOG_END: f32 = FAR_CLIP - 5.0;
 /// The renderer state resource
 pub struct RendererResources {
     pub full_screen_rect: Mesh,
-    pub sky_shader: ShaderProgram,
-    pub ps1_shader: ShaderProgram,
-    pub ps1_shader_tess: ShaderProgram,
-    pub blit_shader: ShaderProgram,
-    pub composite_yiq_shader: ShaderProgram,
-    pub composite_resolve_shader: ShaderProgram,
-    pub sky_texture: Texture,
+    pub sky_texture: Arc<Texture>,
     pub demo_scene_model: GltfModel,
     pub fire_orb_model: GltfModel,
     pub ubo_global: UniformBuffer<GlobalParams>,
     pub framebuffer: Framebuffer,
-    pub yiq_framebuffer: Framebuffer
+    pub yiq_framebuffer: Framebuffer,
+    pub sky_shader: Arc<ShaderProgram>,
+    pub ps1_tess_shader: Arc<ShaderProgram>,
+    pub ps1_no_tess_shader: Arc<ShaderProgram>,
+    pub composite_yiq_shader: Arc<ShaderProgram>,
+    pub composite_resolve_shader: Arc<ShaderProgram>,
+    pub blit_shader: Arc<ShaderProgram>
 }
 
-impl Default for RendererResources {
-    fn default() -> Self {
+impl FromWorld for RendererResources {
+    fn from_world(world: &mut World) -> Self {
         log::info!("Creating renderer resources");
 
         // Create uniform buffers
@@ -49,14 +51,6 @@ impl Default for RendererResources {
         ubo_global.set_mat_proj(&perspective(Deg(FOV), RENDER_ASPECT, NEAR_CLIP, FAR_CLIP));
 
         ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
-
-        // Load shaders
-        let sky_shader = ShaderProgram::new_from_vf(shaders::SHADER_SKY);
-        let ps1_shader = ShaderProgram::new_from_vf(shaders::SHADER_PS1);
-        let ps1_shader_tess = ShaderProgram::new_from_vtf(shaders::SHADER_PS1_TESSELLATE);
-        let blit_shader = ShaderProgram::new_from_vf(shaders::SHADER_BLIT);
-        let composite_yiq_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_YIQ);
-        let composite_resolve_shader = ShaderProgram::new_from_vf(shaders::SHADER_COMPOSITE_RESOLVE);
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -76,13 +70,13 @@ impl Default for RendererResources {
             ]);
 
         // Load textures
-        let sky_params = TextureParams::repeat_nearest();
-        let sky_texture = Texture::new_from_image_buf(resources::TEXTURE_CLOUD, sky_params, true, None)
-            .expect("Failed to load sky texture");
+        let textures = world.get_resource::<TextureManager>().expect("Failed to get texture manager");
+        let sky_texture = textures.get("sky").unwrap().clone();
 
         // Load models
-        let demo_scene_model = GltfModel::from_buf(resources::MODEL_DEMO_SCENE).unwrap();
-        let fire_orb_model = GltfModel::from_buf(resources::MODEL_FIRE_ORB).unwrap();
+        let models = world.get_resource::<ModelManager>().expect("Failed to get model manager");
+        let demo_scene_model = GltfModel::from_buf(models.get("demo_scene").unwrap()).unwrap();
+        let fire_orb_model = GltfModel::from_buf(models.get("fire_orb").unwrap()).unwrap();
 
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8,
@@ -90,20 +84,29 @@ impl Default for RendererResources {
         let yiq_framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::RGBA32F,
             TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::LINEAR_MIPMAP_LINEAR, gl::NEAREST));
 
+        // Load shaders
+        let mut shaders = world.get_resource_mut::<ShaderManager>().expect("Failed to get shader manager");
+        let sky_shader = shaders.get("sky").unwrap().clone();
+        let ps1_tess_shader = shaders.get("ps1_tess").unwrap().clone();
+        let ps1_no_tess_shader = shaders.get("ps1_no_tess").unwrap().clone();
+        let composite_yiq_shader = shaders.get("composite_yiq").unwrap().clone();
+        let composite_resolve_shader = shaders.get("composite_resolve").unwrap().clone();
+        let blit_shader = shaders.get("blit").unwrap().clone();
+
         RendererResources {
             full_screen_rect,
-            sky_shader,
             sky_texture,
-            ps1_shader,
-            ps1_shader_tess,
-            blit_shader,
-            composite_yiq_shader,
-            composite_resolve_shader,
             demo_scene_model,
             fire_orb_model,
             ubo_global,
             framebuffer,
-            yiq_framebuffer
+            yiq_framebuffer,
+            sky_shader,
+            ps1_tess_shader,
+            ps1_no_tess_shader,
+            composite_yiq_shader,
+            composite_resolve_shader,
+            blit_shader
         }
     }
 }
