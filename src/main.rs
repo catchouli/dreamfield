@@ -6,7 +6,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
-use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position};
+use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position, ScreenEffect, RunTime};
 use dreamfield_renderer::resources::ModelManager;
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
@@ -66,12 +66,16 @@ fn init_renderer(world: &mut World) -> Schedule {
 
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
-    // Create world entity
+    // Create world
     world.spawn()
         .insert(Position::new(vec3(0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("demo_scene", true, Animation::Loop("Idle".to_string())));
 
-    // Create player entity
+    // Create sky
+    world.spawn()
+        .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
+
+    // Create player
     world.spawn()
         // Entrance to village
         .insert(PlayerCamera::new(vec3(-125.1, 5.8, 123.8), 0.063, 0.099))
@@ -89,7 +93,7 @@ fn init_entities(world: &mut World) {
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         .insert(PlayerMovement::default());
 
-    // Create ball entity
+    // Create fire orb
     world.spawn()
         .insert(Ball::default())
         .insert(Position::new(vec3(-9.0, 0.0, 9.0)))

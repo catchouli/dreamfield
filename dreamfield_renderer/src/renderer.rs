@@ -3,15 +3,15 @@ mod renderer_resources;
 use std::sync::Arc;
 
 use bevy_ecs::schedule::SystemSet;
-use bevy_ecs::system::{Local, Res, Query};
+use bevy_ecs::system::{Local, Res, Query, ResMut};
 use cgmath::Matrix4;
 use crate::gl_backend::*;
 use crate::camera::Camera;
-use crate::resources::ModelManager;
+use crate::resources::{ModelManager, TextureManager, ShaderManager};
 use dreamfield_system::WindowSettings;
 use renderer_resources::{RendererResources, RENDER_WIDTH, RENDER_HEIGHT};
 use dreamfield_system::resources::SimTime;
-use crate::components::{PlayerCamera, Position, Visual};
+use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime};
 
 /// The render systems
 pub fn systems() -> SystemSet {
@@ -21,7 +21,8 @@ pub fn systems() -> SystemSet {
 
 /// The renderer system
 fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
-    sim_time: Res<SimTime>, models: Res<ModelManager>, player_query: Query<&PlayerCamera>,
+    sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
+    mut shaders: ResMut<ShaderManager>, mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
     mut visuals_query: Query<(&Position, &mut Visual)>)
 {
     let local = &mut *local;
@@ -60,11 +61,8 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
-    // Draw background
-    unsafe { gl::Disable(gl::DEPTH_TEST) }
-    local.sky_texture.bind(bindings::TextureSlot::BaseColor);
-    local.sky_shader.use_program();
-    local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+    // Render pre-scene effects
+    render_screen_effects(RunTime::PreScene, local, &mut textures, &mut shaders, &mut effect_query);
 
     // Draw glfw models
     unsafe { gl::Enable(gl::DEPTH_TEST); }
@@ -77,7 +75,7 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
         // Get model, loading it if it isn't already loaded
         let model = {
             // Initialise model if it's not already
-            if visual.model.is_none() {
+            if visual.internal_model.is_none() {
                 // Get reference to model from the renderer resources cache, loading it if it's not in there
                 let model = local.models
                     .entry(visual.model_name.to_string())
@@ -86,14 +84,14 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
                         Arc::new(GltfModel::from_buf(data).unwrap())
                     });
 
-                visual.model = Some(model.clone());
+                visual.internal_model = Some(model.clone());
             }
-            visual.model.as_ref().unwrap()
+            visual.internal_model.as_ref().unwrap()
         };
 
         // Animate model if an animation is playing
         if anim_changed {
-            if let Some(anim_state) = &visual.anim_state {
+            if let Some(anim_state) = &visual.internal_anim_state {
                 let anim_time = anim_state.anim_time;
                 update_animation(&model, &anim_state.cur_anim.name(), anim_time);
             }
@@ -111,6 +109,34 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
         model.render(&transform, ubo_global, ubo_joints, visual.tessellate);
     }
 
+    // Render pre-scene effects
+    render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
+
+    // Run final composite
+    final_composite(local, &window_settings);
+}
+
+/// Render a screen effect
+/// TODO: these aren't that useful for anything but the sky if you can't read the framebuffer :)
+pub fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_manager: &mut ResMut<TextureManager>,
+    shader_manager: &mut ResMut<ShaderManager>, effect_query: &mut Query<&mut ScreenEffect>)
+{
+    unsafe { gl::Disable(gl::DEPTH_TEST); }
+    for mut effect in effect_query.iter_mut() {
+        if effect.run_time == run_time {
+            if let Some(texture) = effect.get_texture(texture_manager.as_mut()) {
+                texture.bind(bindings::TextureSlot::BaseColor);
+            }
+            if let Some(shader) = effect.get_shader(shader_manager.as_mut()) {
+                shader.use_program();
+                local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+            }
+        }
+    }
+}
+
+/// Run final compositing and blit operations, including ntsc composite emulation
+pub fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettings>) {
     // Disable depth test for blitting operations
     unsafe {
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
@@ -147,7 +173,6 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
 }
 
 /// Update an animation
-/// TODO: have some sort of animation updater thingy instead
 pub fn update_animation(model: &GltfModel, name: &str, time: f32) {
     if let Some(anim) = model.animations().get(name) {
         log::trace!("Playing animation {} at time {}", anim.name(), time);

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use bevy_ecs::world::{FromWorld, World};
 use cgmath::{vec3, vec2, Deg, perspective};
-use crate::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel, UniformBuffer, Framebuffer,
+use crate::gl_backend::{Mesh, VertexAttrib, TextureParams, GltfModel, UniformBuffer, Framebuffer,
     GlobalParams, JointParams, ShaderProgram};
-use crate::resources::{ShaderManager, TextureManager};
+use crate::resources::ShaderManager;
 
 pub const RENDER_WIDTH: i32 = 320;
 pub const RENDER_HEIGHT: i32 = 240;
@@ -22,12 +22,10 @@ pub const FOG_END: f32 = FAR_CLIP - 5.0;
 /// The renderer state resource
 pub struct RendererResources {
     pub full_screen_rect: Mesh,
-    pub sky_texture: Arc<Texture>,
     pub ubo_global: UniformBuffer<GlobalParams>,
     pub ubo_joints: UniformBuffer<JointParams>,
     pub framebuffer: Framebuffer,
     pub yiq_framebuffer: Framebuffer,
-    pub sky_shader: Arc<ShaderProgram>,
     pub ps1_tess_shader: Arc<ShaderProgram>,
     pub ps1_no_tess_shader: Arc<ShaderProgram>,
     pub composite_yiq_shader: Arc<ShaderProgram>,
@@ -70,10 +68,6 @@ impl FromWorld for RendererResources {
             VertexAttrib { index: 1, size: 2, attrib_type: gl::FLOAT },
             ]);
 
-        // Load textures
-        let textures = world.get_resource::<TextureManager>().expect("Failed to get texture manager");
-        let sky_texture = textures.get("sky").unwrap().clone();
-
         // Create framebuffer
         let framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT, gl::SRGB8,
             TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::NEAREST, gl::NEAREST));
@@ -82,7 +76,6 @@ impl FromWorld for RendererResources {
 
         // Load shaders
         let mut shaders = world.get_resource_mut::<ShaderManager>().expect("Failed to get shader manager");
-        let sky_shader = shaders.get("sky").unwrap().clone();
         let ps1_tess_shader = shaders.get("ps1_tess").unwrap().clone();
         let ps1_no_tess_shader = shaders.get("ps1_no_tess").unwrap().clone();
         let composite_yiq_shader = shaders.get("composite_yiq").unwrap().clone();
@@ -91,12 +84,10 @@ impl FromWorld for RendererResources {
 
         RendererResources {
             full_screen_rect,
-            sky_texture,
             ubo_global,
             ubo_joints,
             framebuffer,
             yiq_framebuffer,
-            sky_shader,
             ps1_tess_shader,
             ps1_no_tess_shader,
             composite_yiq_shader,
