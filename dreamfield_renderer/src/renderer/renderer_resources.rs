@@ -75,6 +75,8 @@ impl FromWorld for RendererResources {
             TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::LINEAR_MIPMAP_LINEAR, gl::NEAREST));
 
         // Load shaders
+        // TODO: it would be nice if the shaders were specified by components on entities instead
+        // of hardcoded here, and the composite/resolve were converted to screen-space effects
         let mut shaders = world.get_resource_mut::<ShaderManager>().expect("Failed to get shader manager");
         let ps1_tess_shader = shaders.get("ps1_tess").unwrap().clone();
         let ps1_no_tess_shader = shaders.get("ps1_no_tess").unwrap().clone();
