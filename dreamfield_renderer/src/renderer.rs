@@ -26,8 +26,12 @@ pub const FOV: f32 = 60.0;
 pub const NEAR_CLIP: f32 = 0.1;
 pub const FAR_CLIP: f32 = 35.0;
 
+// Calculated values
 pub const FOG_START: f32 = FAR_CLIP - 10.0;
 pub const FOG_END: f32 = FAR_CLIP - 5.0;
+
+pub const FOV_RADIANS: f32 = FOV * std::f32::consts::PI / 180.0;
+pub const HALF_FOV_RADIANS: f32 = FOV_RADIANS / 2.0;
 
 /// The render systems
 pub fn systems() -> SystemSet {
@@ -116,51 +120,39 @@ fn draw_world(local: &mut RendererResources, world: &mut ResMut<WorldChunkManage
     // out those two points in the distance.
     //
     // To do this, we can divide this triangle into two right-angle triangles, where the line from
-    // the camera position to the point straight ahead of the camera on the far clip plane form one
-    // edge, and the hypotenuse of each triangle then points from the camera position to the corner
-    // of the far clip plane.
+    // the camera position to the point `far_point` straight ahead of the camera on the far clip plane
+    // forms one edge, and the clip plane corners form the third point on each triangle.
     //
-    // To figure out the corner points, we then rotate the forward vector of the camera by half of
-    // the FOV to get a direction to it, and then use trigonometry to work out the length of the
-    // hypotenuse:
-    //   cos(fov / 2) = FAR / corner_dist
-    //   corner_dist = FAR / cos(fov / 2)
-    //   triangle_corner = camera_pos + triangle_edge_dir * corner_dist
-    let half_fov = FOV / 2.0;
+    // To figure out the corner points, we then first figure out what far point is, and then rotate
+    // the forward vector by 90 degrees to get right_xz:
+    let far_point = pos_xz + forward_xz * FAR_CLIP;
+    let right_xz = vec2(-forward_xz.y, forward_xz.x);
 
-    let triangle_edge_dir_1 = vec2(
-        forward_xz.x * f32::cos(half_fov) - forward_xz.y * f32::sin(half_fov),
-        forward_xz.x * f32::sin(half_fov) + forward_xz.y * f32::cos(half_fov)
-    ).normalize();
-    let triangle_edge_dir_2 = vec2(
-        forward_xz.x * f32::cos(-half_fov) - forward_xz.y * f32::sin(-half_fov),
-        forward_xz.x * f32::sin(-half_fov) + forward_xz.y * f32::cos(-half_fov)
-    ).normalize();
+    // We then calculate the "half width" of the far clip plane using trigonometry, which is the
+    // distance between far_point and the corner point.
+    // This can't be a const right now but it could be if f32::tan was...
+    let far_clip_half_width: f32 = FAR_CLIP * f32::tan(HALF_FOV_RADIANS);
 
-    let corner_dist = FAR_CLIP / f32::cos(half_fov);
-
-    let triangle_corner_1 = pos_xz + triangle_edge_dir_1 * corner_dist;
-    let triangle_corner_2 = pos_xz + triangle_edge_dir_2 * corner_dist;
+    // And then we multiply this by the right vector and add it to get the corner point, and then
+    // do the opposite to get the other corner point.
+    let corner_a = far_point + right_xz * far_clip_half_width;
+    let corner_b = far_point - right_xz * far_clip_half_width;
 
     // Then, take the min and max of all three points, and use it to create an AABB for the view.
     // We can then draw all world chunks that intersect this AABB. As an optimization, we could
     // draw only the ones that are actually within the triangle, but I don't think it's necessary.
     let view_aabb_min = vec2(
-        f32::min(pos_xz.x, f32::min(triangle_corner_1.x, triangle_corner_2.x)),
-        f32::min(pos_xz.y, f32::min(triangle_corner_1.y, triangle_corner_2.y))
+        f32::min(pos_xz.x, f32::min(corner_a.x, corner_b.x)),
+        f32::min(pos_xz.y, f32::min(corner_a.y, corner_b.y))
     );
     let view_aabb_max = vec2(
-        f32::max(pos_xz.x, f32::max(triangle_corner_1.x, triangle_corner_2.x)),
-        f32::max(pos_xz.y, f32::max(triangle_corner_1.y, triangle_corner_2.y))
+        f32::max(pos_xz.x, f32::max(corner_a.x, corner_b.x)),
+        f32::max(pos_xz.y, f32::max(corner_a.y, corner_b.y))
     );
 
     // Get chunk indexes at corners
     let (view_min_chunk_x, view_min_chunk_z) = WorldChunk::point_to_chunk_index_2d(&view_aabb_min);
     let (view_max_chunk_x, view_max_chunk_z) = WorldChunk::point_to_chunk_index_2d(&view_aabb_max);
-
-    let chunk_count = (view_max_chunk_x - view_min_chunk_x) * (view_max_chunk_z - view_min_chunk_z);
-
-    println!("drawing chunks from {}, {} to {}, {} ({} chunks)", view_min_chunk_x, view_min_chunk_z, view_max_chunk_x, view_max_chunk_z, chunk_count);
 
     for chunk_x in view_min_chunk_x..=view_max_chunk_x {
         for chunk_z in view_min_chunk_z..=view_max_chunk_z {
