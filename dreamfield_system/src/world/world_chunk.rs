@@ -1,4 +1,4 @@
-use cgmath::Vector3;
+use cgmath::{Vector3, Vector2};
 use speedy::{Readable, Writable};
 use super::aabb::Aabb;
 
@@ -66,7 +66,13 @@ impl WorldChunk {
         }
     }
 
-    /// Get the chunk index for a point
+    /// Get the chunk index for a 2d point
+    pub fn point_to_chunk_index_2d(point: &Vector2<f32>) -> ChunkIndex {
+        (f32::floor(point.x / CHUNK_SIZE as f32) as i32,
+         f32::floor(point.y / CHUNK_SIZE as f32) as i32)
+    }
+
+    /// Get the chunk index for a 3d point
     pub fn point_to_chunk_index(point: &Vector3<f32>) -> ChunkIndex {
         (f32::floor(point.x / CHUNK_SIZE as f32) as i32,
          f32::floor(point.z / CHUNK_SIZE as f32) as i32)

@@ -5,19 +5,7 @@ use cgmath::{vec3, vec2, Deg, perspective};
 use crate::gl_backend::{Mesh, VertexAttrib, TextureParams, GltfModel, UniformBuffer, Framebuffer,
     GlobalParams, JointParams, ShaderProgram};
 use crate::resources::ShaderManager;
-
-pub const RENDER_WIDTH: i32 = 320;
-pub const RENDER_HEIGHT: i32 = 240;
-
-pub const RENDER_ASPECT: f32 = 4.0 / 3.0;
-
-pub const FOV: f32 = 60.0;
-
-pub const NEAR_CLIP: f32 = 0.1;
-pub const FAR_CLIP: f32 = 35.0;
-
-pub const FOG_START: f32 = FAR_CLIP - 10.0;
-pub const FOG_END: f32 = FAR_CLIP - 5.0;
+use super::{FOG_START, FOG_END, RENDER_ASPECT, RENDER_WIDTH, RENDER_HEIGHT, FOV, NEAR_CLIP, FAR_CLIP};
 
 /// The renderer state resource
 pub struct RendererResources {
