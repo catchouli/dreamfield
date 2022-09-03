@@ -31,7 +31,8 @@ pub struct RendererResources {
     pub composite_yiq_shader: Arc<ShaderProgram>,
     pub composite_resolve_shader: Arc<ShaderProgram>,
     pub blit_shader: Arc<ShaderProgram>,
-    pub models: HashMap<String, Arc<GltfModel>>
+    pub models: HashMap<String, Arc<GltfModel>>,
+    pub world_meshes: HashMap<i32, Mesh>
 }
 
 impl FromWorld for RendererResources {
@@ -95,7 +96,8 @@ impl FromWorld for RendererResources {
             composite_yiq_shader,
             composite_resolve_shader,
             blit_shader,
-            models: HashMap::new()
+            models: HashMap::new(),
+            world_meshes: HashMap::new()
         }
     }
 }

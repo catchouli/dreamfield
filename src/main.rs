@@ -7,7 +7,6 @@ use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position, ScreenEffect, RunTime};
-use dreamfield_renderer::resources::ModelManager;
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
 
@@ -31,10 +30,7 @@ fn init_sim(world: &mut World) -> Schedule {
     // Sim resources
     world.insert_resource(InputState::new());
     world.insert_resource(SimTime::new(0.0, FIXED_UPDATE_TIME));
-    world.insert_resource({
-        let models = world.get_resource::<ModelManager>().expect("Failed to get model manager");
-        LevelCollision::new(models.get("demo_scene").unwrap())
-    });
+    world.init_resource::<LevelCollision>();
 
     // Create update schedule
     let mut update_schedule = Schedule::default();
@@ -53,6 +49,7 @@ fn init_renderer(world: &mut World) -> Schedule {
     world.insert_resource(resources::create_shader_manager());
     world.insert_resource(resources::create_texture_manager());
     world.insert_resource(resources::create_model_manager());
+    world.insert_resource(resources::create_world_chunk_manager());
 
     // Create render schedule
     let mut render_schedule = Schedule::default();
@@ -67,9 +64,21 @@ fn init_renderer(world: &mut World) -> Schedule {
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
     // Create world
-    world.spawn()
-        .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-        .insert(Visual::new_with_anim("demo_scene", true, Animation::Loop("Idle".to_string())));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("scene_a", true));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("scene_b", true));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("scene_c", true));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("scene_d", true));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("scene_e", true));
 
     // Create sky
     world.spawn()
@@ -78,7 +87,7 @@ fn init_entities(world: &mut World) {
     // Create player
     world.spawn()
         // Entrance to village
-        .insert(PlayerCamera::new(vec3(-125.1, 5.8, 123.8), 0.063, 0.099))
+        //.insert(PlayerCamera::new(vec3(-125.1, 5.8, 123.8), 0.063, 0.099))
         // Entrance to cathedral
         //.insert(PlayerCamera::new(vec3(-99.988, 6.567, 75.533), -0.0367, 0.8334))
         // In corridor, going out
@@ -88,7 +97,7 @@ fn init_entities(world: &mut World) {
         // Looking at corridor
         //.insert(PlayerCamera::new(vec3(5.2, 0.8, 12.8), 0.03, 2.0))
         // Default dungeon pos
-        //.insert(PlayerCamera::new(vec3(0.0, 1.0, 10.0), -0.17, 0.0))
+        .insert(PlayerCamera::new(vec3(0.0, 1.0, 10.0), -0.17, 0.0))
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         .insert(PlayerMovement::default());

@@ -9,6 +9,16 @@ pub enum UniformBlockBinding {
     JointParams = 4
 }
 
+pub enum AttribBinding {
+    Positions = 0,
+    Normals = 1,
+    TexCoords = 3,
+    Tangents = 4,
+    Colors = 5,
+    Joints = 6,
+    Weights = 7
+}
+
 pub enum TextureSlot {
     BaseColor = 0
 }

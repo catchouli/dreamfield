@@ -1,6 +1,16 @@
 use dreamfield_renderer::resources::{ShaderManager, TextureManager, ModelManager};
 use dreamfield_renderer::gl_backend::TextureParams;
 use dreamfield_macros::*;
+use dreamfield_system::world::WorldChunkManager;
+use include_dir::{include_dir, Dir};
+
+/// The world chunks
+pub const WORLD_CHUNKS: Dir<'_> = include_dir!("target/world_chunks");
+
+/// Create the world chunk manager
+pub fn create_world_chunk_manager() -> WorldChunkManager {
+    WorldChunkManager::new(&WORLD_CHUNKS)
+}
 
 /// Create the shader manager
 pub fn create_shader_manager() -> ShaderManager {
@@ -26,5 +36,10 @@ pub fn create_model_manager() -> ModelManager {
     ModelManager::new_with_models(vec![
         ("demo_scene", include_bytes!("../resources/models/demo_scene.glb")),
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
+        ("scene_a", include_bytes!("../resources/models/scene_a.glb")),
+        ("scene_b", include_bytes!("../resources/models/scene_b.glb")),
+        ("scene_c", include_bytes!("../resources/models/scene_c.glb")),
+        ("scene_d", include_bytes!("../resources/models/scene_d.glb")),
+        ("scene_e", include_bytes!("../resources/models/scene_e.glb")),
     ])
 }

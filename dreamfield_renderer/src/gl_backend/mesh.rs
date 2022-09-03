@@ -29,7 +29,7 @@ impl Mesh {
     }
 
     /// Create a new Mesh from a vertex buffer and an index buffer
-    pub fn new_indexed(vertex_buffer: &[f32], index_buffer: &[i32], buffer_layout: &[VertexAttrib]) -> Mesh {
+    pub fn new_indexed(vertex_buffer: &[f32], index_buffer: &[u32], buffer_layout: &[VertexAttrib]) -> Mesh {
         // Create and bind a vao
         let vao = Mesh::create_vao();
 
@@ -74,16 +74,16 @@ impl Mesh {
         }
     }
 
-    /// Create an ebo from a &[i32]
-    fn create_ebo(element_buffer: &[i32]) -> u32 {
+    /// Create an ebo from a &[u32]
+    fn create_ebo(element_buffer: &[u32]) -> u32 {
         unsafe {
             let mut ebo = 0;
             gl::GenBuffers(1, &mut ebo);
 
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
             gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
-                           (element_buffer.len() * std::mem::size_of::<i32>()) as GLsizeiptr,
-                           &element_buffer[0] as *const i32 as *const GLvoid,
+                           (element_buffer.len() * std::mem::size_of::<u32>()) as GLsizeiptr,
+                           &element_buffer[0] as *const u32 as *const GLvoid,
                            gl::STATIC_DRAW);
             ebo
         }

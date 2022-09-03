@@ -1,5 +1,6 @@
 pub mod input;
 pub mod resources;
+pub mod world;
 mod fixed_timestep;
 mod glfw_system;
 mod game_host;

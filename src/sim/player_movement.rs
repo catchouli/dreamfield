@@ -1,8 +1,9 @@
 use std::f32::consts::PI;
 
 use bevy_ecs::component::Component;
-use bevy_ecs::system::{Res, Query};
+use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, InnerSpace};
+use dreamfield_system::world::WorldChunkManager;
 
 use super::level_collision::LevelCollision;
 use dreamfield_renderer::components::{PlayerCamera, Camera};
@@ -41,8 +42,8 @@ impl Default for PlayerMovement {
 }
 
 /// The player update system
-pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<InputState>, sim_time: Res<SimTime>,
-    mut query: Query<(&mut PlayerCamera, &mut PlayerMovement)>)
+pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: ResMut<WorldChunkManager>,
+    input_state: Res<InputState>, sim_time: Res<SimTime>, mut query: Query<(&mut PlayerCamera, &mut PlayerMovement)>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 
@@ -76,7 +77,7 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
         // Update velocity with cam movement and gravity
         player_movement.velocity.x = cam_movement.x;
         player_movement.velocity.z = cam_movement.z;
-        player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
+        //player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
         let mut pos = *camera.pos();
@@ -88,7 +89,7 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
         let mut movement = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
         for _ in 0..2 {
             if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-                movement = resolve_horizontal_movement(level_collision.as_ref(), &pos, &movement);
+                movement = resolve_horizontal_movement(level_collision.as_mut(), world.as_mut(), &pos, &movement);
             }
         }
         pos += movement;
@@ -96,8 +97,8 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
         // Resolve vertical motion
         if player_movement.velocity.y < 0.0 {
             let movement_y = player_movement.velocity.y * time_delta;
-            (pos, player_movement.velocity.y) = resolve_vertical_movement(level_collision.as_ref(), &pos,
-                &player_movement.velocity, &movement_y);
+            (pos, player_movement.velocity.y) = resolve_vertical_movement(level_collision.as_mut(), world.as_mut(),
+                &pos, &player_movement.velocity, &movement_y);
         }
 
         // Bump out of wall
@@ -111,7 +112,7 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
 
             let collider_dir = vec3(x_offset, 0.0, z_offset);
 
-            if let Some(hit) = level_collision.raycast_normal(&pos, &collider_dir, BUMP_RADIUS) {
+            if let Some(hit) = level_collision.raycast_normal(world.as_mut(), &pos, &collider_dir, BUMP_RADIUS) {
                 pos = pos + (hit.toi - BUMP_RADIUS) * collider_dir;
             }
         }
@@ -122,14 +123,14 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
     }
 }
 
-fn resolve_vertical_movement(level_collision: &LevelCollision, pos: &Vector3<f32>, vel: &Vector3<f32>, movement_y: &f32)
-    -> (Vector3<f32>, f32)
+fn resolve_vertical_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
+    vel: &Vector3<f32>, movement_y: &f32) -> (Vector3<f32>, f32)
 {
     let movement_y_len = f32::abs(*movement_y);
     let movement_y_dir = vec3(0.0, -1.0, 0.0);
 
     let stop_dist = level_collision
-        .raycast(pos, &movement_y_dir, movement_y_len + CHAR_HEIGHT)
+        .raycast(world, pos, &movement_y_dir, movement_y_len + CHAR_HEIGHT)
         .map(|toi| toi - CHAR_HEIGHT);
 
     match stop_dist {
@@ -142,8 +143,8 @@ fn resolve_vertical_movement(level_collision: &LevelCollision, pos: &Vector3<f32
     }
 }
 
-fn resolve_horizontal_movement(level_collision: &LevelCollision, pos: &Vector3<f32>, movement: &Vector3<f32>)
-    -> Vector3<f32>
+fn resolve_horizontal_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
+    movement: &Vector3<f32>) -> Vector3<f32>
 {
     let movement_len = movement.magnitude();
     let movement_dir = movement / movement_len;
@@ -151,7 +152,7 @@ fn resolve_horizontal_movement(level_collision: &LevelCollision, pos: &Vector3<f
     let ray_start = pos;
     let ray_dist = movement_len;
 
-    match level_collision.raycast_normal(&ray_start, &movement_dir, ray_dist) {
+    match level_collision.raycast_normal(world, &ray_start, &movement_dir, ray_dist) {
         Some(ray_hit) => {
             let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
 

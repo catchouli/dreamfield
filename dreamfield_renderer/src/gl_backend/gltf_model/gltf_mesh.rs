@@ -3,7 +3,7 @@ use super::GltfMaterial;
 use super::Texture;
 use gltf::{Semantic, material::AlphaMode};
 use serde::{Deserialize, Serialize, Deserializer};
-use crate::gl_backend::bindings;
+use crate::gl_backend::bindings::{TextureSlot, AttribBinding};
 use gl::types::GLvoid;
 
 /// A gltf mesh
@@ -185,13 +185,13 @@ impl GltfMesh {
     /// Get the attribute index of a primitive
     fn attribute_index(prim_type: &gltf::Semantic) -> u32 {
         match prim_type {
-            Semantic::Positions => 0,
-            Semantic::Normals => 1,
-            Semantic::TexCoords(_) => 3,
-            Semantic::Tangents => 4,
-            Semantic::Colors(_) => 5,
-            Semantic::Joints(_) => 6,
-            Semantic::Weights(_) => 7,
+            Semantic::Positions => AttribBinding::Positions as u32,
+            Semantic::Normals => AttribBinding::Normals as u32,
+            Semantic::TexCoords(_) => AttribBinding::TexCoords as u32,
+            Semantic::Tangents => AttribBinding::Tangents as u32,
+            Semantic::Colors(_) => AttribBinding::Colors as u32,
+            Semantic::Joints(_) => AttribBinding::Joints as u32,
+            Semantic::Weights(_) => AttribBinding::Weights as u32,
             Semantic::Extras(_) => 8
         }
     }
@@ -224,7 +224,7 @@ impl GltfMeshPrimitive {
 
         // Bind textures, or unbind if None
         if let Some(texture) = &self.base_color_texture {
-            texture.bind(bindings::TextureSlot::BaseColor);
+            texture.bind(TextureSlot::BaseColor);
         }
 
         // Indexed draw

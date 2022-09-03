@@ -396,9 +396,11 @@ dependencies = [
  "glfw",
  "gltf",
  "image 0.24.3",
+ "include_dir",
  "log",
  "nalgebra 0.31.1",
  "ncollide3d",
+ "speedy",
  "std140",
 ]
 
@@ -440,9 +442,14 @@ name = "dreamfield_system"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
+ "byteorder",
+ "cgmath",
  "gl",
  "glfw",
+ "gltf",
+ "include_dir",
  "log",
+ "speedy",
 ]
 
 [[package]]
@@ -757,6 +764,25 @@ dependencies = [
  "png 0.17.5",
  "scoped_threadpool",
  "tiff",
+]
+
+[[package]]
+name = "include_dir"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "482a2e29200b7eed25d7fdbd14423326760b7f6658d21a4cf12d55a50713c69f"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e074c19deab2501407c91ba1860fa3d6820bfde307db6d8cb851b55a10be89b"
+dependencies = [
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]
@@ -1296,18 +1322,18 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "serde"
-version = "1.0.143"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e8e5d5b70924f74ff5c6d64d9a5acd91422117c60f48c4e07855238a254553"
+checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.143"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3d8e8de557aee63c26b85b947f5e59b690d0454c753f3adeb5cd7835ab88391"
+checksum = "94ed3a816fb1d101812f83e789f888322c34e291f894f19590dc310963e87a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1361,6 +1387,26 @@ name = "smallvec"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
+
+[[package]]
+name = "speedy"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f45b0970d87b76e449484d8a530a9c48ad04df2645d9af2148a74b82f368fa1"
+dependencies = [
+ "speedy-derive",
+]
+
+[[package]]
+name = "speedy-derive"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d56cb212a4b09de6561bac41bc36dc810fd41faf24b0a8aa1374062546af0a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "spin"

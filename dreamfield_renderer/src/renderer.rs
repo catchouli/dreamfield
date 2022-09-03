@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use bevy_ecs::schedule::SystemSet;
 use bevy_ecs::system::{Local, Res, Query, ResMut};
-use cgmath::Matrix4;
+use cgmath::{SquareMatrix, Matrix4};
+use dreamfield_system::world::world_chunk::WorldChunk;
+use renderer_resources::{RendererResources, RENDER_WIDTH, RENDER_HEIGHT};
 use crate::gl_backend::*;
+use crate::gl_backend::bindings::AttribBinding;
 use crate::camera::Camera;
 use crate::resources::{ModelManager, TextureManager, ShaderManager};
-use dreamfield_system::WindowSettings;
-use renderer_resources::{RendererResources, RENDER_WIDTH, RENDER_HEIGHT};
-use dreamfield_system::resources::SimTime;
 use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime};
+use dreamfield_system::WindowSettings;
+use dreamfield_system::world::WorldChunkManager;
+use dreamfield_system::resources::SimTime;
 
 /// The render systems
 pub fn systems() -> SystemSet {
@@ -22,7 +25,8 @@ pub fn systems() -> SystemSet {
 /// The renderer system
 fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
-    mut shaders: ResMut<ShaderManager>, mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
+    mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
+    mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
     mut visuals_query: Query<(&Position, &mut Visual)>)
 {
     let local = &mut *local;
@@ -64,7 +68,81 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     // Render pre-scene effects
     render_screen_effects(RunTime::PreScene, local, &mut textures, &mut shaders, &mut effect_query);
 
-    // Draw glfw models
+    // Draw world
+
+    // Draw visuals
+    draw_visuals(local, &sim_time, &models, &mut visuals_query);
+    draw_world(local, &mut world, &player_camera);
+
+    // Render pre-scene effects
+    render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
+
+    // Run final composite
+    final_composite(local, &window_settings);
+}
+
+/// Draw the world
+fn draw_world(local: &mut RendererResources, world: &mut ResMut<WorldChunkManager>, camera: &PlayerCamera) {
+    unsafe { gl::Enable(gl::DEPTH_TEST); }
+    local.ps1_tess_shader.use_program();
+
+    local.ubo_global.set_mat_model_derive(&Matrix4::identity());
+    local.ubo_global.upload_changed();
+
+    // Get camera pos
+    let pos = camera.camera.pos();
+
+    // Get current chunk
+    let chunk_index = WorldChunk::point_to_chunk_index(pos);
+    let chunk = world.get_chunk(chunk_index);
+
+    // Render current chunk
+    if let Some(chunk) = &chunk {
+        // Render each mesh in chunk
+        for mesh in chunk.meshes().iter() {
+            // Get or load gl mesh
+            let gl_mesh = local.world_meshes
+                .entry(mesh.index())
+                .or_insert_with(|| {
+                    // TODO: pregenerate them as u32, or just load them as u16
+                    let index_buffer = mesh.indices().iter().map(|i| *i as u32).collect::<Vec<u32>>();
+                    let buffer_layout = vec![
+                        VertexAttrib {
+                            index: AttribBinding::Positions as u32,
+                            attrib_type: gl::FLOAT,
+                            size: 3
+                        },
+                        VertexAttrib {
+                            index: AttribBinding::Normals as u32,
+                            attrib_type: gl::FLOAT,
+                            size: 3
+                        },
+                        VertexAttrib {
+                            index: AttribBinding::TexCoords as u32,
+                            attrib_type: gl::FLOAT,
+                            size: 2
+                        },
+                        VertexAttrib {
+                            index: AttribBinding::Colors as u32,
+                            attrib_type: gl::FLOAT,
+                            size: 4
+                        }
+                    ];
+                    let mesh = Mesh::new_indexed(mesh.vertices(), &index_buffer, &buffer_layout);
+
+                    mesh
+                });
+
+            // TODO: draw mesh
+            gl_mesh.draw_indexed(gl::PATCHES, mesh.indices().len() as i32);
+        }
+    }
+}
+
+/// Draw the visuals
+fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: &Res<ModelManager>,
+    visuals_query: &mut Query<(&Position, &mut Visual)>)
+{
     unsafe { gl::Enable(gl::DEPTH_TEST); }
 
     let ubo_global = &mut local.ubo_global;
@@ -108,12 +186,6 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
         let transform = Matrix4::from_translation(pos.pos);
         model.render(&transform, ubo_global, ubo_joints, visual.tessellate);
     }
-
-    // Render pre-scene effects
-    render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
-
-    // Run final composite
-    final_composite(local, &window_settings);
 }
 
 /// Render a screen effect
