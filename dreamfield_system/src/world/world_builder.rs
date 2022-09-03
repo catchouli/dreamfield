@@ -2,7 +2,7 @@ use super::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex, CHUNK_SIZE, VER
 use super::aabb::Aabb;
 use std::{collections::HashMap, path::Path};
 use gltf::{import_slice, buffer, image, Semantic, Node};
-use cgmath::{Matrix4, SquareMatrix, Vector3, vec4, vec3, vec2, Vector2, InnerSpace};
+use cgmath::{Matrix4, SquareMatrix, Vector3, vec4, vec3, vec2, InnerSpace};
 use byteorder::{ReadBytesExt, LittleEndian};
 use speedy::Writable;
 use crate::build_log;
@@ -218,8 +218,8 @@ impl WorldBuilder {
                         for z in chunk_z_min..=chunk_z_max {
                             let chunk = self.get_chunk((x, z));
 
-                            let chunk_bounds_min = vec2(x as f32 * CHUNK_SIZE, z as f32 * CHUNK_SIZE);
-                            let chunk_bounds_max = chunk_bounds_min + vec2(CHUNK_SIZE, CHUNK_SIZE);
+                            let chunk_bounds_min = vec3(x as f32 * CHUNK_SIZE, -1000.0, z as f32 * CHUNK_SIZE);
+                            let chunk_bounds_max = vec3(chunk_bounds_min.x + CHUNK_SIZE, 1000.0, chunk_bounds_min.z + CHUNK_SIZE);
 
                             // Build vertex and index buffer for this chunk
                             let mut chunk_mesh_aabb = Aabb::new();
@@ -230,19 +230,19 @@ impl WorldBuilder {
                             // going to be filtering some of them out and need to remap them
                             let mut chunk_index_map: HashMap<u16, u16> = HashMap::new();
 
+                            // Insert a vertex into the new mesh, returning the index of the vertex
                             let mut insert_chunk_mesh_vertex = |data: &[f32]| -> u16 {
                                 let index = (chunk_mesh_vertices.len() / VERTEX_STRIDE) as u16;
 
-                                //build_log!("inserting vertex at position {}", index);
-
                                 for i in 0..VERTEX_STRIDE {
-                                    //build_log!("  inserting data {}", data[i]);
                                     chunk_mesh_vertices.push(data[i]);
                                 }
 
                                 index
                             };
 
+                            // Iterate through each triangle in the original mesh and build a mesh of just triangles
+                            // that intersect or are contained within the chunk's aabb
                             assert!(vertices.len() % VERTEX_STRIDE == 0);
                             assert!(indices.len() % INDEX_STRIDE == 0);
                             for tri in indices.chunks_exact(INDEX_STRIDE) {
@@ -262,80 +262,7 @@ impl WorldBuilder {
                                 let v2 = vec3(v2_data[0], v2_data[1], v2_data[2]);
                                 let v3 = vec3(v3_data[0], v3_data[1], v3_data[2]);
 
-                                // SAT test for aabb:triangle
-                                let intersects = || -> bool {
-                                    let aabb_min = vec3(chunk_bounds_min.x, -50.0, chunk_bounds_min.y);
-                                    let aabb_max = vec3(chunk_bounds_max.x, 50.0, chunk_bounds_max.y);
-
-                                    //panic!("tri: {:?}, {:?}, {:?}", v1, v2, v3);
-                                    //panic!("chunk: {:?}, min: {:?}, max: {:?}", (x, z), aabb_min, aabb_max);
-
-                                    // Convert AABB to center-extents form
-                                    let e = 0.5 * (aabb_max - aabb_min);
-                                    let c = 0.5 * (aabb_max + aabb_min);
-
-                                    //panic!("aabb center: {c:?}, extents: {e:?}");
-
-                                    // Translate triangle as conceptually moving aabb to origin
-                                    let v0 = v1 - c;
-                                    let v1 = v2 - c;
-                                    let v2 = v3 - c;
-
-                                    // Compute the edge vectors of the triangle
-                                    let f0 = v1 - v0;
-                                    let f1 = v2 - v1;
-                                    let f2 = v0 - v2;
-
-                                    // Compute face normals of the aabb
-                                    let u0 = Vector3::new(1.0, 0.0, 0.0);
-                                    let u1 = Vector3::new(0.0, 1.0, 0.0);
-                                    let u2 = Vector3::new(0.0, 0.0, 1.0);
-
-                                    // Compute first 9 axes
-                                    let axis_u0_f0 = u0.cross(f0);
-                                    let axis_u0_f1 = u0.cross(f1);
-                                    let axis_u0_f2 = u0.cross(f2);
-
-                                    let axis_u1_f0 = u1.cross(f0);
-                                    let axis_u1_f1 = u1.cross(f1);
-                                    let axis_u1_f2 = u1.cross(f2);
-
-                                    let axis_u2_f0 = u2.cross(f0);
-                                    let axis_u2_f1 = u2.cross(f1);
-                                    let axis_u2_f2 = u2.cross(f2);
-
-                                    // Do sat tests
-                                    let axis_separated = |axis: &Vector3<f32>| -> bool {
-                                        let p0 = v0.dot(*axis);
-                                        let p1 = v1.dot(*axis);
-                                        let p2 = v2.dot(*axis);
-
-                                        let r = e.x * f32::abs(u0.dot(*axis)) +
-                                                e.y * f32::abs(u1.dot(*axis)) +
-                                                e.z * f32::abs(u2.dot(*axis));
-
-                                        f32::max(-f32::max(p0, f32::max(p1, p2)), f32::min(p0, f32::min(p1, p2))) > r
-                                    };
-
-                                    if axis_separated(&axis_u0_f0) { return false; }
-                                    else if axis_separated(&axis_u0_f1) { return false; }
-                                    else if axis_separated(&axis_u0_f2) { return false; }
-                                    else if axis_separated(&axis_u1_f0) { return false; }
-                                    else if axis_separated(&axis_u1_f1) { return false; }
-                                    else if axis_separated(&axis_u1_f2) { return false; }
-                                    else if axis_separated(&axis_u2_f0) { return false; }
-                                    else if axis_separated(&axis_u2_f1) { return false; }
-                                    else if axis_separated(&axis_u2_f2) { return false; }
-                                    else if axis_separated(&u0) { return false; }
-                                    else if axis_separated(&u1) { return false; }
-                                    else if axis_separated(&u2) { return false; }
-                                    else if axis_separated(&f0.cross(f1)) { return false; }
-                                    else { return true; }
-                                }();
-
-                                if intersects {
-                                //if Self::tri_intersects_chunk(&chunk_bounds_min, &chunk_bounds_max, &v1, &v2, &v3) {
-                                    build_log!("tri in chunk");
+                                if Self::triangle_intersects_aabb(&chunk_bounds_min, &chunk_bounds_max, &v1, &v2, &v3) {
                                     // And then remap each index into a new place in the vertex buffer.
                                     let i1 = *chunk_index_map
                                         .entry(i1)
@@ -383,113 +310,64 @@ impl WorldBuilder {
         }
     }
 
-    /// Check if a triangle intersects a chunk
-    fn tri_intersects_chunk(chunk_min: &Vector2<f32>, chunk_max: &Vector2<f32>,
-        v1: &Vector3<f32>, v2: &Vector3<f32>, v3: &Vector3<f32>) -> bool
+    /// Check whether a triangle intersects an aabb
+    /// https://gdbooks.gitbooks.io/3dcollisions/content/Chapter4/aabb-triangle.html
+    fn triangle_intersects_aabb(aabb_min: &Vector3<f32>, aabb_max: &Vector3<f32>,
+        a: &Vector3<f32>, b: &Vector3<f32>, c: &Vector3<f32>) -> bool
     {
-        // Convert triangle vertices to 2d
-        let v1 = vec2(v1.x, v1.z);
-        let v2 = vec2(v2.x, v2.z);
-        let v3 = vec2(v3.x, v3.z);
+        // Convert AABB to center-extents form
+        let center = 0.5 * aabb_min + 0.5 * aabb_max;
+        let extents = 0.5 * aabb_max - 0.5 * aabb_min;
 
-        // Get vertices of box
-        let b1 = vec2(chunk_min.x, chunk_min.y);
-        let b2 = vec2(chunk_max.x, chunk_min.y);
-        let b3 = vec2(chunk_max.x, chunk_max.y);
-        let b4 = vec2(chunk_min.x, chunk_max.y);
+        // Translate triangle as conceptually moving aabb to origin
+        let v0 = a - center;
+        let v1 = b - center;
+        let v2 = c - center;
 
-        // A triangle intersects an AABB if either condition is true:
-        // * One or more of the triangle vertices is inside the AABB
-        if Self::point_in_aabb_2d(&chunk_min, &chunk_max, &v1) ||
-           Self::point_in_aabb_2d(&chunk_min, &chunk_max, &v2) || 
-           Self::point_in_aabb_2d(&chunk_min, &chunk_max, &v3)
-        {
-            return true;
-        }
+        // Compute the edge vectors of the triangle
+        let f0 = v1 - v0;
+        let f1 = v2 - v1;
+        let f2 = v0 - v2;
 
-        // * One or more of the AABB vertices is inside the triangle
-        if Self::point_in_tri_2d(&v1, &v2, &v3, &b1) ||
-           Self::point_in_tri_2d(&v1, &v2, &v3, &b2) ||
-           Self::point_in_tri_2d(&v1, &v2, &v3, &b3) ||
-           Self::point_in_tri_2d(&v1, &v2, &v3, &b4)
-        {
-            return true;
-        }
+        // Compute face normals of the aabb (they're just axis aligned)
+        let u0 = Vector3::new(1.0, 0.0, 0.0);
+        let u1 = Vector3::new(0.0, 1.0, 0.0);
+        let u2 = Vector3::new(0.0, 0.0, 1.0);
 
-        // * One of the triangle's edges intersects one of the AABB's edges
-        if Self::line_segments_intersect(&v1, &v2, &b1, &b2) ||
-           Self::line_segments_intersect(&v1, &v2, &b2, &b3) ||
-           Self::line_segments_intersect(&v1, &v2, &b3, &b4) ||
-           Self::line_segments_intersect(&v1, &v2, &b4, &b1) ||
-           Self::line_segments_intersect(&v2, &v3, &b1, &b2) ||
-           Self::line_segments_intersect(&v2, &v3, &b2, &b3) ||
-           Self::line_segments_intersect(&v2, &v3, &b3, &b4) ||
-           Self::line_segments_intersect(&v2, &v3, &b4, &b1) ||
-           Self::line_segments_intersect(&v3, &v1, &b1, &b2) ||
-           Self::line_segments_intersect(&v3, &v1, &b2, &b3) ||
-           Self::line_segments_intersect(&v3, &v1, &b3, &b4) ||
-           Self::line_segments_intersect(&v3, &v1, &b4, &b1)
-        {
-            return true;
-        }
+        // A helper function for doing SAT tests of a given axis against the triangle
+        let axis_separated = |axis: Vector3<f32>| -> bool {
+            let p0 = v0.dot(axis);
+            let p1 = v1.dot(axis);
+            let p2 = v2.dot(axis);
 
-        false
-    }
+            let r = extents.x * f32::abs(u0.dot(axis)) +
+                    extents.y * f32::abs(u1.dot(axis)) +
+                    extents.z * f32::abs(u2.dot(axis));
 
-    /// Check if a 2d point is in a triangle
-    fn point_in_tri_2d(a: &Vector2<f32>, b: &Vector2<f32>, c: &Vector2<f32>, point: &Vector2<f32>) -> bool {
-        let (u, v, w) = Self::barycentric_coordinates(a, b, c, point);
+            f32::max(-f32::max(p0, f32::max(p1, p2)), f32::min(p0, f32::min(p1, p2))) > r
+        };
 
-        0.0 <= u && u <= 1.0 &&
-        0.0 <= v && v <= 1.0 &&
-        w >= 0.0
-    }
+        // Do the sat tests for:
+        // * The 9 axes separating the edges of the aabb and the triangle's edges
+        // * The three face normals from the AABB
+        // * The axis of the face normal of the triangle
+        let any_separated =
+            axis_separated(u0.cross(f0)) ||
+            axis_separated(u0.cross(f1)) ||
+            axis_separated(u0.cross(f2)) ||
+            axis_separated(u1.cross(f0)) ||
+            axis_separated(u1.cross(f1)) ||
+            axis_separated(u1.cross(f2)) ||
+            axis_separated(u2.cross(f0)) ||
+            axis_separated(u2.cross(f1)) ||
+            axis_separated(u2.cross(f2)) ||
+            axis_separated(u0) ||
+            axis_separated(u1) ||
+            axis_separated(u2) ||
+            axis_separated(f0.cross(f1));
 
-    /// Check if a 2d point is in an axis-aligned rectangle
-    fn point_in_aabb_2d(min: &Vector2<f32>, max: &Vector2<f32>, point: &Vector2<f32>) -> bool {
-        min.x <= point.x && point.x <= max.x &&
-        min.y <= point.y && point.y <= max.y
-    }
-
-    /// https://algs4.cs.princeton.edu/91primitives/
-    fn ccw(a: &Vector2<f32>, b: &Vector2<f32>, c: &Vector2<f32>) -> f32 {
-        (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)
-    }
-
-    /// Check if two line segments intersect
-    fn line_segments_intersect(a1: &Vector2<f32>, a2: &Vector2<f32>, b1: &Vector2<f32>, b2: &Vector2<f32>) -> bool {
-        if Self::ccw(a1, a2, b1) * Self::ccw(a1, a2, b2) >= 0.0 {
-            return false;
-        }
-        else if Self::ccw(b1, b2, a1) * Self::ccw(b1, b2, a2) >= 0.0 {
-            return false;
-        }
-        else {
-            return true;
-        }
-    }
-
-    /// Get the barycentric coordinates of a point in a triangle, 2d
-    fn barycentric_coordinates(a: &Vector2<f32>, b: &Vector2<f32>, c: &Vector2<f32>, point: &Vector2<f32>)
-        -> (f32, f32, f32)
-    {
-        // https://gamedev.stackexchange.com/a/23745
-        let v0 = b - a;
-        let v1 = c - a;
-        let v2 = point - a;
-
-        let d00 = v0.dot(v0);
-        let d01 = v0.dot(v1);
-        let d11 = v1.dot(v1);
-        let d20 = v2.dot(v0);
-        let d21 = v2.dot(v1);
-        let denom = d00 * d11 - d01 * d01;
-
-        let v = (d11 * d20 - d01 * d21) / denom;
-        let w = (d00 * d21 - d01 * d20) / denom;
-        let u = 1.0 - v - w;
-
-        (u, v, w)
+        // If any axis was separated, the triangle did not intersect the aabb
+        !any_separated
     }
 
     /// Get the chunk for a given chunk index

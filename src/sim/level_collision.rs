@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use dreamfield_system::world::{world_chunk::{ChunkIndex, VERTEX_STRIDE, INDEX_STRIDE}, WorldChunkManager, CHUNK_SIZE};
+use dreamfield_system::world::{world_chunk::{ChunkIndex, VERTEX_STRIDE, INDEX_STRIDE, WorldChunk}, WorldChunkManager};
 use ncollide3d::{shape::TriMesh, math::{Point, Isometry}, query::{Ray, RayCast, RayIntersection}};
 use cgmath::Vector3;
 
@@ -26,8 +26,9 @@ impl LevelCollision {
             ncollide3d::math::Vector::new(direction.x, direction.y, direction.z));
 
         // Raycast the current chunk's trimeshes
-        let (chunk_x, chunk_z) = (origin.x / CHUNK_SIZE as f32, origin.z / CHUNK_SIZE as f32);
-        if let Some(meshes) = self.get_chunk_meshes(world, (chunk_x as i32, chunk_z as i32)) {
+        // TODO: we probably need to check every chunk along the ray
+        let chunk_index = WorldChunk::point_to_chunk_index(origin);
+        if let Some(meshes) = self.get_chunk_meshes(world, chunk_index) {
             let mut nearest: Option<f32> = None;
 
             for mesh in meshes.iter() {
@@ -55,8 +56,9 @@ impl LevelCollision {
             ncollide3d::math::Vector::new(direction.x, direction.y, direction.z));
 
         // Raycast the current chunk's trimeshes
-        let (chunk_x, chunk_z) = (origin.x / CHUNK_SIZE as f32, origin.z / CHUNK_SIZE as f32);
-        if let Some(meshes) = self.get_chunk_meshes(world, (chunk_x as i32, chunk_z as i32)) {
+        // TODO: we probably need to check every chunk along the ray
+        let chunk_index = WorldChunk::point_to_chunk_index(origin);
+        if let Some(meshes) = self.get_chunk_meshes(world, chunk_index) {
             let mut nearest: Option<RayIntersection<f32>> = None;
 
             for mesh in meshes.iter() {

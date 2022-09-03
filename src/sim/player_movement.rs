@@ -77,7 +77,7 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         // Update velocity with cam movement and gravity
         player_movement.velocity.x = cam_movement.x;
         player_movement.velocity.z = cam_movement.z;
-        //player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
+        player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
         let mut pos = *camera.pos();
