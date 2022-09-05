@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use bevy_ecs::world::{FromWorld, World};
 use cgmath::{vec3, vec2, Deg, perspective};
-use crate::gl_backend::{Mesh, VertexAttrib, TextureParams, GltfModel, UniformBuffer, Framebuffer,
-    GlobalParams, JointParams, ShaderProgram};
+use crate::gl_backend::{Mesh, VertexAttrib, Texture, TextureParams, GltfModel, UniformBuffer, Framebuffer,
+    GlobalParams, JointParams, ShaderProgram, MaterialParams};
 use crate::resources::ShaderManager;
 use super::{FOG_START, FOG_END, RENDER_ASPECT, RENDER_WIDTH, RENDER_HEIGHT, FOV, NEAR_CLIP, FAR_CLIP};
 
@@ -12,6 +12,7 @@ pub struct RendererResources {
     pub full_screen_rect: Mesh,
     pub ubo_global: UniformBuffer<GlobalParams>,
     pub ubo_joints: UniformBuffer<JointParams>,
+    pub ubo_material: UniformBuffer<MaterialParams>,
     pub framebuffer: Framebuffer,
     pub yiq_framebuffer: Framebuffer,
     pub ps1_tess_shader: Arc<ShaderProgram>,
@@ -20,7 +21,8 @@ pub struct RendererResources {
     pub composite_resolve_shader: Arc<ShaderProgram>,
     pub blit_shader: Arc<ShaderProgram>,
     pub models: HashMap<String, Arc<GltfModel>>,
-    pub world_meshes: HashMap<i32, Mesh>
+    pub world_meshes: HashMap<i32, Mesh>,
+    pub world_textures: HashMap<i32, Texture>
 }
 
 impl FromWorld for RendererResources {
@@ -39,6 +41,7 @@ impl FromWorld for RendererResources {
         ubo_global.set_mat_proj(&perspective(Deg(FOV), RENDER_ASPECT, NEAR_CLIP, FAR_CLIP));
 
         let ubo_joints = UniformBuffer::<JointParams>::new();
+        let ubo_material = UniformBuffer::<MaterialParams>::new();
 
         // Load meshes
         let full_screen_rect = Mesh::new_indexed(
@@ -77,6 +80,7 @@ impl FromWorld for RendererResources {
             full_screen_rect,
             ubo_global,
             ubo_joints,
+            ubo_material,
             framebuffer,
             yiq_framebuffer,
             ps1_tess_shader,
@@ -85,7 +89,8 @@ impl FromWorld for RendererResources {
             composite_resolve_shader,
             blit_shader,
             models: HashMap::new(),
-            world_meshes: HashMap::new()
+            world_meshes: HashMap::new(),
+            world_textures: HashMap::new()
         }
     }
 }

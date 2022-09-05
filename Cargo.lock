@@ -398,7 +398,6 @@ dependencies = [
  "image 0.24.3",
  "include_dir",
  "log",
- "nalgebra 0.31.1",
  "ncollide3d",
  "speedy",
  "std140",
@@ -449,6 +448,8 @@ dependencies = [
  "gltf",
  "include_dir",
  "log",
+ "serde",
+ "serde_json",
  "speedy",
 ]
 
@@ -963,22 +964,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nalgebra"
-version = "0.31.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e0a04ce089f9401aac565c740ed30c46291260f27d4911fdbaa6ca65fa3044"
-dependencies = [
- "approx 0.5.1",
- "matrixmultiply",
- "nalgebra-macros",
- "num-complex",
- "num-rational 0.4.1",
- "num-traits",
- "simba",
- "typenum",
-]
-
-[[package]]
 name = "nalgebra-macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1008,7 +993,7 @@ dependencies = [
  "bitflags",
  "downcast-rs",
  "either",
- "nalgebra 0.30.1",
+ "nalgebra",
  "num-traits",
  "petgraph",
  "simba",
@@ -1099,9 +1084,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "2f7254b99e31cad77da24b08ebf628882739a608578bb1bcdfc1f9c21260d7c0"
 
 [[package]]
 name = "parking"

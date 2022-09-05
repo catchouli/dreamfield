@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use bevy_ecs::schedule::SystemSet;
 use bevy_ecs::system::{Local, Res, Query, ResMut};
-use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace};
-use dreamfield_system::world::world_chunk::WorldChunk;
+use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4};
 use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
@@ -14,6 +13,9 @@ use crate::resources::{ModelManager, TextureManager, ShaderManager};
 use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime};
 use dreamfield_system::WindowSettings;
 use dreamfield_system::world::WorldChunkManager;
+use dreamfield_system::world::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex};
+use dreamfield_system::world::world_texture::WorldTexture;
+use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::SimTime;
 
 pub const RENDER_WIDTH: i32 = 320;
@@ -86,10 +88,10 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     render_screen_effects(RunTime::PreScene, local, &mut textures, &mut shaders, &mut effect_query);
 
     // Draw world
+    draw_world(local, &mut world, &models, &player_camera);
 
     // Draw visuals
     draw_visuals(local, &sim_time, &models, &mut visuals_query);
-    draw_world(local, &mut world, &player_camera);
 
     // Render pre-scene effects
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
@@ -99,12 +101,11 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
 }
 
 /// Draw the world
-fn draw_world(local: &mut RendererResources, world: &mut ResMut<WorldChunkManager>, camera: &PlayerCamera) {
+fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkManager>, models: &Res<ModelManager>,
+    camera: &PlayerCamera)
+{
     unsafe { gl::Enable(gl::DEPTH_TEST); }
     local.ps1_tess_shader.use_program();
-
-    local.ubo_global.set_mat_model_derive(&Matrix4::identity());
-    local.ubo_global.upload_changed();
 
     // Get camera pos
     let pos = camera.camera.pos();
@@ -156,53 +157,125 @@ fn draw_world(local: &mut RendererResources, world: &mut ResMut<WorldChunkManage
 
     for chunk_x in view_min_chunk_x..=view_max_chunk_x {
         for chunk_z in view_min_chunk_z..=view_max_chunk_z {
-            if let Some(chunk) = world.get_chunk((chunk_x, chunk_z)) {
-                draw_world_chunk(local, &chunk);
-            }
+            draw_world_chunk(local, &mut world, &models, (chunk_x, chunk_z));
         }
     }
 }
 
 /// Draw a WorldChunk
-fn draw_world_chunk(local: &mut RendererResources, chunk: &WorldChunk) {
-    // Render each mesh in chunk
-    for mesh in chunk.meshes().iter() {
-        // Get or load gl mesh
-        let gl_mesh = local.world_meshes
-            .entry(mesh.index())
-            .or_insert_with(|| {
-                // TODO: pregenerate them as u32, or just load them as u16
-                let index_buffer = mesh.indices().iter().map(|i| *i as u32).collect::<Vec<u32>>();
-                let buffer_layout = vec![
-                    VertexAttrib {
-                        index: AttribBinding::Positions as u32,
-                        attrib_type: gl::FLOAT,
-                        size: 3
-                    },
-                    VertexAttrib {
-                        index: AttribBinding::Normals as u32,
-                        attrib_type: gl::FLOAT,
-                        size: 3
-                    },
-                    VertexAttrib {
-                        index: AttribBinding::TexCoords as u32,
-                        attrib_type: gl::FLOAT,
-                        size: 2
-                    },
-                    VertexAttrib {
-                        index: AttribBinding::Colors as u32,
-                        attrib_type: gl::FLOAT,
-                        size: 4
+fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunkManager>, models: &Res<ModelManager>,
+    chunk_index: ChunkIndex)
+{
+    let mut textures_to_load = Vec::new();
+
+    if let Some(chunk) = world.get_or_load_chunk(chunk_index) {
+        // Draw instances in chunk
+        for instance in chunk.instances().iter() {
+            // Get reference to model from the renderer resources cache, loading it if it's not in there
+            let model = local.models
+                .entry(instance.mesh_name().to_string())
+                .or_insert_with(|| {
+                    let data = models.get(instance.mesh_name()).unwrap();
+                    Arc::new(GltfModel::from_buf(data).unwrap())
+                });
+
+            for WrappedVector3(point) in instance.points().iter() {
+                let transform = Matrix4::from_translation(*point);
+                model.render(&transform, &mut local.ubo_global, &mut local.ubo_joints, true);
+            }
+        }
+
+        // Draw meshes in chunk
+        local.ubo_global.set_mat_model_derive(&Matrix4::identity());
+        local.ubo_global.upload_changed();
+
+        for mesh in chunk.meshes().iter() {
+            // Bind material
+            local.ubo_material.set_has_base_color_texture(&false);
+            if let Some(material) = mesh.material() {
+                if let Some(texture_id) = material.base_color_tex() {
+                    if let Some(texture) = local.world_textures.get(texture_id) {
+                        local.ubo_material.set_has_base_color_texture(&true);
+                        texture.bind(TextureSlot::BaseColor);
                     }
-                ];
-                let mesh = Mesh::new_indexed(mesh.vertices(), &index_buffer, &buffer_layout);
+                    else {
+                        // Annoyingly we can't just load it now as we still have world borrowed
+                        // mutably through the reference to chunk
+                        textures_to_load.push(*texture_id);
+                    }
+                }
+                else {
+                }
 
-                mesh
-            });
+                local.ubo_material.set_base_color(material.base_color().as_vec());
+                local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
+            }
+            else {
+                local.ubo_material.set_base_color(&vec4(1.0, 1.0, 1.0, 1.0));
+                local.ubo_material.set_has_base_color_texture(&false);
+                local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
+            }
 
-        // TODO: bind materials/textures and set up state properly
-        gl_mesh.draw_indexed(gl::PATCHES, mesh.indices().len() as i32);
+            // Draw mesh
+            let count = mesh.indices().len() as i32;
+            let mesh = get_gl_mesh(local, &mesh);
+            mesh.draw_indexed(gl::PATCHES, count);
+        }
     }
+
+    // Load textures, a bit late but otherwise we end up borrowing world twice because we're still
+    // iterating the chunk's meshes... sigh
+    for tex_idx in textures_to_load {
+        if let Some(texture) = world.get_or_load_texture(tex_idx) {
+            get_gl_texture(local, &texture);
+        }
+    }
+}
+
+// Get the gl mesh for a world mesh
+fn get_gl_mesh<'a>(local: &'a mut RendererResources, mesh: &WorldChunkMesh) -> &'a Mesh {
+    local.world_meshes
+        .entry(mesh.index())
+        .or_insert_with(|| {
+            // TODO: pregenerate them as u32, or just load them as u16
+            let index_buffer = mesh.indices().iter().map(|i| *i as u32).collect::<Vec<u32>>();
+            let buffer_layout = vec![
+                VertexAttrib {
+                    index: AttribBinding::Positions as u32,
+                    attrib_type: gl::FLOAT,
+                    size: 3
+                },
+                VertexAttrib {
+                    index: AttribBinding::Normals as u32,
+                    attrib_type: gl::FLOAT,
+                    size: 3
+                },
+                VertexAttrib {
+                    index: AttribBinding::TexCoords as u32,
+                    attrib_type: gl::FLOAT,
+                    size: 2
+                },
+                VertexAttrib {
+                    index: AttribBinding::Colors as u32,
+                    attrib_type: gl::FLOAT,
+                    size: 4
+                }
+            ];
+
+            Mesh::new_indexed(mesh.vertices(), &index_buffer, &buffer_layout)
+        })
+}
+
+// Get the gl texture for a world texture
+fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) -> &'a Texture {
+    local.world_textures
+        .entry(texture.index())
+        .or_insert_with(|| {
+            let dest_format = gl::SRGB8_ALPHA8;
+            let tex_params = TextureParams::repeat_nearest();
+            Texture::new_from_buf(&texture.pixels(), texture.width() as i32, texture.height() as i32, texture.format(),
+                gl::UNSIGNED_BYTE, dest_format, tex_params).expect("Failed to create world texture")
+        })
 }
 
 /// Draw the visuals

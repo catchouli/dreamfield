@@ -63,23 +63,6 @@ fn init_renderer(world: &mut World) -> Schedule {
 
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
-    // Create world
-    //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-    //    .insert(Visual::new("scene_a", true));
-    //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-    //    .insert(Visual::new("scene_b", true));
-    //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-    //    .insert(Visual::new("scene_c", true));
-    //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-    //    .insert(Visual::new("scene_d", true));
-    //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 0.0, 0.0)))
-    //    .insert(Visual::new("scene_e", true));
-
     // Create sky
     world.spawn()
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
@@ -97,10 +80,10 @@ fn init_entities(world: &mut World) {
         // Looking at corridor
         //.insert(PlayerCamera::new(vec3(5.2, 0.8, 12.8), 0.03, 2.0))
         // Default dungeon pos
-        .insert(PlayerCamera::new(vec3(0.0, 1.0, 10.0), -0.17, 0.0))
+        .insert(PlayerCamera::new(vec3(0.0, 0.5, 10.0), -0.17, 0.0))
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
-        .insert(PlayerMovement::default());
+        .insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
 
     // Create fire orb
     world.spawn()

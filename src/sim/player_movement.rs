@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, InnerSpace};
@@ -10,7 +8,10 @@ use dreamfield_renderer::components::{PlayerCamera, Camera};
 use dreamfield_system::resources::{SimTime, InputName, InputState};
 
 /// The character height
-const CHAR_HEIGHT: f32 = 1.7;
+const CHAR_HEIGHT: f32 = 1.8;
+
+/// The character's collider radius
+const COLLIDER_RADIUS: f32 = 0.5;
 
 /// The camera look speed
 const CAM_LOOK_SPEED: f32 = 0.5;
@@ -25,18 +26,25 @@ const CAM_MOVE_SPEED: f32 = 4.0;
 const CAM_MOVE_SPEED_FAST: f32 = 12.0;
 
 /// The gravity acceleration
-const GRAVITY_ACCELERATION: f32 = 9.8;
+//const GRAVITY_ACCELERATION: f32 = 9.8;
+const GRAVITY_ACCELERATION: f32 = 0.0;
+
+/// The character eye level. According to a cursory google, this is on average 4.5" below the top
+/// of your head, which is just over 10cm
+const CHAR_EYE_LEVEL: f32 = CHAR_HEIGHT - 0.10;
 
 /// The PlayerMovement component
 #[derive(Component)]
 pub struct PlayerMovement {
+    pub position: Vector3<f32>,
     pub velocity: Vector3<f32>
 }
 
-impl Default for PlayerMovement {
-    fn default() -> Self {
+impl PlayerMovement {
+    pub fn new(position: Vector3<f32>, velocity: Vector3<f32>) -> Self {
         PlayerMovement {
-            velocity: vec3(0.0, 0.0, 0.0)
+            position,
+            velocity
         }
     }
 }
@@ -80,91 +88,94 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
-        let mut pos = *camera.pos();
+        let mut pos = player_movement.position;
 
         // Print the camera position
         log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
 
+        // Bump out of walls as a backup
+        //let collider_pos = vec3(pos.x, pos.y + COLLIDER_RADIUS, pos.z);
+        //if let Some(contact) = level_collision.sphere_contact_any(&mut world, &collider_pos, COLLIDER_RADIUS, None) {
+        //    if contact.depth > 0.0 {
+        //        println!("bumping out of wall, contact depth {}", contact.depth);
+        //        let normal = vec3(contact.normal.x, contact.normal.y, contact.normal.z);
+        //        pos += normal * contact.depth;
+        //    }
+        //}
+
         // Resolve horizontal motion
         let mut movement = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
-        for _ in 0..2 {
-            if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
-                movement = resolve_horizontal_movement(level_collision.as_mut(), world.as_mut(), &pos, &movement);
-            }
+        //println!("\nresolving horizontal motion: {movement:?}");
+        for i in 0..3 {
+            movement.y = 0.0;
+            movement = resolve_horizontal_movement(level_collision.as_mut(), world.as_mut(), &pos, &movement);
+            //println!("resolved {i}: {movement:?}");
         }
-        pos += movement;
+        // Zero y motion or we can be redirected downwards as a result of collisions
+        pos += vec3(movement.x, 0.0, movement.z);
 
         // Resolve vertical motion
-        if player_movement.velocity.y < 0.0 {
-            let movement_y = player_movement.velocity.y * time_delta;
-            (pos, player_movement.velocity.y) = resolve_vertical_movement(level_collision.as_mut(), world.as_mut(),
-                &pos, &player_movement.velocity, &movement_y);
-        }
+        let movement_y = player_movement.velocity.y * time_delta;
+        let (movement, on_ground) = resolve_vertical_movement(level_collision.as_mut(), world.as_mut(),
+            &pos, movement_y);
 
-        // Bump out of wall
-        const BUMP_STEPS: i32 = 4;
-        const BUMP_RADIUS: f32 = 0.5;
-        for i in 0..BUMP_STEPS {
-            let angle = (i as f32 / BUMP_STEPS as f32) * 2.0 * PI;
+        pos += movement;
 
-            let x_offset = f32::sin(angle);
-            let z_offset = f32::cos(angle);
-
-            let collider_dir = vec3(x_offset, 0.0, z_offset);
-
-            if let Some(hit) = level_collision.raycast_normal(world.as_mut(), &pos, &collider_dir, BUMP_RADIUS) {
-                pos = pos + (hit.toi - BUMP_RADIUS) * collider_dir;
-            }
+        if on_ground {
+            //println!("on ground, resetting velocity to 0");
+            player_movement.velocity.y = 0.0;
         }
 
         // Update camera position
-        camera.set_pos(&pos);
+        player_movement.position = pos;
+
+        let cam_pos = vec3(pos.x, pos.y + CHAR_EYE_LEVEL, pos.z);
+        camera.set_pos(&cam_pos);
         camera.update();
     }
 }
 
+/// Resolve the vertical movement, returns the resolved movement vector and whether the collider is
+/// now on the ground.
 fn resolve_vertical_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
-    vel: &Vector3<f32>, movement_y: &f32) -> (Vector3<f32>, f32)
+    movement_y: f32) -> (Vector3<f32>, bool)
 {
-    let movement_y_len = f32::abs(*movement_y);
-    let movement_y_dir = vec3(0.0, -1.0, 0.0);
+    let movement = vec3(0.0, movement_y, 0.0);
 
-    let stop_dist = level_collision
-        .raycast(world, pos, &movement_y_dir, movement_y_len + CHAR_HEIGHT)
-        .map(|toi| toi - CHAR_HEIGHT);
+    let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let target_pos = collider_pos + movement;
 
-    match stop_dist {
-        Some(toi) => {
-            (pos + toi * movement_y_dir, 0.0)
-        },
-        _ => {
-            (pos + vec3(0.0, *movement_y, 0.0), vel.y)
-        }
+    if let Some(hit) = level_collision.spherecast(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+        //println!("collided with ground");
+        (hit.toi() * vec3(0.0, -1.0, 0.0), true)
+    }
+    else {
+        (movement, false)
     }
 }
 
 fn resolve_horizontal_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
     movement: &Vector3<f32>) -> Vector3<f32>
 {
-    let movement_len = movement.magnitude();
-    let movement_dir = movement / movement_len;
+    let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let target_pos = collider_pos + movement;
 
-    let ray_start = pos;
-    let ray_dist = movement_len;
+    let movement_dir = (target_pos - collider_pos).normalize();
 
-    match level_collision.raycast_normal(world, &ray_start, &movement_dir, ray_dist) {
-        Some(ray_hit) => {
-            let hit_normal = vec3(ray_hit.normal.x, ray_hit.normal.y, ray_hit.normal.z);
+    if let Some(hit) = level_collision.spherecast(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+        let dot = hit.normal().dot(movement_dir);
+        //println!("collision dot: {dot}, toi: {}, normal: {:?}", hit.toi(), hit.normal());
 
-            let movement_to_wall = ray_hit.toi * movement_dir * 0.99;
-            let remaining_movement = movement - movement_to_wall;
-            let subtracted_movement = hit_normal * remaining_movement.dot(hit_normal);
+        let movement_to_wall = hit.toi() * movement_dir;// + 0.01 * hit.normal();
+        let remaining_movement = movement - movement_to_wall;
+        let subtracted_movement = hit.normal() * remaining_movement.dot(*hit.normal());
 
-            movement_to_wall + remaining_movement - subtracted_movement
-        },
-        _ => {
-            *movement
-        }
+        movement_to_wall + remaining_movement - subtracted_movement
+        //let wall_dir_movement = movement * movement.dot(*hit.normal());
+        //movement - wall_dir_movement
+    }
+    else {
+        //println!("spherecast didnt hit");
+        *movement
     }
 }
-

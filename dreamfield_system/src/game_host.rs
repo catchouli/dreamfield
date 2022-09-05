@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use bevy_ecs::{world::World, schedule::Schedule};
 use glfw::{Action, Context, Key};
 use crate::fixed_timestep::FixedTimestep;
@@ -75,7 +77,10 @@ impl GameHost {
                 sim_time_res.sim_time = fixed_timestep.sim_time();
 
                 // Simulate game state
+                let now = Instant::now();
                 update_schedule.run(&mut world);
+                let elapsed = now.elapsed();
+                println!("Update time: {:.2?}", elapsed);
             }
 
             // Render

@@ -34,12 +34,7 @@ pub fn create_texture_manager() -> TextureManager {
 /// Create the model manager
 pub fn create_model_manager() -> ModelManager {
     ModelManager::new_with_models(vec![
-        ("demo_scene", include_bytes!("../resources/models/demo_scene.glb")),
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
-        ("scene_a", include_bytes!("../resources/models/scene_a.glb")),
-        ("scene_b", include_bytes!("../resources/models/scene_b.glb")),
-        ("scene_c", include_bytes!("../resources/models/scene_c.glb")),
-        ("scene_d", include_bytes!("../resources/models/scene_d.glb")),
-        ("scene_e", include_bytes!("../resources/models/scene_e.glb")),
+        ("tree", include_bytes!("../resources/models/tree.glb"))
     ])
 }

@@ -1,36 +1,6 @@
 use cgmath::{Vector3, vec3};
-use speedy::{Readable, Writable, Context};
-
-/// A wrapper for Vector3<f32> that's serializable
-#[derive(Clone)]
-struct WrappedVector3(Vector3<f32>);
-
-impl WrappedVector3 {
-    pub fn as_vec(&self) -> &Vector3<f32> {
-        match self {
-            WrappedVector3(v) => &v
-        }
-    }
-}
-
-impl<'a, C: Context> Writable<C> for WrappedVector3 {
-    fn write_to< T: ?Sized + speedy::Writer< C > >( &self, writer: &mut T ) -> Result<(), C::Error > {
-        let v = self.as_vec();
-        writer.write_f32(v.x)?;
-        writer.write_f32(v.y)?;
-        writer.write_f32(v.z)?;
-        Ok(())
-    }
-}
-
-impl<'a, C: Context> Readable<'a, C> for WrappedVector3 {
-    fn read_from< R: speedy::Reader< 'a, C > >( reader: &mut R ) -> Result< Self, <C as Context>::Error > {
-        let x = reader.read_f32()?;
-        let y = reader.read_f32()?;
-        let z = reader.read_f32()?;
-        Ok(WrappedVector3(vec3(x, y, z)))
-    }
-}
+use speedy::{Readable, Writable};
+use super::wrapped_vectors::WrappedVector3;
 
 /// Axis aligned bounding box
 #[derive(Clone, Readable, Writable)]
@@ -92,5 +62,26 @@ impl Aabb {
             f32::max(a.y, b.y),
             f32::max(a.z, b.z),
         )
+    }
+
+    pub fn intersects_sphere(&self, center: &Vector3<f32>, radius: f32) -> bool {
+        if let Some((WrappedVector3(min), WrappedVector3(max))) = &self.min_max {
+            // https://stackoverflow.com/a/4579192
+            let mut dmin = 0.0;
+
+            for i in 0..3 {
+                if center[i] < min[i] {
+                    dmin += (center[i] - min[i]) * (center[i] - min[i]);
+                }
+                else if center[i] > max[i] {
+                    dmin += (center[i] - max[i]) * (center[i] - max[i]);
+                }
+            }
+
+            dmin <= radius * radius
+        }
+        else {
+            false
+        }
     }
 }
