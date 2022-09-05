@@ -80,7 +80,10 @@ fn init_entities(world: &mut World) {
         // Looking at corridor
         //.insert(PlayerCamera::new(vec3(5.2, 0.8, 12.8), 0.03, 2.0))
         // Default dungeon pos
-        .insert(PlayerCamera::new(vec3(0.0, 0.5, 10.0), -0.17, 0.0))
+        // TODO: split the orientation out into PlayerMovement, and then make this be initialized
+        // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
+        // duplicated.
+        .insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         .insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));

@@ -26,8 +26,7 @@ const CAM_MOVE_SPEED: f32 = 4.0;
 const CAM_MOVE_SPEED_FAST: f32 = 12.0;
 
 /// The gravity acceleration
-//const GRAVITY_ACCELERATION: f32 = 9.8;
-const GRAVITY_ACCELERATION: f32 = 0.0;
+const GRAVITY_ACCELERATION: f32 = 9.8;
 
 /// The character eye level. According to a cursory google, this is on average 4.5" below the top
 /// of your head, which is just over 10cm
@@ -82,57 +81,81 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         let cam_movement = forward_cam_movement * cam_speed * camera.forward()
             + right_cam_movement * cam_speed * camera.right();
 
+        println!("initial feet pos: {:?}, velocity: {:?}", player_movement.position, player_movement.velocity);
+
         // Update velocity with cam movement and gravity
         player_movement.velocity.x = cam_movement.x;
         player_movement.velocity.z = cam_movement.z;
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
-        let mut pos = player_movement.position;
+        // Bump out of walls
+        player_movement.position = bump_out_of_walls(level_collision.as_mut(), world.as_mut(), &player_movement);
 
-        // Print the camera position
-        log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
+        // Apply horizontal movement
+        player_movement.position = apply_horizontal_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
 
-        // Bump out of walls as a backup
-        //let collider_pos = vec3(pos.x, pos.y + COLLIDER_RADIUS, pos.z);
-        //if let Some(contact) = level_collision.sphere_contact_any(&mut world, &collider_pos, COLLIDER_RADIUS, None) {
-        //    if contact.depth > 0.0 {
-        //        println!("bumping out of wall, contact depth {}", contact.depth);
-        //        let normal = vec3(contact.normal.x, contact.normal.y, contact.normal.z);
-        //        pos += normal * contact.depth;
-        //    }
-        //}
+        // Apply vertical movement
+        let on_ground;
+        //(player_movement.position, on_ground) = apply_vertical_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
+        on_ground = true;
 
-        // Resolve horizontal motion
-        let mut movement = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
-        //println!("\nresolving horizontal motion: {movement:?}");
-        for i in 0..3 {
-            movement.y = 0.0;
-            movement = resolve_horizontal_movement(level_collision.as_mut(), world.as_mut(), &pos, &movement);
-            //println!("resolved {i}: {movement:?}");
-        }
-        // Zero y motion or we can be redirected downwards as a result of collisions
-        pos += vec3(movement.x, 0.0, movement.z);
-
-        // Resolve vertical motion
-        let movement_y = player_movement.velocity.y * time_delta;
-        let (movement, on_ground) = resolve_vertical_movement(level_collision.as_mut(), world.as_mut(),
-            &pos, movement_y);
-
-        pos += movement;
-
-        if on_ground {
-            //println!("on ground, resetting velocity to 0");
+        // Cancel out vertical velocity if we're on the ground
+        if on_ground && player_movement.velocity.y < 0.0 {
             player_movement.velocity.y = 0.0;
         }
 
-        // Update camera position
-        player_movement.position = pos;
+        println!("final feet pos: {:?}, velocity: {:?}", player_movement.position, player_movement.velocity);
 
-        let cam_pos = vec3(pos.x, pos.y + CHAR_EYE_LEVEL, pos.z);
+        // Update camera position
+        let feet_pos = &player_movement.position;
+        let cam_pos = vec3(feet_pos.x, feet_pos.y + CHAR_EYE_LEVEL, feet_pos.z);
         camera.set_pos(&cam_pos);
         camera.update();
     }
+}
+
+/// Apply the horizontal movement, returning an updated position
+fn apply_horizontal_motion(level_collision: &mut LevelCollision, world: &mut WorldChunkManager,
+    player_movement: &PlayerMovement, time_delta: f32) -> Vector3<f32>
+{
+    const HORIZONTAL_ITERATIONS: i32 = 3;
+
+    // Construct horizontal movement vector
+    let pos = &player_movement.position;
+    let mut movement = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
+
+    // Apply a few iterations of this, as the first slide may result in a movement vector that
+    // slides us through a wall, requiring us to test again
+    for _ in 0..HORIZONTAL_ITERATIONS {
+        movement = resolve_horizontal_movement(level_collision, world, pos, &movement);
+    }
+
+    pos + movement
+}
+
+/// Apply the vertical movement, returning an updated position, and whether we're on the ground
+fn apply_vertical_motion(level_collision: &mut LevelCollision, world: &mut WorldChunkManager,
+    player_movement: &PlayerMovement, time_delta: f32) -> (Vector3<f32>, bool)
+{
+    let pos = &player_movement.position;
+    let movement_y = player_movement.velocity.y * time_delta;
+    let (movement, on_ground) = resolve_vertical_movement(level_collision, world, pos, movement_y);
+    (pos + movement, on_ground)
+}
+
+/// "Bump" out of walls as a backup for if the current position is obstructed, returning an updated
+/// position
+fn bump_out_of_walls(level_collision: &mut LevelCollision, world: &mut WorldChunkManager,
+    player_movement: &PlayerMovement) -> Vector3<f32>
+{
+    let feet_pos = &player_movement.position;
+    let collider_pos = vec3(feet_pos.x, feet_pos.y + COLLIDER_RADIUS, feet_pos.z);
+
+    level_collision.sphere_contact_any(world, &collider_pos, COLLIDER_RADIUS)
+        .filter(|contact| contact.depth > 0.0)
+        .map(|contact| feet_pos + contact.depth * vec3(contact.normal.x, contact.normal.y, contact.normal.z))
+        .unwrap_or(*feet_pos)
 }
 
 /// Resolve the vertical movement, returns the resolved movement vector and whether the collider is
@@ -141,13 +164,17 @@ fn resolve_vertical_movement(level_collision: &mut LevelCollision, world: &mut W
     movement_y: f32) -> (Vector3<f32>, bool)
 {
     let movement = vec3(0.0, movement_y, 0.0);
+    let movement_dir = movement.normalize();
 
     let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
     let target_pos = collider_pos + movement;
 
-    if let Some(hit) = level_collision.spherecast(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+    if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
         //println!("collided with ground");
-        (hit.toi() * vec3(0.0, -1.0, 0.0), true)
+        //println!("hit normal: {:?}", hit.normal());
+        println!("floor hit toi: {}", hit.toi());
+        (hit.toi() * movement_dir, true)
+        //(movement, true)
     }
     else {
         (movement, false)
@@ -162,20 +189,35 @@ fn resolve_horizontal_movement(level_collision: &mut LevelCollision, world: &mut
 
     let movement_dir = (target_pos - collider_pos).normalize();
 
-    if let Some(hit) = level_collision.spherecast(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
-        let dot = hit.normal().dot(movement_dir);
-        //println!("collision dot: {dot}, toi: {}, normal: {:?}", hit.toi(), hit.normal());
-
-        let movement_to_wall = hit.toi() * movement_dir;// + 0.01 * hit.normal();
+    if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+        //println!("sweep_sphere toi: {}, normal: {:?}", hit.toi(), hit.normal());
+        let movement_to_wall = hit.toi() * movement_dir;
         let remaining_movement = movement - movement_to_wall;
         let subtracted_movement = hit.normal() * remaining_movement.dot(*hit.normal());
 
+        //println!("movement_to_wall: {:?}, remaining_movement: {:?}, subtracted_movement: {:?}", movement_to_wall, remaining_movement, subtracted_movement);
+
         movement_to_wall + remaining_movement - subtracted_movement
-        //let wall_dir_movement = movement * movement.dot(*hit.normal());
-        //movement - wall_dir_movement
     }
     else {
-        //println!("spherecast didnt hit");
+        //println!("sweep_sphere no hit");
         *movement
     }
+
+    //if let Some(hit) = level_collision.spherecast(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+    //    let dot = hit.normal().dot(movement_dir);
+    //    //println!("collision dot: {dot}, toi: {}, normal: {:?}", hit.toi(), hit.normal());
+
+    //    let movement_to_wall = hit.toi() * movement_dir;// + 0.01 * hit.normal();
+    //    let remaining_movement = movement - movement_to_wall;
+    //    let subtracted_movement = hit.normal() * remaining_movement.dot(*hit.normal());
+
+    //    movement_to_wall + remaining_movement - subtracted_movement
+    //    //let wall_dir_movement = movement * movement.dot(*hit.normal());
+    //    //movement - wall_dir_movement
+    //}
+    //else {
+    //    //println!("spherecast didnt hit");
+    //    *movement
+    //}
 }

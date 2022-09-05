@@ -107,6 +107,46 @@ impl LevelCollision {
         }
     }
 
+    pub fn sweep_sphere(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
+        radius: f32) -> Option<SpherecastResult>
+    {
+        let far_contact = self.get_spherecast_upper_bound(world, &start, &end, radius)?;
+        println!("sweep_sphere far contact: {}", far_contact.0);
+        //let far_contact = self.sphere_contact_any(world, &end, radius)?;
+
+        let ray_dir = (end - start).normalize();
+
+        // Binary search to find better candidate
+        // TODO: this works good, but we probably have to:
+        // * Sweep the radiuses still to make sure we don't jump through walls
+        // * Check against every returned face to find the actual closest one, maybe, or just
+        // resolve the collision against all of them...
+        // Then it'll probably be really solid. Otherwise, back to the qauke source code
+        const STEPS: i32 = 5;
+
+        let mut nearest_contact = far_contact;
+
+        let mut max = 1.0;
+        let mut min = 0.0;
+
+        for _ in 0..5 {
+            let toi = 0.5 * (min + max);
+            let mid = start + ray_dir * toi;
+
+            if let Some((hit_toi, mid_contact)) = self.sphere_contact_nearest(world, &mid, radius, &start, &ray_dir) {
+                max = hit_toi;
+                nearest_contact = (hit_toi, mid_contact);
+            }
+            else {
+                min = toi;
+            }
+        }
+
+        let (toi, contact) = nearest_contact;
+        let normal = vec3(contact.normal.x, contact.normal.y, contact.normal.z);
+        Some(SpherecastResult::new(toi, normal))
+    }
+
     /// Spherecast into the level, from the current point up to the maximum number of steps
     pub fn spherecast(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
         radius: f32) -> Option<SpherecastResult>
@@ -132,7 +172,7 @@ impl LevelCollision {
             let center = start + ray * toi;
             //println!("spherecast contact {toi}, {center:?}");
 
-            let contact = self.sphere_contact_nearest(world, &center, radius, &start, Some(ray));
+            let contact = self.sphere_contact_nearest(world, &center, radius, &start, &ray_dir);
             if contact.is_some() {
                 nearest_intersection = contact;
             }
@@ -159,7 +199,7 @@ impl LevelCollision {
 
     // Get an upper bound for the spherecast hit distance by stepping along the ray by the diameter of the sphere
     fn get_spherecast_upper_bound(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
-        radius: f32) -> Option<f32>
+        radius: f32) -> Option<(f32, Contact<f32>)>
     {
         // We step by the diameter of the sphere to find an initial intersection as this should
         // mean we can get an upper bound on the distance we need to step without missing any
@@ -178,9 +218,9 @@ impl LevelCollision {
             let cur_dist = f32::min(ray_dist, step_size * (i as f32));
             let center = start + ray_dir * cur_dist;
 
-            let contact = self.sphere_contact_any(world, &center, radius, Some(ray_dir));
-            if contact.is_some() {
-                return Some(cur_dist / ray_dist);
+            if let Some(contact) = self.sphere_contact_nearest(world, &center, radius, &start, &ray_dir) {
+                //return Some((cur_dist / ray_dist, contact));
+                return Some(contact);
             }
         }
 
@@ -189,8 +229,8 @@ impl LevelCollision {
 
     /// Sphere contact with the level, returning true as soon as it finds an object that intersects with the sphere.
     /// Note that this isn't guaranteed to be the closest contact, as we stop when we find a single contact point.
-    pub fn sphere_contact_any(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32,
-        ray_dir: Option<Vector3<f32>>) -> Option<Contact<f32>>
+    pub fn sphere_contact_any(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32)
+        -> Option<Contact<f32>>
     {
         let chunk_index = WorldChunk::point_to_chunk_index_2d(&vec2(center.x, center.z));
         if let Some((chunk_aabb, meshes)) = self.get_chunk_meshes(world, chunk_index).as_ref() {
@@ -203,15 +243,17 @@ impl LevelCollision {
             let ball = Ball::new(radius);
             let ball_transform = Isometry::from(Translation::new(center.x, center.y, center.z));
             let level_transform = Isometry::identity();
-            let ray_dir = ray_dir.map(|rd| ncollide3d::na::Vector3::new(rd.x, rd.y, rd.z));
 
             for (aabb, mesh) in meshes.iter() {
                 if !aabb.intersects_sphere(&center, radius) {
                     continue;
                 }
 
-                let contact = Self::contact_trimesh_ball_dir(&level_transform, mesh, &ball_transform, &ball, 0.0,
-                    ray_dir);
+                let mut contact: Option<Contact<f32>> = None;
+                Self::contact_trimesh_ball(&level_transform, mesh, &ball_transform, &ball, 0.0, |c| {
+                    contact = Some(c);
+                    return false;
+                });
 
                 if contact.is_some() {
                     return contact;
@@ -224,7 +266,7 @@ impl LevelCollision {
 
     /// Sphere contact with the level, returning the closest intersection found to the ray origin
     fn sphere_contact_nearest(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32, ray_start: &Vector3<f32>,
-        ray_dir: Option<Vector3<f32>>) -> Option<(f32, Contact<f32>)>
+        ray_dir: &Vector3<f32>) -> Option<(f32, Contact<f32>)>
     {
         let chunk_index = WorldChunk::point_to_chunk_index_2d(&vec2(center.x, center.z));
         if let Some((chunk_aabb, meshes)) = self.get_chunk_meshes(world, chunk_index).as_ref() {
@@ -237,7 +279,7 @@ impl LevelCollision {
             let ball = Ball::new(radius);
             let ball_transform = Isometry::from(Translation::new(center.x, center.y, center.z));
             let level_transform = Isometry::identity();
-            let ray_dir_nc = ray_dir.map(|rd| ncollide3d::na::Vector3::new(rd.x, rd.y, rd.z));
+            let initial_point_on_ray = (center - ray_start).magnitude();
 
             let mut nearest_contact: Option<(f32, Contact<f32>)> = None;
 
@@ -252,24 +294,59 @@ impl LevelCollision {
                 // returning the wrong one and letting us walk through the other. Ideally we'd be
                 // able to reject intersections with the wrong normal when doing the intersection
                 // with each triangle instead of at this point.
-                let contact = Self::contact_trimesh_ball_dir(&level_transform, mesh, &ball_transform, &ball, 0.0,
-                    ray_dir_nc);
+                const ITERATIONS: i32 = 5;
+                for _ in 0..1 {
+                    let cur_ball_transform = ball_transform;
+                    Self::contact_trimesh_ball(&level_transform, mesh, &cur_ball_transform, &ball, 0.0, |contact| {
+                        let normal = vec3(contact.normal.x, contact.normal.y, contact.normal.z);
 
-                if let Some(contact) = contact {
-                    let normal = vec3(contact.normal.x, contact.normal.y, contact.normal.z);
+                        // Skip faces the ray can't intersect with
+                        if normal.dot(*ray_dir) >= 0.0 {
+                            return true;
+                        }
 
-                    let point = vec3(contact.world1.x, contact.world1.y, contact.world1.z);
-                    let point_on_ray = point + normal * radius;
-                    let dist = (point_on_ray - ray_start).magnitude();
+                        let point = vec3(contact.world1.x, contact.world1.y, contact.world1.z);
+                        let point_on_ray = point + normal * radius;
+                        // TODO: dunno if this is accurate tbh
+                        // TODO: let's just try this using *_any and make the spherecast find the
+                        // nearest non-intersecting point instead...
+                        let dist = (point_on_ray - ray_start).magnitude();
 
-                    if let Some((old_dist, _)) = nearest_contact {
-                        if dist < old_dist {
+                        if let Some((nearest_dist, _)) = nearest_contact {
+                            if dist < nearest_dist {
+                                println!("found closer dist: {dist}");
+                                nearest_contact = Some((dist, contact));
+                            }
+                        }
+                        else {
+                            println!("found initial contact, dist: {dist}");
                             nearest_contact = Some((dist, contact));
                         }
-                    }
-                    else {
-                        nearest_contact = Some((dist, contact));
-                    }
+
+                        true
+
+                        //if dist < initial_point_on_ray {
+                        //    println!("new closer point on ray: {dist} < {initial_point_on_ray}");
+                        //    //ball_transform = Isometry::from(Translation::new(point_on_ray.x, point_on_ray.y, point_on_ray.z));
+                        //    return false;
+                        //}
+                        //else {
+                        //    return true;
+                        //}
+
+                        //if let Some((old_dist, _)) = nearest_contact {
+                        //    if dist < old_dist {
+                        //        //println!("found closer intersection {dist} < {old_dist}");
+                        //        nearest_contact = Some((dist, contact));
+                        //    }
+                        //}
+                        //else {
+                        //    //println!("found initial intersection {dist}");
+                        //    nearest_contact = Some((dist, contact));
+                        //}
+
+                        //true
+                    });
                 }
             }
 
@@ -320,45 +397,35 @@ impl LevelCollision {
     }
 
     /// Best contact between a composite shape (`Mesh`, `Compound`) and any other shape.
-    pub fn contact_trimesh_ball<F: Fn(Contact<f32>)> (
+    pub fn contact_trimesh_ball<F: FnMut(Contact<f32>) -> bool> (
         m1: &Isometry<f32>,
         g1: &TriMesh<f32>,
         m2: &Isometry<f32>,
         g2: &Ball<f32>,
         prediction: f32,
-        f: F,
-    )
+        mut f: F,
+    ) -> Option<Contact<f32>>
     {
         // Find new collisions
         let ls_m2 = m1.inverse() * m2.clone();
         let ls_aabb2 = g2.aabb(&ls_m2).loosened(prediction);
 
         let mut interferences = Vec::new();
-
         {
             let mut visitor = BoundingVolumeInterferencesCollector::new(&ls_aabb2, &mut interferences);
             g1.bvh().visit(&mut visitor);
         }
 
-        //let mut res = None::<Contact<f32>>;
-
         let p2 = Point::from(m2.translation.vector);
-
         for i in interferences.into_iter() {
-            g1.map_part_at(i, m1, &mut |m, part| {
-                if let Some(c) = ncollide3d::query::contact(&m, part, &m2, g2, prediction) {
-                    f(c);
-                //if let Some(c) = Self::contact_convex_polyhedron_ball(&m, part, &p2, &g2, prediction, move_dir) {
-                    //let replace = res.map_or(true, |cbest| c.depth > cbest.depth);
-
-                    //if replace {
-                        //res = Some(c)
-                    //}
+            if let Some(c) = ncollide3d::query::contact(&m1, &g1.triangle_at(i), &m2, g2, prediction) {
+                if !f(c) {
+                    return Some(c);
                 }
-            });
+            }
         }
 
-        //res
+        None
     }
     
     /// Best contact between a composite shape (`Mesh`, `Compound`) and any other shape.
