@@ -80,7 +80,7 @@ impl GameHost {
                 let now = Instant::now();
                 update_schedule.run(&mut world);
                 let elapsed = now.elapsed();
-                println!("Update time: {:.2?}", elapsed);
+                log::trace!("Update time: {:.2?}", elapsed);
             }
 
             // Render

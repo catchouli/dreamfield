@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use dreamfield_system::world::{world_chunk::{ChunkIndex, VERTEX_STRIDE, INDEX_STRIDE, WorldChunk}, WorldChunkManager, aabb::Aabb};
 use cgmath::{Vector3, vec2, InnerSpace, vec3};
 
-use ncollide3d::bounding_volume::BoundingVolume;
+use ncollide3d::{bounding_volume::BoundingVolume, interpolation::ConstantLinearVelocityRigidMotion};
 use ncollide3d::na::{RealField, Unit};
 use ncollide3d::shape::{TriMesh, Ball, FeatureId, CompositeShape, Shape};
 use ncollide3d::math::{Point, Isometry, Translation};
@@ -49,207 +49,158 @@ impl Default for LevelCollision {
 }
 
 impl LevelCollision {
-    /// Sweep a shpere out from start to end, returning an intersection result along with a time of
-    /// impact
+    /// Sweep a sphere out from start to end, returning an intersection result along with a time of impact
     pub fn sweep_sphere(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
         radius: f32) -> Option<SpherecastResult>
     {
+        // Calculate ray direction
         let ray = end - start;
-        let ray_dist = ray.magnitude();
-        let ray_dir = ray / ray_dist;
-        println!("sweep_sphere: {start:?} ----> {end:?}");
+        let ray_length = ray.magnitude();
+        let ray_dir = ray / ray_length;
 
-        // First step, sweep out from the start to the end by the sphere radius. Normally, this
-        // will result in only one or two intersection tests, and we could optimize it by just
-        // doing a single intersection at the point `end`, but we need to do this so that large
-        // movement vectors don't let you walk through walls. The result of this gives you an upper
-        // bound on the toi along with some contact at that point, and we refine that estimate
-        // below. If no intersections were found, that means the destination is unblocked and we
-        // can just return None.
-        let (mut toi, mut contact) = self.get_spherecast_upper_bound(world, &start, &end, radius)?;
-        println!("sweep_sphere: found first guess at {toi}");
+        // Construct an aabb for the sphere's path
+        let mut sphere_path_aabb = Aabb::new();
+        sphere_path_aabb.expand_with_point(&(start - vec3(radius, radius, radius)));
+        sphere_path_aabb.expand_with_point(&(start + vec3(radius, radius, radius)));
+        sphere_path_aabb.expand_with_point(&(end - vec3(radius, radius, radius)));
+        sphere_path_aabb.expand_with_point(&(end + vec3(radius, radius, radius)));
 
-        // Secondly, we try to resolve this collision by intersecting the collision faces and
-        // moving the toi back each time to resolve the intersection.
-        // TODO: FFS GO THROUGH AND CHANGE ALL THESE TOI/T VALUES TO BE WORLD DISTANCE AND NOT
-        // NORMALIZED
-        let center = start + toi * ray_dir;
-        self.sphere_contact_all(world, &center, radius, |c| {
-            // Clip sphere back along the ray until it's not intersecting this face
-            let n = &c.normal;
-            let point = vec3(c.world1.x, c.world1.y, c.world1.z);
-            let normal = vec3(n.x, n.y, n.z);
+        // Walk aabb bounds and find all chunks that intersect the spherecast
+        let (min, max) = sphere_path_aabb.min_max().unwrap();
+        let (chunk_min_x, chunk_min_z) = WorldChunk::point_to_chunk_index(min);
+        let (chunk_max_x, chunk_max_z) = WorldChunk::point_to_chunk_index(max);
 
-            let dot = normal.dot(ray_dir);
-            //if dot < 0.0 {
-            println!("contact dot: {dot}");
+        //// We clip this toi by each intersection until we end up with no more intersections
+        let mut clipped_toi = ray_length;
+        let mut closest_normal: Option<Vector3<f32>> = None;
 
-            // Find the point at which the ray hits the plane of the face
-            // TODO: make safer
-            // TODO: let's make all plane t parameters not normalized and just be the real
-            // distance...
-            let plane_t = Self::intersect_ray_plane(&normal, &point, start, &ray_dir).unwrap();
-            // Move back by the radius, plus 1 extra cm so we're not touching anymore and we don't
-            // have to repeat this intersection
-            let safe_t = plane_t - radius;// - 0.01;
-
-            if safe_t < toi {
-                toi = safe_t;
-                contact = c;
-                println!("sweep_sphere:found new guess at {toi}");
-            }
-
-            //let plane_point = start + ray_dir * plane_t;
-
-            //let sphere_point = vec3(c.world2.x, c.world2.y, c.world2.z);
-            //let other_point = vec3(c.world1.x, c.world1.y, c.world1.z);
-            //let v = (sphere_point - other_point).normalize();
-
-            //let point_on_ray = center_point + v * c.depth * 0.5;
-            //let point_on_ray = other_point + v * radius;
-            //let point_on_ray = other_point + normal * c.depth;
-            //let point_on_ray = other_point + normal * radius;
-            // TODO: there might be a smarter way to do this
-            //let dist = (point_on_ray - start).magnitude() / ray_dist;
-
-            //if dist < toi {
-                //toi = dist;
-                //contact = c;
-                //println!("sweep_sphere: found new guess at {toi}");
-            //}
-
-            //}
-
-            // We always want to keep going and make sure we clipped to the collision with all
-            // possible faces
-            true
-        });
-
-        let n = &contact.normal;
-        Some(SpherecastResult::new(toi, vec3(n.x, n.y, n.z)))
-
-        /*
-        // If a toi of exactly 0.0 is returned at this point, we can't move at all from this point,
-        // and can just return.
-        // TODO: try using the trimesh contact code to clip the sphere back into a negative toi if
-        // it is intersecting. I don't know if this will result in the most stable algorithm, but
-        // if it works it's probably pretty solid and would mean intersections that are already
-        // happening would resolve themselves.
-        if toi == 0.0 {
-            let n = &contact.normal;
-            return Some(SpherecastResult::new(toi, vec3(n.x, n.y, n.z)));
-        }
-
-        // TODO: this works good, but we probably have to:
-        // * Sweep the radiuses still to make sure we don't jump through walls
-        // * Check against every returned face to find the actual closest one, maybe, or just
-        // resolve the collision against all of them...
-        // Then it'll probably be really solid. Otherwise, back to the qauke source code
-
-        // Second, we do a binary search between the upper bound established above and the start
-        // point in order to refine our guess a bit.
-        // TODO: this might not be necessary tbh
-        const STEPS: i32 = 5;
-
-        let mut nearest_contact = Some((toi, contact));
-
-        let mut max = toi;
-        let mut min = 0.0;
-
-        for _ in 0..STEPS {
-            let toi = 0.5 * (min + max);
-            let mid = start + ray_dir * toi;
-
-            if let Some(mid_contact) = self.sphere_contact_any(world, &mid, radius) {
-                max = toi;
-                nearest_contact = Some((toi, mid_contact));
-            }
-            else {
-                min = toi;
-                nearest_contact = None;
+        for x in chunk_min_x..=chunk_max_x {
+            for z in chunk_min_z..=chunk_max_z {
+                if let Some((aabb, meshes)) = self.get_chunk_meshes(world, (x, z)) {
+                    let res = Self::sweep_sphere_chunk(aabb, meshes, start, &ray_dir, clipped_toi, radius);
+                    if let Some((toi, normal)) = res {
+                        clipped_toi = toi;
+                        closest_normal = Some(normal);
+                    }
+                }
             }
         }
 
-        // Third, we 
-        nearest_contact.map(|(toi, contact)| {
-            let n = &contact.normal;
-            SpherecastResult::new(toi, vec3(n.x, n.y, n.z))
-        })
-        */
+        // If we have a closest_normal that means there was at least one intersection, otherwise there was none
+        closest_normal.map(|normal| SpherecastResult::new(clipped_toi, normal))
     }
 
-    // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-plane-and-ray-disk-intersection
-    fn intersect_ray_plane(plane_normal: &Vector3<f32>, plane_point: &Vector3<f32>, ray_start: &Vector3<f32>,
-        ray_dir: &Vector3<f32>) -> Option<f32>
+    /// Sweep a sphere against a chunk
+    fn sweep_sphere_chunk(chunk_aabb: &Aabb, chunk_meshes: &Vec<(Aabb, TriMesh<f32>)>, start: &Vector3<f32>,
+        dir: &Vector3<f32>, length: f32, radius: f32) -> Option<(f32, Vector3<f32>)>
     {
-        // For some reason the plane normal is opposite in this function... as in it should be
-        // facing in the same direction roughly as the ray rather than opposite it.
-        let plane_normal = -*plane_normal;
+        // Construct the moving sphere
+        let sphere = intersection::Sphere::new(*start, radius);
 
-        // TODO: check all normals are normalized... if that's why it's failing, d'oh
-        let denom = plane_normal.dot(*ray_dir);
-        println!("ray intersect plane denom: {denom}");
-        if denom > 0.000001 {
-            let ray_start_to_plane_point = plane_point - ray_start;
-            let t = ray_start_to_plane_point.dot(plane_normal) / denom;
-            println!("ray intersect plane: {t}");
-            if t >= 0.0 {
-                return Some(t);
+        let mut clipped_toi = length;
+        let mut sphere_velocity = dir * clipped_toi;
+        let mut clipped_normal = None;
+
+        // Check if the sphere is going to intersect the abbb at all and return None if not
+        if intersection::toi_moving_sphere_aabb(&sphere, chunk_aabb, &sphere_velocity).is_none() {
+            println!("sphere didn't intersect with chunk aabb");
+            return None;
+        }
+
+        // Check each mesh in the chunk for intersections
+        for (mesh_aabb, mesh) in chunk_meshes.iter() {
+            if intersection::toi_moving_sphere_aabb(&sphere, mesh_aabb, &sphere_velocity).is_none() {
+                println!("sphere didn't intersect with mesh aabb");
+                continue;
             }
-            else {
-                return None;
+
+            println!("testing triangles of mesh");
+            for i in 0..mesh.nparts() {
+                let triangle = intersection::Triangle::from(mesh.triangle_at(i));
+                let tri_normal = triangle.normal();
+
+                if tri_normal.dot(*dir) > -0.001 {
+                    continue;
+                }
+
+                let dispatcher = ncollide3d::query::DefaultTOIDispatcher {};
+                let sphere_translation = Isometry::translation(sphere.center.x, sphere.center.y, sphere.center.z);
+                let velocity = dir * clipped_toi;
+                let sphere_velocity_2 = ncollide3d::na::Vector3::new(velocity.x, velocity.y, velocity.z);
+                let motion = ConstantLinearVelocityRigidMotion::new(0.0, sphere_translation, sphere_velocity_2);
+                let ball = Ball::new(sphere.radius);
+                let no_motion = ConstantLinearVelocityRigidMotion::new(0.0, Isometry::identity(), ncollide3d::na::Vector3::new(0.0, 0.0, 0.0));
+                let nc = ncollide3d::query::nonlinear_time_of_impact(&dispatcher, &motion, &ball, &no_motion, &mesh.triangle_at(i), clipped_toi, 0.0).unwrap();
+                if let Some(nc) = nc {
+                    if nc.toi < clipped_toi {
+                        clipped_toi = nc.toi;
+                        println!("got new toi: {clipped_toi}");
+                        sphere_velocity = dir * clipped_toi;
+                        // TODO: could probably save the triangle instead, and get the normal later, to
+                        // prevent doing it multiple times
+                        // Actualy, we need to calculate the normal anyway to intersection test against
+                        // it, so maybe we can just return it instead once we're done with it
+                        clipped_normal = Some(tri_normal);
+                    }
+                }
+                //if let Some(toi) = intersection::toi_moving_sphere_triangle(&sphere, &triangle, dir, clipped_toi) {
+                //    clipped_toi = toi;
+                //    sphere_velocity = dir * clipped_toi;
+                //    clipped_normal = Some(triangle.normal());
+                //}
             }
         }
 
-        None
+        // If we got a clipped_normal, that means at least one intersection was resolved
+        clipped_normal.map(|normal| (clipped_toi, normal))
     }
 
-    // Get an upper bound for the spherecast hit distance by stepping along the ray by the diameter of the sphere
-    fn get_spherecast_upper_bound(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
-        radius: f32) -> Option<(f32, Contact<f32>)>
-    {
-        println!("finding spherecast upper bound");
+    //// Get an upper bound for the spherecast hit distance by stepping along the ray by the diameter of the sphere
+    //fn get_spherecast_upper_bound(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, end: &Vector3<f32>,
+    //    radius: f32) -> Option<(f32, Contact<f32>)>
+    //{
+    //    println!("finding spherecast upper bound");
 
-        // We step by the diameter of the sphere to find an initial intersection as this should
-        // mean we can get an upper bound on the distance we need to step without missing any
-        // intersections. We want to start stepping from the radius (we're assuming the current
-        // position isn't blocked, because we already tested that) which puts the spheres extents
-        // from 0.0 to its diameter. We want to then step by the diameter until the center of the
-        // sphere is at the target position.
-        let ray = end - start;
-        let ray_dist = ray.magnitude();
-        let ray_dir = ray / ray_dist;
+    //    // We step by the diameter of the sphere to find an initial intersection as this should
+    //    // mean we can get an upper bound on the distance we need to step without missing any
+    //    // intersections. We want to start stepping from the radius (we're assuming the current
+    //    // position isn't blocked, because we already tested that) which puts the spheres extents
+    //    // from 0.0 to its diameter. We want to then step by the diameter until the center of the
+    //    // sphere is at the target position.
+    //    let ray = end - start;
+    //    let ray_dist = ray.magnitude();
+    //    let ray_dir = ray / ray_dist;
 
-        let step_size = radius;
-        let step_count = f32::ceil(ray_dist / step_size) as usize;
+    //    let step_size = radius;
+    //    let step_count = f32::ceil(ray_dist / step_size) as usize;
 
-        for i in 0..=step_count {
-            let cur_dist = f32::min(ray_dist, step_size * (i as f32));
-            let center = start + ray_dir * cur_dist;
+    //    for i in 0..=step_count {
+    //        let cur_dist = f32::min(ray_dist, step_size * (i as f32));
+    //        let center = start + ray_dir * cur_dist;
 
-            let mut found_contact = None;
+    //        let mut found_contact = None;
 
-            self.sphere_contact_all(world, &center, radius, |c| {
-                //let n = &c.normal;
-                //let normal = vec3(n.x, n.y, n.z);
+    //        self.sphere_contact_all(world, &center, radius, |c| {
+    //            //let n = &c.normal;
+    //            //let normal = vec3(n.x, n.y, n.z);
 
-                //let dot = normal.dot(ray_dir);
-                //if dot < 0.0 {
-                    found_contact = Some(c);
-                    false
-                //}
-                //else {
-                    //true
-                //}
-            });
+    //            //let dot = normal.dot(ray_dir);
+    //            //if dot < 0.0 {
+    //                found_contact = Some(c);
+    //                false
+    //            //}
+    //            //else {
+    //                //true
+    //            //}
+    //        });
 
-            if let Some(contact) = found_contact {
-                return Some((cur_dist, contact));
-            }
-        }
+    //        if let Some(contact) = found_contact {
+    //            return Some((cur_dist, contact));
+    //        }
+    //    }
 
-        None
-    }
+    //    None
+    //}
 
     /// Sphere contact with the level, returning true as soon as it finds an object that intersects with the sphere.
     /// Note that this isn't guaranteed to be the closest contact, as we stop when we find a single contact point.

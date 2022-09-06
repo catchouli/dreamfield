@@ -12,6 +12,7 @@ const WORLD_MODELS: &'static [WorldModel] = &[
     //include_world_model!("resources/models/scene_c.glb"),
     //include_world_model!("resources/models/scene_d.glb"),
     //include_world_model!("resources/models/scene_e.glb"),
+    //include_world_model!("resources/models/triangle.glb"),
 ];
 
 /// TODO: output files to update on when changed

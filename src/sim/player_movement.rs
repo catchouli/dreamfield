@@ -1,6 +1,6 @@
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
-use cgmath::{Vector3, vec3};
+use cgmath::{Vector3, vec3, InnerSpace};
 use dreamfield_system::world::WorldChunkManager;
 
 use super::level_collision::LevelCollision;
@@ -89,19 +89,29 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
+        let bump = false;
+        let vert = true;
+        let horz = true;
+
         // Bump out of walls
-        player_movement.position = bump_out_of_walls(level_collision.as_mut(), world.as_mut(), &player_movement);
+        if bump {
+            player_movement.position = bump_out_of_walls(level_collision.as_mut(), world.as_mut(), &player_movement);
+        }
 
         // Apply horizontal movement
-        player_movement.position = apply_horizontal_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
+        if horz {
+            player_movement.position = apply_horizontal_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
+        }
 
         // Apply vertical movement
-        let on_ground;
-        (player_movement.position, on_ground) = apply_vertical_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
+        if vert {
+            let on_ground;
+            (player_movement.position, on_ground) = apply_vertical_motion(level_collision.as_mut(), world.as_mut(), &player_movement, time_delta);
 
-        // Cancel out vertical velocity if we're on the ground
-        if on_ground && player_movement.velocity.y < 0.0 {
-            player_movement.velocity.y = 0.0;
+            // Cancel out vertical velocity if we're on the ground
+            if on_ground && player_movement.velocity.y < 0.0 {
+                player_movement.velocity.y = 0.0;
+            }
         }
 
         println!("final feet pos: {:?}, velocity: {:?}", player_movement.position, player_movement.velocity);
@@ -118,7 +128,7 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
 fn apply_horizontal_motion(level_collision: &mut LevelCollision, world: &mut WorldChunkManager,
     player_movement: &PlayerMovement, time_delta: f32) -> Vector3<f32>
 {
-    const HORIZONTAL_ITERATIONS: i32 = 1;
+    const HORIZONTAL_ITERATIONS: i32 = 2;
 
     // Construct horizontal movement vector
     let pos = &player_movement.position;
@@ -126,8 +136,10 @@ fn apply_horizontal_motion(level_collision: &mut LevelCollision, world: &mut Wor
 
     // Apply a few iterations of this, as the first slide may result in a movement vector that
     // slides us through a wall, requiring us to test again
-    for i in 0..HORIZONTAL_ITERATIONS {
-        movement = resolve_horizontal_movement(level_collision, world, pos, &movement);
+    for _ in 0..HORIZONTAL_ITERATIONS {
+        if movement.x != 0.0 || movement.y != 0.0 || movement.z != 0.0 {
+            movement = resolve_horizontal_movement(level_collision, world, pos, &movement);
+        }
     }
 
     pos + movement
@@ -161,46 +173,40 @@ fn bump_out_of_walls(level_collision: &mut LevelCollision, world: &mut WorldChun
 
 /// Resolve the vertical movement, returns the resolved movement vector and whether the collider is
 /// now on the ground.
-fn resolve_vertical_movement(_level_collision: &mut LevelCollision, _world: &mut WorldChunkManager, _pos: &Vector3<f32>,
+fn resolve_vertical_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
     movement_y: f32) -> (Vector3<f32>, bool)
 {
-    return (vec3(0.0, movement_y, 0.0), false);
+    let movement = vec3(0.0, movement_y, 0.0);
+    let movement_dir = movement.normalize();
 
-    //let movement = vec3(0.0, movement_y, 0.0);
-    //let movement_dir = movement.normalize();
+    let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let target_pos = collider_pos + movement;
 
-    //let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    //let target_pos = collider_pos + movement;
-
-    //if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
-    //    (hit.toi() * movement_dir, true)
-    //}
-    //else {
-    //    (movement, false)
-    //}
+    if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+        (hit.toi() * movement_dir, true)
+    }
+    else {
+        (movement, false)
+    }
 }
 
-fn resolve_horizontal_movement(_level_collision: &mut LevelCollision, _world: &mut WorldChunkManager, _pos: &Vector3<f32>,
+fn resolve_horizontal_movement(level_collision: &mut LevelCollision, world: &mut WorldChunkManager, pos: &Vector3<f32>,
     movement: &Vector3<f32>) -> Vector3<f32>
 {
-    return *movement;
+    let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let target_pos = collider_pos + movement;
 
-    //let collider_pos = pos + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    //let target_pos = collider_pos + movement;
+    let movement_dir = (target_pos - collider_pos).normalize();
 
-    //let movement_dir = (target_pos - collider_pos).normalize();
+    if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
+        let toi = hit.toi() - 0.01;
+        let movement_to_wall = toi * movement_dir;
+        let remaining_movement = movement - movement_to_wall;
+        let subtracted_movement = hit.normal() * remaining_movement.dot(*hit.normal());
 
-    //if let Some(hit) = level_collision.sweep_sphere(world, &collider_pos, &target_pos, COLLIDER_RADIUS) {
-    //    println!("sweep sphere returned toi {}", hit.toi());
-    //    let movement_to_wall = hit.toi() * movement_dir;
-    //    let remaining_movement = movement - movement_to_wall;
-    //    let subtracted_movement = hit.normal() * remaining_movement.dot(*hit.normal());
-
-    //    //movement_to_wall + remaining_movement - subtracted_movement
-    //    movement_to_wall
-    //}
-    //else {
-    //    println!("sweep sphere returned toi NONE");
-    //    *movement
-    //}
+        movement_to_wall + remaining_movement - subtracted_movement
+    }
+    else {
+        *movement
+    }
 }
