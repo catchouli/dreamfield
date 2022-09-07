@@ -9,6 +9,9 @@ use dreamfield_system::resources::SimTime;
 pub struct Ball {
 }
 
+#[derive(Component)]
+pub struct TestSphere;
+
 impl Default for Ball {
     fn default() -> Self {
         Ball {}

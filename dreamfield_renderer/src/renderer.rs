@@ -18,8 +18,8 @@ use dreamfield_system::world::world_texture::WorldTexture;
 use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::SimTime;
 
-pub const RENDER_WIDTH: i32 = 320;
-pub const RENDER_HEIGHT: i32 = 240;
+pub const RENDER_WIDTH: i32 = 1920;
+pub const RENDER_HEIGHT: i32 = 1080;
 
 pub const RENDER_ASPECT: f32 = 4.0 / 3.0;
 
@@ -105,7 +105,8 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     camera: &PlayerCamera)
 {
     unsafe { gl::Enable(gl::DEPTH_TEST); }
-    local.ps1_tess_shader.use_program();
+    //local.ps1_tess_shader.use_program();
+    local.ps1_no_tess_shader.use_program();
 
     // Get camera pos
     let pos = camera.camera.pos();
@@ -219,7 +220,7 @@ fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunk
             // Draw mesh
             let count = mesh.indices().len() as i32;
             let mesh = get_gl_mesh(local, &mesh);
-            mesh.draw_indexed(gl::PATCHES, count);
+            mesh.draw_indexed(gl::TRIANGLES, count);
         }
     }
 

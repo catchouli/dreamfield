@@ -10,7 +10,7 @@ use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position,
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
 
-use sim::{PlayerMovement, Ball};
+use sim::{PlayerMovement, Ball, TestSphere};
 use sim::level_collision::LevelCollision;
 
 /// The width of the window
@@ -71,6 +71,7 @@ fn init_entities(world: &mut World) {
     world.spawn()
         // Entrance to village
         //.insert(PlayerCamera::new(vec3(-125.1, 5.8, 123.8), 0.063, 0.099))
+        //.insert(PlayerMovement::new(vec3(-125.1, 5.8, 123.8), vec3(0.0, 0.0, 0.0)));
         // Entrance to cathedral
         //.insert(PlayerCamera::new(vec3(-99.988, 6.567, 75.533), -0.0367, 0.8334))
         // In corridor, going out
@@ -83,16 +84,24 @@ fn init_entities(world: &mut World) {
         // TODO: split the orientation out into PlayerMovement, and then make this be initialized
         // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
         // duplicated.
-        .insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
+        //.insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
+        //.insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
-        .insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
+        // Test spherecast
+        .insert(PlayerCamera::new(vec3(-45.885677, 6.7, 20.211102), -0.50333333, 0.7666667))
+        .insert(PlayerMovement::new(vec3(-45.885677, 6.7 - 1.7, 20.211102), vec3(0.0, 0.0, 0.0)));
 
     // Create fire orb
+    //world.spawn()
+    //    .insert(Ball::default())
+    //    .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
+    //    .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+
     world.spawn()
-        .insert(Ball::default())
-        .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
-        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+        .insert(TestSphere {})
+        .insert(Position::new(vec3(-9.0, 0.5, 9.0)))
+        .insert(Visual::new("white_sphere", false));
 }
 
 /// Entry point

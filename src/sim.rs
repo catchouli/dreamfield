@@ -8,6 +8,7 @@ use bevy_ecs::schedule::SystemSet;
 // Components
 pub use player_movement::PlayerMovement;
 pub use ball::Ball;
+pub use ball::TestSphere;
 
 // Sim systems
 pub fn systems() -> SystemSet {

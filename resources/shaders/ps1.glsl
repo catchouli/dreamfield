@@ -22,11 +22,11 @@ out vec3 tcs_normal;
 out vec2 tcs_uv;
 out vec3 tcs_col;
 #else
-noperspective out float frag_dist;
-noperspective out vec3 frag_world_pos;
-noperspective out vec3 frag_nrm;
-noperspective out vec2 frag_uv;
-noperspective out vec3 frag_light;
+out float frag_dist;
+out vec3 frag_world_pos;
+out vec3 frag_nrm;
+out vec2 frag_uv;
+out vec3 frag_light;
 #endif
 
 void main() {
@@ -120,12 +120,12 @@ in vec3 tes_normal[];
 in vec2 tes_uv[];
 in vec3 tes_col[];
 
-noperspective out float frag_dist;
-noperspective out vec3 frag_world_pos;
-noperspective out vec3 frag_nrm;
-noperspective out vec2 frag_uv;
+out float frag_dist;
+out vec3 frag_world_pos;
+out vec3 frag_nrm;
+out vec2 frag_uv;
 
-noperspective out vec3 frag_light;
+out vec3 frag_light;
 
 vec4 lerp3D(vec4 v0, vec4 v1, vec4 v2)
 {
@@ -159,11 +159,11 @@ void main() {
 
 uniform sampler2D tex_base_color;
 
-noperspective in float frag_dist;
-noperspective in vec3 frag_world_pos;
-noperspective in vec3 frag_nrm;
-noperspective in vec2 frag_uv;
-noperspective in vec3 frag_light;
+in float frag_dist;
+in vec3 frag_world_pos;
+in vec3 frag_nrm;
+in vec2 frag_uv;
+in vec3 frag_light;
 
 out vec4 out_frag_color;
 

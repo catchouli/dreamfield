@@ -35,6 +35,7 @@ pub fn create_texture_manager() -> TextureManager {
 pub fn create_model_manager() -> ModelManager {
     ModelManager::new_with_models(vec![
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
-        ("tree", include_bytes!("../resources/models/tree.glb"))
+        ("tree", include_bytes!("../resources/models/tree.glb")),
+        ("white_sphere", include_bytes!("../resources/models/white_sphere.glb"))
     ])
 }

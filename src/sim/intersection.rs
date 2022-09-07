@@ -1,5 +1,4 @@
-use cgmath::{Vector3, vec3, InnerSpace};
-use dreamfield_system::world::aabb::Aabb;
+use cgmath::{Vector3, vec3, InnerSpace, vec2};
 
 /// A plane primitive
 pub struct Plane {
@@ -81,12 +80,6 @@ impl From<ncollide3d::shape::Triangle<f32>> for Triangle {
     }
 }
 
-/// Time of intersection between a moving sphere and an aabb
-pub fn toi_moving_sphere_aabb(_sphere: &Sphere, _aabb: &Aabb, _sphere_velocity: &Vector3<f32>) -> Option<f32> {
-    // Sweep along the ray testing at each 'radius' interval to see if it ever intersects
-    Some(0.0)
-}
-
 /// Time of intersection between a moving sphere and a triangle. We handle this by clipping
 /// the motion against, in order:
 /// * The plane of the triangle. If the intersection point is in the triangle, we can report that
@@ -99,16 +92,18 @@ pub fn toi_moving_sphere_aabb(_sphere: &Sphere, _aabb: &Aabb, _sphere_velocity: 
 /// * Finally, each edge of the triangle, as there may be a case where one of the sphere's sides
 /// slips through between two vertices without intersecting either of them.
 /// TODO: if we are intersecting, we might want to return a small negative toi to push us
-/// back out, so we don't have to do the weird 'bump' thing. 
+/// back out, so we don't have to do the weird 'bump' thing. update: it has that but it was causing
+/// weird up and down jumps when going over hills, so something's funny. for now I clamped it to 0
 pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir: &Vector3<f32>, move_dist: f32)
-    -> Option<f32>
+    -> Option<(f32, Vector3<f32>)>
 {
+    let move_dir = move_dir.normalize();
     // One: Check the normal dot product. A positive value means we're moving away from the
     // triangle and can't possibly intersect it.
     let normal = triangle.normal();
-    let normal_dot_move_dir = normal.dot(*move_dir);
+    let normal_dot_move_dir = normal.dot(move_dir);
     // TODO: check epsilon needed
-    if normal_dot_move_dir > -0.001 {
+    if normal_dot_move_dir >= -0.001 {
         return None;
     }
 
@@ -125,9 +120,9 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
 
     // If the plane is too far away to intersect with our movement, then we can't intersect
     // with the triangle either
-    if dist_from_plane - sphere.radius > move_dist {
-        return None;
-    }
+    //if dist_from_plane - sphere.radius > move_dist {
+        //return None;
+    //}
 
     // At this point, we know that there's either a valid intersection with the plane up ahead, or
     // we're already touching (dist = 0) or in contact with the plane. At this point, we need to
@@ -135,65 +130,112 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
     // intersection with the triangle, and that we didn't just intersect with the plane at some
     // position away from it.
 
+    // At this point, we need to clip the movement against all of the vertices and edges of the
+    // triangle, to look for intersections that we've missed, and find the closest one.
+    let mut nearest_toi = move_dist;
+
     // First, however, we handle the case where the intersection point between the plane and the
     // sphere is inside the triangle, and return that intersection straight away, both as an
     // early-out, and because if we didn't handle it here, you might walk straight through a
     // triangle that's bigger than the sphere, because it won't end up intersecting with the
     // vertices or edges.
-    if false && normal_dot_move_dir != 0.0 {
-        let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
-        let point_on_plane = sphere.center + move_dir * toi - normal * sphere.radius;
-        // TODO: check that this logic is right. I don't know if we need to keep going and check the
-        // vertices and edges of the triangle in this case, in case there's a closer intersection.
-        // I can't think of any cases where that would happen, but if anything funny happens around
-        // more complex models, that may be what happened.
-        if point_in_triangle(triangle, &point_on_plane) {
-            return Some(toi);
-        }
-    }
+    //if normal_dot_move_dir != 0.0 {
+    //    let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
+    //    let point_on_plane = sphere.center + move_dir * toi - normal * sphere.radius;
 
-    // At this point, we need to clip the movement against all of the vertices and edges of the
-    // triangle, to look for intersections that we've missed, and find the closest one.
-    let mut nearest_toi = move_dist;
+    //    // TODO: what case does it solve that this keeps executing?
+    //    if point_in_triangle(triangle, &point_on_plane) {
+    //        nearest_toi = toi;
+    //    }
+    //}
+    //let mut h = dist_from_plane;
+    //if h > sphere.radius {
+    //    h -= sphere.radius;
+    //    let dot = normal.dot(move_dir);
+    //    if dot != 0.0 {
+    //        let t = -h / dot;
+    //        let on_plane = sphere.center + move_dir * t;
+    //        if point_in_triangle(&triangle, &on_plane) {
+    //            if t < nearest_toi {
+    //                println!("got direct intersect");
+    //                nearest_toi = t;
+    //            }
+    //        }
+    //    }
+    //}
+    //if normal_dot_move_dir != 0.0 {
+    //    let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
+    //    let point = sphere.center + move_dir * toi;
+    //    let plane_point = plane.project(&point);
+    //    if point_in_triangle(&triangle, &plane_point) {
+    //        nearest_toi = toi;
+    //    }
+    //}
 
     // Three: Intersect the sphere with the triangle's vertices
     for i in 0..0 {
-        let tri_vertex = triangle.vertex_at(i);
+        let seg_pt0 = triangle.vertex_at(i);
+        let seg_pt1 = seg_pt0 - move_dir;
 
-        // To intersect a moving sphere with a point, we reverse the test and intersect a moving
-        // point (ray) with a sphere at the point instead, which should give the same result
-        let vertex_sphere = Sphere::new(*tri_vertex, sphere.radius);
-        if let Some(toi) = toi_ray_sphere(&vertex_sphere, &sphere.center, move_dir) {
-            if toi < nearest_toi {
-                nearest_toi = toi;
+        let inter1;
+        let inter2;
+        let res = {
+            let square = |x: f32| x * x;
+
+            let a = square(seg_pt1.x - seg_pt0.x) + square(seg_pt1.y - seg_pt0.y) + square(seg_pt1.z - seg_pt0.z);
+            let b = 2.0 * ((seg_pt1.x - seg_pt0.x) * (seg_pt0.x - sphere.center.x) +
+                           (seg_pt1.y - seg_pt0.y) * (seg_pt0.y - sphere.center.y) +
+                           (seg_pt1.z - seg_pt0.z) * (seg_pt0.z - sphere.center.z));
+            let c = square(sphere.center.x) + square(sphere.center.y) + square(sphere.center.z) + square(seg_pt0.x) +
+                square(seg_pt0.y) + square(seg_pt0.z) -
+                2.0 * (sphere.center.x * seg_pt0.x + sphere.center.y * seg_pt0.y + sphere.center.z * seg_pt0.z)
+                - square(sphere.radius);
+            let i = b * b - 4.0 * a * c;
+
+            if i < 0.0 {
+                inter1 = 0.0;
+                inter2 = 0.0;
+                false
             }
+            else if i == 0.0 {
+                inter1 = -b / (2.0 * a);
+                inter2 = -b / (2.0 * a);
+                true
+            }
+            else {
+                inter1 = (-b + f32::sqrt(square(b) - 4.0 * a * c)) / (2.0 * a);
+                inter2 = (-b - f32::sqrt(square(b) - 4.0 * a * c)) / (2.0 * a);
+                true
+            }
+        };
+
+        if !res {
+            continue;
+        }
+
+        let t = f32::min(inter1, inter2);
+
+        if t < 0.0 {
+            continue;
+        }
+
+        if t < nearest_toi {
+            nearest_toi = t;
         }
     }
 
     // Four: Intersect the sphere with the triangle's edges
     for i in 0..3 {
-        let a = triangle.vertex_at(i);
-        let b = triangle.vertex_at((i + 1) % 3);
+        let edge0 = triangle.vertex_at(i);
+        let edge1 = triangle.vertex_at((i + 1) % 3);
+        let edge2 = edge1 - move_dir;
 
-        // To intersect a moving sphere with a line segment, we expand the line out by the sphere's
-        // radius to make a an infinite cylinder, and then we can just perform a raycast to get the
-        // toi where the sphere intersects the line. We can then check that the point of intersection
-        // of the sphere and the line is actually on the line segment.
-        //
-        // Technically, I think this misses the cases where the side of a sphere brushes past the
-        // segment, but we've already tested the time of impact of the sphere and the vertices of
-        // the triangle, which handles that case.
-        //if let Some(toi) = toi_ray_infinite_cylinder(&sphere.center, move_dir, a, b, sphere.radius) {
-            //a.cross(b)
-        //}
-
-        let c = b - move_dir;
-
-        let v0 = a - b;
-        let v1 = c - b;
-        let n = v1.cross(v0).normalize();
-
-        let plane = Plane::new_from_point_and_normal(*a, n);
+        let plane = {
+            let v0 = edge0 - edge1;
+            let v1 = edge2 - edge1;
+            let n = v1.cross(v0).normalize();
+            Plane::new_from_point_and_normal(*edge0, n)
+        };
 
         let d = plane.dist_from_point(&sphere.center);
         if d > sphere.radius || d < -sphere.radius {
@@ -205,68 +247,81 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
 
         let pt0 = plane.project(&sphere.center);
 
-        // point to line segment
-        let v = pt0 - a;
-        let s = pt0 - b;
-        let length_square = s.magnitude2();
-        let dot = v.dot(s) / length_square;
-        let disp = s * dot;
-        let on_line = pt0 + disp;
-
-        let v = on_line - pt0;
-        v.normalize();
-
-        // Point on the sphere which will maybe collide with the edge
+        let on_line = {
+            let v = pt0 - edge0;
+            let s = edge1 - edge0;
+            let len_sq = s.magnitude2();
+            let dot = v.dot(s) / len_sq;
+            let disp = s * dot;
+            pt0 + disp
+        };
+        let v = (on_line - pt0).normalize();
         let pt1 = v * r + pt0;
 
-        // Figure out the point on the line
-        // avoid sqrt
-        let seg = b - a;
-        let a_to_point = pt1 - a;
-        let sign = if seg.dot(a_to_point) >= 0.0 { 1.0 } else { -1.0 };
-        let dist_from_a = (pt1 - a).magnitude() * sign;
-        let seg_length = (b - a).magnitude();
-
-        if dist_from_a < seg_length {
-            let point_on_ray = pt1 - normal * sphere.radius;
-            let toi = (point_on_ray - sphere.center).magnitude();
-            println!("got intersection at {toi}");
-            if toi < nearest_toi {
-                nearest_toi = toi;
-                println!("found new intersection with segment {i}: {toi} (from {:?})", sphere.center);
-            }
+        let mut a0 = 0;
+        let mut a1 = 1;
+        let pl_x = f32::abs(plane.a);
+        let pl_y = f32::abs(plane.b);
+        let pl_z = f32::abs(plane.c);
+        if pl_x > pl_y && pl_x > pl_z {
+            a0 = 1;
+            a1 = 2;
         }
+        else if pl_y > pl_z {
+            a0 = 0;
+            a1 = 2;
+        }
+
+        let vv = pt1 + move_dir;
+
+        let res = {
+            let _p1 = vec2(pt1[a0], pt1[a1]);
+            let _p2 = vec2(vv[a0], vv[a1]);
+            let _p3 = vec2(edge0[a0], edge0[a1]);
+            let _p4 = vec2(edge1[a0], edge1[a1]);
+
+            let d1 = _p2 - _p1;
+            let d2 = _p3 - _p4;
+
+            let denom = d2.y * d1.x - d2.x * d1.y;
+            if denom == 0.0 {
+                None
+            }
+            else {
+                let dist = (d2.x * (_p1.y - _p3.y) - d2.y * (_p1.x - _p3.x)) / denom;
+                //println!("edge {i}: {edge0:?}, {edge1:?}, {t}, nearest: {nearest_toi}");
+                Some(dist)
+            }
+        };
+
+        if res.filter(|t| *t >= 0.0).is_none() {
+            continue;
+        }
+
+        let t = res.unwrap();
+        let inter = pt1 + move_dir * t;
+
+        let r1 = edge0 - inter;
+        let r2 = edge1 - inter;
+
+        if r1.dot(r2) > 0.0 {
+            continue;
+        }
+
+        if t > nearest_toi {
+            continue;
+        }
+
+        println!("edge {i}: {edge0:?}, {edge1:?}, {t}, nearest: {nearest_toi}");
+
+        nearest_toi = t;
     }
 
     // If the nearest toi we've found is less than the movement distance, we have a valid
     // intersection with this triangle.
     if nearest_toi < move_dist {
-        println!("intersection: {normal:?}, distance: {nearest_toi}"); 
-        Some(nearest_toi)
-    }
-    else {
-        None
-    }
-}
-
-/// Find the time of impact of a ray and an infinite cylinder along a line segment
-//fn toi_ray_infinite_cylinder(ray_start: &Vector3<f32>, ray_dir: &Vector3<f32>, a: &Vector3<f32>, b: &Vector3<f32>,
-//    radius: f32) -> Option<f32>
-//{
-//    None
-//}
-
-/// Find the time of impact between a line segment and a sphere
-fn toi_ray_sphere(sphere: &Sphere, ray_start: &Vector3<f32>, ray_dir: &Vector3<f32>) -> Option<f32> {
-    let offset = ray_start - sphere.center;
-
-    // Ray dir is normalised so a = 0.0
-    let a = 1.0;
-    let b = 2.0 * ray_dir.dot(offset);
-    let c = offset.dot(offset) - (sphere.radius * sphere.radius);
-
-    if b * b - 4.0 * a * c >= 0.0 {
-        Some((-b - f32::sqrt((b * b) - 4.0 * a * c)) / (2.0 * a))
+        //println!("intersection: {normal:?}, distance: {nearest_toi}"); 
+        Some((nearest_toi, normal))
     }
     else {
         None
@@ -277,22 +332,81 @@ fn toi_ray_sphere(sphere: &Sphere, ray_start: &Vector3<f32>, ray_dir: &Vector3<f
 /// checking that 0 <= v <= 1.0, 0 <= w <= 1.0, and v + v <= 1.0
 /// https://gamedev.stackexchange.com/a/23745
 fn point_in_triangle(triangle: &Triangle, point: &Vector3<f32>) -> bool {
-    let v0 = triangle.b - triangle.a;
-    let v1 = triangle.c - triangle.a;
-    let v2 = point - triangle.a;
+    //return true;
+    let u = triangle.b - triangle.a;
+    let v = triangle.c - triangle.a;
+    let w = point - triangle.a;
 
-    let d00 = v0.dot(v0);
-    let d01 = v0.dot(v1);
-    let d11 = v1.dot(v1);
-    let d20 = v2.dot(v0);
-    let d21 = v2.dot(v1);
+    let uu = u.dot(u);
+    let uv = u.dot(v);
+    let vv = v.dot(v);
+    let wu = w.dot(u);
+    let wv = w.dot(v);
+    let d = uv * uv - uu * vv;
 
-    let denom = d00 * d11 - d01 * d01;
+    let inv_d = 1.0 / d;
+    let s = (uv * wv - vv * wu) * inv_d;
+    if s < 0.0 || s > 1.0 {
+        return false;
+    }
 
-    let v = (d11 * d20 - d01 * d21) / denom;
-    let w = (d00 * d21 - d01 * d20) / denom;
+    let t = (uv * wu - uu * wv) * inv_d;
+    if t < 0.0 || (s + t > 1.0) {
+        return false;
+    }
 
-    0.0 <= v && v <= 1.0 &&
-    0.0 <= w && w <= 1.0 &&
-    (v + w) <= 1.0
+    true
+
+    //let a = vec3(triangle.a.x as f64, triangle.a.y as f64, triangle.a.z as f64);
+    //let b = vec3(triangle.b.x as f64, triangle.b.y as f64, triangle.b.z as f64);
+    //let c = vec3(triangle.c.x as f64, triangle.c.y as f64, triangle.c.z as f64);
+    //let point = vec3(point.x as f64, point.y as f64, point.z as f64);
+
+    //let v0 = b - a;
+    //let v1 = c - a;
+    //let v2 = point - a;
+
+    //let d00 = v0.dot(v0);
+    //let d01 = v0.dot(v1);
+    //let d11 = v1.dot(v1);
+    //let d20 = v2.dot(v0);
+    //let d21 = v2.dot(v1);
+
+    //let denom = d00 * d11 - d01 * d01;
+
+    //let v = (d11 * d20 - d01 * d21) / denom;
+    //let w = (d00 * d21 - d01 * d20) / denom;
+
+    //0.0 <= v && v <= 1.0 &&
+    //0.0 <= w && w <= 1.0 &&
+    //(v + w) <= 1.0
+
+    //let a = triangle.a - point;
+    //let b = triangle.b - point;
+    //let c = triangle.c - point;
+
+    //let u = b.cross(c);
+    //let v = c.cross(a);
+    //let w = a.cross(b);
+
+    //if u.dot(v) < 0.0 {
+    //    false
+    //}
+    //else if u.dot(w) < 0.0 {
+    //    false
+    //}
+    //else {
+    //    true
+    //}
+
+    //let same_side = |p1: Vector3<f32>, p2: Vector3<f32>, a: Vector3<f32>, b: Vector3<f32>| {
+    //    let cp1 = (b - a).cross(p1 - a);
+    //    let cp2 = (b - a).cross(p2 - a);
+    //    cp1.dot(cp2) >= 0.0
+    //};
+
+    //let a = triangle.a;
+    //let b = triangle.b;
+    //let c = triangle.c;
+    //same_side(*point, a, b, c) && same_side(*point, b, a, c) && same_side(*point, c, a, b)
 }
