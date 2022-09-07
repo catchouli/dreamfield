@@ -12,6 +12,8 @@ use ncollide3d::query::visitors::BoundingVolumeInterferencesCollector;
 use super::intersection;
 
 // TODO: might be worth trying fixed point, for authenticity, and to see if it's more stable
+// TODO: or doubles.. if really necessary for stability. quake used floats though and was very
+// stable.
 
 /// A struct for storing spherecast hits
 pub struct SpherecastResult {
@@ -54,7 +56,6 @@ impl LevelCollision {
     pub fn sweep_sphere(&mut self, world: &mut WorldChunkManager, start: &Vector3<f32>, dir: &Vector3<f32>,
         length: f32, radius: f32) -> Option<SpherecastResult>
     {
-        println!("\nsweep_sphere start");
         // Construct sphere
         let sphere = intersection::Sphere::new(*start, radius);
 
@@ -76,109 +77,22 @@ impl LevelCollision {
 
         for x in chunk_min_x..=chunk_max_x {
             for z in chunk_min_z..=chunk_max_z {
-                if let Some((_aabb, meshes)) = self.get_chunk_meshes(world, (x, z)) {
-
+                if let Some((aabb, meshes)) = self.get_chunk_meshes(world, (x, z)) {
                     // Check if the sphere is going to intersect the abbb at all and return None if not
-                    // TODO: implement this check properly
-                    //if intersection::toi_moving_sphere_aabb(&sphere, chunk_aabb, &sphere_velocity).is_none() {
-                    //    return None;
-                    //}
+                    if intersection::toi_moving_sphere_aabb(&sphere, aabb, dir, clipped_toi).is_none() {
+                        return None;
+                    }
 
                     // Check each mesh in the chunk for intersections
-                    for (_mesh_aabb, mesh) in meshes.iter() {
-                        // TODO: implement this check properly
-                        //if intersection::toi_moving_sphere_aabb(&sphere, mesh_aabb, &sphere_velocity).is_none() {
-                        //    continue;
-                        //}
+                    for (mesh_aabb, mesh) in meshes.iter() {
+                        if intersection::toi_moving_sphere_aabb(&sphere, mesh_aabb, dir, clipped_toi).is_none() {
+                            continue;
+                        }
 
                         for i in 0..mesh.nparts() {
                             let triangle = intersection::Triangle::from(mesh.triangle_at(i));
 
                             let res = intersection::toi_moving_sphere_triangle(&sphere, &triangle, dir, clipped_toi);
-                            if let Some((toi, normal)) = res {
-                                if toi < clipped_toi {
-                                    clipped_toi = f32::max(0.0, toi);
-                                    closest_normal = Some(normal);
-                                    println!("found better toi: {clipped_toi}");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If we have a closest_normal that means there was at least one intersection, otherwise there was none
-        closest_normal.map(|normal| SpherecastResult::new(clipped_toi, normal))
-    }
-
-    /// Sweep a "gourd" (two spheres positioned between two points, like a crappy capsule) out from
-    /// start to end, returning an intersection result along with a time of impact
-    pub fn sweep_gourd(&mut self, world: &mut WorldChunkManager, mut a: Vector3<f32>, mut b: Vector3<f32>,
-        dir: &Vector3<f32>, length: f32, radius: f32) -> Option<SpherecastResult>
-    {
-        // Make sure a is below b
-        if a.y > b.y {
-            let c = a;
-            a = b;
-            b = c;
-        }
-
-        // Construct two spheres between a and b
-        let top_center = b - vec3(0.0, radius, 0.0);
-        let bottom_center = a + vec3(0.0, radius, 0.0);
-
-        let top = intersection::Sphere::new(top_center, radius);
-        let bottom = intersection::Sphere::new(bottom_center, radius);
-
-        // Construct an aabb for the sphere's path
-        let mut sphere_path_aabb = Aabb::new();
-        sphere_path_aabb.expand_with_point(&(top_center - vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(top_center + vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(top_center + dir * length - vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(top_center + dir * length + vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(bottom_center - vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(bottom_center + vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(bottom_center + dir * length - vec3(radius, radius, radius)));
-        sphere_path_aabb.expand_with_point(&(bottom_center + dir * length + vec3(radius, radius, radius)));
-
-        // Walk aabb bounds and find all chunks that intersect the spherecast
-        let (min, max) = sphere_path_aabb.min_max().unwrap();
-        let (chunk_min_x, chunk_min_z) = WorldChunk::point_to_chunk_index(min);
-        let (chunk_max_x, chunk_max_z) = WorldChunk::point_to_chunk_index(max);
-
-        //// We clip this toi by each intersection until we end up with no more intersections
-        let mut clipped_toi = length;
-        let mut closest_normal: Option<Vector3<f32>> = None;
-
-        for x in chunk_min_x..=chunk_max_x {
-            for z in chunk_min_z..=chunk_max_z {
-                if let Some((_aabb, meshes)) = self.get_chunk_meshes(world, (x, z)) {
-                    // Check if the sphere is going to intersect the abbb at all and return None if not
-                    // TODO: implement this check properly
-                    //if intersection::toi_moving_sphere_aabb(&sphere, chunk_aabb, &sphere_velocity).is_none() {
-                    //    return None;
-                    //}
-
-                    // Check each mesh in the chunk for intersections
-                    for (_mesh_aabb, mesh) in meshes.iter() {
-                        // TODO: implement this check properly
-                        //if intersection::toi_moving_sphere_aabb(&sphere, mesh_aabb, &sphere_velocity).is_none() {
-                        //    continue;
-                        //}
-
-                        for i in 0..mesh.nparts() {
-                            let triangle = intersection::Triangle::from(mesh.triangle_at(i));
-
-                            let res = intersection::toi_moving_sphere_triangle(&top, &triangle, dir, clipped_toi);
-                            if let Some((toi, normal)) = res {
-                                if toi < clipped_toi {
-                                    clipped_toi = f32::max(0.0, toi);
-                                    closest_normal = Some(normal);
-                                }
-                            }
-
-                            let res = intersection::toi_moving_sphere_triangle(&bottom, &triangle, dir, clipped_toi);
                             if let Some((toi, normal)) = res {
                                 if toi < clipped_toi {
                                     clipped_toi = f32::max(0.0, toi);

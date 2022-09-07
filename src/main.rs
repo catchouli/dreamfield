@@ -84,24 +84,34 @@ fn init_entities(world: &mut World) {
         // TODO: split the orientation out into PlayerMovement, and then make this be initialized
         // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
         // duplicated.
-        //.insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
-        //.insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
+        .insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
+        .insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         // Test spherecast
-        .insert(PlayerCamera::new(vec3(-45.885677, 6.7, 20.211102), -0.50333333, 0.7666667))
-        .insert(PlayerMovement::new(vec3(-45.885677, 6.7 - 1.7, 20.211102), vec3(0.0, 0.0, 0.0)));
+        //.insert(PlayerCamera::new(vec3(-45.885677, 6.7, 20.211102), 0.0, 0.76))//-0.50333333, 0.7666667))
+        //.insert(PlayerMovement::new(vec3(-45.885677, 6.7 - 1.7, 20.211102), vec3(0.0, 0.0, 0.0)));
 
     // Create fire orb
-    //world.spawn()
-    //    .insert(Ball::default())
-    //    .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
-    //    .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+    world.spawn()
+        .insert(Ball::default())
+        .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
+        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
     world.spawn()
         .insert(TestSphere {})
         .insert(Position::new(vec3(-9.0, 0.5, 9.0)))
         .insert(Visual::new("white_sphere", false));
+
+    world.spawn()
+        .insert(Position::new(vec3(8.0, 2.5, -2.85)))
+        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
+    world.spawn()
+        .insert(Position::new(vec3(0.0, 2.5, -2.85)))
+        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
+    world.spawn()
+        .insert(Position::new(vec3(-8.0, 2.5, -2.85)))
+        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
 }
 
 /// Entry point

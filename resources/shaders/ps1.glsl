@@ -15,18 +15,18 @@ layout(location = 6) in vec4 vs_joint;
 layout(location = 7) in vec4 vs_weight;
 
 #ifdef TESSELLATION_ENABLED
-out vec4 tcs_clip_pos;
-out vec3 tcs_eye_pos;
-out vec3 tcs_world_pos;
-out vec3 tcs_normal;
-out vec2 tcs_uv;
-out vec3 tcs_col;
+noperspective out vec4 tcs_clip_pos;
+noperspective out vec3 tcs_eye_pos;
+noperspective out vec3 tcs_world_pos;
+noperspective out vec3 tcs_normal;
+noperspective out vec2 tcs_uv;
+noperspective out vec3 tcs_col;
 #else
-out float frag_dist;
-out vec3 frag_world_pos;
-out vec3 frag_nrm;
-out vec2 frag_uv;
-out vec3 frag_light;
+noperspective out float frag_dist;
+noperspective out vec3 frag_world_pos;
+noperspective out vec3 frag_nrm;
+noperspective out vec2 frag_uv;
+noperspective out vec3 frag_light;
 #endif
 
 void main() {
@@ -69,20 +69,20 @@ void main() {
 
 #ifdef BUILDING_TESS_CONTROL_SHADER
 
-in vec4 tcs_clip_pos[];
-in vec3 tcs_eye_pos[];
-in vec3 tcs_world_pos[];
-in vec3 tcs_normal[];
-in vec2 tcs_uv[];
-in vec3 tcs_col[];
+noperspective in vec4 tcs_clip_pos[];
+noperspective in vec3 tcs_eye_pos[];
+noperspective in vec3 tcs_world_pos[];
+noperspective in vec3 tcs_normal[];
+noperspective in vec2 tcs_uv[];
+noperspective in vec3 tcs_col[];
 
 layout(vertices=3) out;
-out vec4 tes_clip_pos[];
-out vec3 tes_eye_pos[];
-out vec3 tes_world_pos[];
-out vec3 tes_normal[];
-out vec2 tes_uv[];
-out vec3 tes_col[];
+noperspective out vec4 tes_clip_pos[];
+noperspective out vec3 tes_eye_pos[];
+noperspective out vec3 tes_world_pos[];
+noperspective out vec3 tes_normal[];
+noperspective out vec2 tes_uv[];
+noperspective out vec3 tes_col[];
 
 void main() {
     tes_clip_pos[gl_InvocationID] = tcs_clip_pos[gl_InvocationID];
@@ -113,19 +113,19 @@ void main() {
 #ifdef BUILDING_TESS_EVAL_SHADER
 
 layout(triangles,equal_spacing) in;
-in vec4 tes_clip_pos[];
-in vec3 tes_eye_pos[];
-in vec3 tes_world_pos[];
-in vec3 tes_normal[];
-in vec2 tes_uv[];
-in vec3 tes_col[];
+noperspective in vec4 tes_clip_pos[];
+noperspective in vec3 tes_eye_pos[];
+noperspective in vec3 tes_world_pos[];
+noperspective in vec3 tes_normal[];
+noperspective in vec2 tes_uv[];
+noperspective in vec3 tes_col[];
 
-out float frag_dist;
-out vec3 frag_world_pos;
-out vec3 frag_nrm;
-out vec2 frag_uv;
+noperspective out float frag_dist;
+noperspective out vec3 frag_world_pos;
+noperspective out vec3 frag_nrm;
+noperspective out vec2 frag_uv;
 
-out vec3 frag_light;
+noperspective out vec3 frag_light;
 
 vec4 lerp3D(vec4 v0, vec4 v1, vec4 v2)
 {
@@ -159,11 +159,11 @@ void main() {
 
 uniform sampler2D tex_base_color;
 
-in float frag_dist;
-in vec3 frag_world_pos;
-in vec3 frag_nrm;
-in vec2 frag_uv;
-in vec3 frag_light;
+noperspective in float frag_dist;
+noperspective in vec3 frag_world_pos;
+noperspective in vec3 frag_nrm;
+noperspective in vec2 frag_uv;
+noperspective in vec3 frag_light;
 
 out vec4 out_frag_color;
 
