@@ -1,20 +1,22 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use cgmath::Vector3;
+use cgmath::{Vector3, Quaternion};
 pub use crate::camera::{Camera, FpsCamera};
 use crate::{gl_backend::{GltfModel, Texture, ShaderProgram}, resources::{ShaderManager, TextureManager}};
 
 /// A component for representing 3d positions
 #[derive(Component)]
 pub struct Position {
-    pub pos: Vector3<f32>
+    pub pos: Vector3<f32>,
+    pub rot: Quaternion<f32>
 }
 
 impl Position {
-    pub fn new(pos: Vector3<f32>) -> Self {
+    pub fn new(pos: Vector3<f32>, rot: Quaternion<f32>) -> Self {
         Self {
-            pos
+            pos,
+            rot
         }
     }
 }

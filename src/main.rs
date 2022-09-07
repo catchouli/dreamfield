@@ -1,7 +1,7 @@
 mod sim;
 mod resources;
 
-use cgmath::vec3;
+use cgmath::{vec3, Quaternion};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
@@ -68,7 +68,7 @@ fn init_renderer(world: &mut World) -> Schedule {
 fn init_entities(world: &mut World) {
     // Create world
     world.spawn()
-        .insert(Position::new(vec3(0.0, 0.0, 0.0)))
+        .insert(Position::new(vec3(0.0, 0.0, 0.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("demo_scene", true, Animation::Loop("Idle".to_string())));
 
     // Create sky
@@ -96,7 +96,7 @@ fn init_entities(world: &mut World) {
     // Create fire orb
     world.spawn()
         .insert(Ball::default())
-        .insert(Position::new(vec3(-9.0, 0.0, 9.0)))
+        .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 }
 

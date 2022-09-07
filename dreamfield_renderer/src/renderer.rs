@@ -105,7 +105,7 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
         shader.use_program();
 
         // Draw model
-        let transform = Matrix4::from_translation(pos.pos);
+        let transform = Matrix4::from_translation(pos.pos) * Matrix4::from(pos.rot);
         model.render(&transform, ubo_global, ubo_joints, visual.tessellate);
     }
 
