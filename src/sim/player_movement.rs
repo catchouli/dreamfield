@@ -190,26 +190,39 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
         player_movement.velocity *= newspeed;
     }
 
-    let lat_vel = 0.2 * (right_cmd + forward_cmd);
+    let lat_vel = right_cmd + forward_cmd;
     player_movement.velocity.x = lat_vel.x;
     player_movement.velocity.z = lat_vel.z;
 
     let mut clip_planes = Vec::new();
 
-    // find ground plane
+    // Find ground plane
     let ground_start = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
     if let Some(hit) = level.sweep_sphere(world, &ground_start, &vec3(0.0, -1.0, 0.0), 0.0, COLLIDER_RADIUS) {
-        let point = ground_start + vec3(0.0, -1.0, 0.0) * hit.toi();
-        let ground_plane = Plane::new_from_point_and_normal(point, *hit.normal());
-        clip_planes.push(ground_plane);
+        if hit.normal().y >= 0.7 {
+            let point = ground_start + vec3(0.0, -1.0, 0.0) * hit.toi() - hit.normal() * COLLIDER_RADIUS;
+            //println!("found ground plane: toi: {}, pos: {point:?}, normal: {:?}", hit.toi(), hit.normal());
+            let ground_plane = Plane::new_from_point_and_normal(point, *hit.normal());
+            clip_planes.push(ground_plane);
 
-        //println!("found ground, resetting y velocity");
-        player_movement.velocity.y = 0.0;
+            //println!("found ground, resetting y velocity");
+            player_movement.velocity.y = 0.0;
+        }
+        else {
+            //println!("on steep slope");
+            player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
+        }
     }
     else {
         //println!("no ground, accelerating");
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
     }
+
+    // Add original velocity as plane
+    let vel_plane_nrm = player_movement.velocity.normalize();
+    let vel_plane_pos = player_movement.position - vel_plane_nrm * COLLIDER_RADIUS;
+    clip_planes.push(Plane::new_from_point_and_normal(vel_plane_pos, vel_plane_nrm));
+    //println!("pos: {:?}, vel: {:?}", player_movement.position, player_movement.velocity);
 
     //println!("vel: {:?}", player_movement.velocity);
 
@@ -232,7 +245,9 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
         let move_dir = remaining_movement / move_dist;
 
         // Spherecast to find the next plane to clip against
-        if let Some(hit) = level.sweep_sphere(world, &move_start, &move_dir, move_dist, COLLIDER_RADIUS) {
+        //println!("spherecasting down to {move_dist}");
+        let sphere_start = move_start + vec3(0.0, COLLIDER_RADIUS, 0.0);
+        if let Some(hit) = level.sweep_sphere(world, &sphere_start, &move_dir, move_dist, COLLIDER_RADIUS) {
             //println!("spherecast hit object at distance {}", hit.toi());
 
             // Check the plane isn't already in there
@@ -246,22 +261,25 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
 
             // TODO: should we do something if it is found?
             if !found_plane {
-                let point = move_start + move_dir * hit.toi() - hit.normal() * COLLIDER_RADIUS;
+                let point = sphere_start + move_dir * hit.toi() - hit.normal() * COLLIDER_RADIUS;
                 //println!("adding plane with normal {:?} at position {point:?}", hit.normal());
-                clip_planes.push(Plane::new_from_point_and_normal(point, *hit.normal()));
+                let plane = Plane::new_from_point_and_normal(point, *hit.normal());
+                //println!("spherecast adding plane with pos: {point:?}, normal: {:?}", plane.normal());
+                clip_planes.push(plane);
             }
         }
 
         // Clip movement to clip planes
-        let sphere = Sphere::new(move_start, COLLIDER_RADIUS);
+        let sphere = Sphere::new(move_start + vec3(0.0, COLLIDER_RADIUS, 0.0), COLLIDER_RADIUS);
         let mut clip_plane = None;
         let mut clip_toi = move_dist;
+        //println!("testing clip planes for clip toi, move_dist: {move_dist}");
         for (i, plane) in clip_planes.iter().enumerate() {
             //println!("testing against plane {i} with normal {:?}", plane.normal());
             // works ok in some places but was falling through ramp
             if let Some(toi) = intersection::toi_moving_sphere_plane(&sphere, plane, &move_dir, clip_toi) {
                 //println!("sphere hit plane {i}");
-                if toi < move_dist {
+                if toi < clip_toi {
                     //println!("plane {i} toi: {toi}");
                     clip_plane = Some(plane);
                     clip_toi = toi;
@@ -276,10 +294,30 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
             // If we find any solution that doesn't end up intersecting any of the other clip
             // planes then we can move onto the next iteration and look for more clip planes to
             // add.
-            remaining_movement -= plane.normal() * plane.normal().dot(remaining_movement);
         }
 
-        move_start += move_dir * (clip_toi - 0.01);
+        let step_move_dist = clip_toi - 0.01;
+        if let Some(plane) = clip_plane {
+            remaining_movement -= plane.normal() * plane.normal().dot(remaining_movement);
+            if remaining_movement.magnitude2() > 0.0 {
+                remaining_movement = remaining_movement.normalize() * (move_dist - step_move_dist);
+            }
+        }
+        else {
+            remaining_movement = vec3(0.0, 0.0, 0.0);
+        }
+
+        //println!("move dir: {move_dir:?}");
+        let old = move_start;
+        move_start += move_dir * f32::max(0.0, step_move_dist);
+
+        //println!("got clip toi: {clip_toi}, moving from {old:?} to {move_start:?}");
+        if let Some(plane) = clip_plane {
+            //println!("clipped plane: {plane:?}");
+        }
+        else {
+            //println!("(no clip plane clipped)");
+        }
 
         // Move up to plane and redirect motion
         //move_start += move_dir * clip_toi;
@@ -332,6 +370,15 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
     //}
 
     //println!("pos: {:?}, vel: {:?}", player_movement.position, player_movement.velocity);
+
+    // bump out of walls
+    let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    if let Some(contact) = level.sphere_contact_any(world, &collider_pos, COLLIDER_RADIUS) {
+        if contact.depth > 0.0 {
+            let n = contact.normal;
+            player_movement.position += contact.depth * vec3(n.x, n.y, n.z);
+        }
+    }
 }
 
 fn pm_update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
