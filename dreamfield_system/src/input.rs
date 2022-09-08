@@ -18,6 +18,7 @@ pub enum InputName {
     CamLookDown,
     CamLookRight,
     CamSpeed,
+    Jump,
     Rewind,
     Last
 }

@@ -1,7 +1,7 @@
 mod sim;
 mod resources;
 
-use cgmath::vec3;
+use cgmath::{vec3, vec2};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
@@ -10,7 +10,7 @@ use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position,
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
 
-use sim::{PlayerMovement, Ball, TestSphere};
+use sim::{PlayerMovement, Ball, TestSphere, PlayerMovementMode};
 use sim::level_collision::LevelCollision;
 
 /// The width of the window
@@ -85,7 +85,7 @@ fn init_entities(world: &mut World) {
         // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
         // duplicated.
         .insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
-        .insert(PlayerMovement::new(vec3(0.0, 0.5, 10.0), vec3(0.0, 0.0, 0.0)));
+        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Clip, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         // Test spherecast
