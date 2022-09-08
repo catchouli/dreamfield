@@ -2,10 +2,10 @@ use std::f32::consts::PI;
 
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, Query};
-use cgmath::{Vector3, vec3, InnerSpace};
+use cgmath::{Vector3, vec3, InnerSpace, Vector2, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix};
 
 use super::level_collision::LevelCollision;
-use dreamfield_renderer::components::{PlayerCamera, Camera};
+use dreamfield_renderer::components::PlayerCamera;
 use dreamfield_system::resources::{SimTime, InputName, InputState};
 
 /// The character height
@@ -26,17 +26,45 @@ const CAM_MOVE_SPEED_FAST: f32 = 12.0;
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
 
+/// The world up vector
+const WORLD_UP: Vector3<f32> = vec3(0.0, 1.0, 0.0);
+
+/// The world right vector
+const WORLD_RIGHT: Vector3<f32> = vec3(1.0, 0.0, 0.0);
+
+/// The world forward vector
+const WORLD_FORWARD: Vector3<f32> = vec3(0.0, 0.0, -1.0);
+
 /// The PlayerMovement component
 #[derive(Component)]
 pub struct PlayerMovement {
+    pub position: Vector3<f32>,
+    pub pitch_yaw: Vector2<f32>,
     pub velocity: Vector3<f32>
 }
 
-impl Default for PlayerMovement {
-    fn default() -> Self {
+impl PlayerMovement {
+    pub fn new(position: Vector3<f32>, pitch_yaw: Vector2<f32>) -> Self {
         PlayerMovement {
+            position,
+            pitch_yaw,
             velocity: vec3(0.0, 0.0, 0.0)
         }
+    }
+
+    // TODO: could cache these
+    pub fn orientation(&self) -> Quaternion<f32> {
+        let pitch = Quaternion::from_axis_angle(WORLD_RIGHT, Rad(self.pitch_yaw.x));
+        let yaw = Quaternion::from_axis_angle(WORLD_UP, Rad(self.pitch_yaw.y));
+        yaw * pitch
+    }
+
+    pub fn forward(&self) -> Vector3<f32> {
+        self.orientation() * WORLD_FORWARD
+    }
+
+    pub fn right(&self) -> Vector3<f32> {
+        self.orientation() * WORLD_RIGHT
     }
 }
 
@@ -47,8 +75,6 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
     let time_delta = sim_time.sim_time_delta as f32;
 
     for (mut cam, mut player_movement) in query.iter_mut() {
-        let camera = &mut cam.camera;
-
         // Update look direction (buttons)
         let (cam_look_horizontal, cam_look_vertical) = input_state.get_look_input();
 
@@ -57,10 +83,9 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
             true => CAM_LOOK_SPEED_FAST,
         };
 
-        let (mut pitch, mut yaw) = camera.get_pitch_yaw();
-        pitch += cam_look_vertical * cam_look_speed * time_delta;
-        yaw += cam_look_horizontal * cam_look_speed * time_delta;
-        camera.set_pitch_yaw(pitch, yaw);
+        let pitch_yaw = &mut player_movement.pitch_yaw;
+        pitch_yaw.x += cam_look_vertical * cam_look_speed * time_delta;
+        pitch_yaw.y += cam_look_horizontal * cam_look_speed * time_delta;
 
         // Get camera movement input
         let (forward_cam_movement, right_cam_movement) = input_state.get_movement_input();
@@ -70,8 +95,8 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
             true => CAM_MOVE_SPEED_FAST,
         };
 
-        let cam_movement = forward_cam_movement * cam_speed * camera.forward()
-            + right_cam_movement * cam_speed * camera.right();
+        let cam_movement = forward_cam_movement * cam_speed * player_movement.forward()
+            + right_cam_movement * cam_speed * player_movement.right();
 
         // Update velocity with cam movement and gravity
         player_movement.velocity.x = cam_movement.x;
@@ -79,10 +104,7 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
 
         // Now solve the y movement and xz movement separately
-        let mut pos = *camera.pos();
-
-        // Print the camera position
-        log::trace!("Camera position: {}, {}, {}; cam rot: {}, {}", pos.x, pos.y, pos.z, pitch, yaw);
+        let mut pos = player_movement.position + vec3(0.0, CHAR_HEIGHT, 0.0);
 
         // Resolve horizontal motion
         let mut movement = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
@@ -116,9 +138,11 @@ pub fn player_update(level_collision: Res<LevelCollision>, input_state: Res<Inpu
             }
         }
 
+        // Update position
+        player_movement.position = pos - vec3(0.0, CHAR_HEIGHT, 0.0);
+
         // Update camera position
-        camera.set_pos(&pos);
-        camera.update();
+        update_camera(&player_movement, &mut cam);
     }
 }
 
@@ -167,3 +191,8 @@ fn resolve_horizontal_movement(level_collision: &LevelCollision, pos: &Vector3<f
     }
 }
 
+fn update_camera(player_movement: &PlayerMovement, player_camera: &mut PlayerCamera) {
+    let cam_pos = player_movement.position + vec3(0.0, CHAR_HEIGHT, 0.0);
+    let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
+    player_camera.view = cam_transform.invert().unwrap();
+}
