@@ -30,6 +30,10 @@ impl Plane {
         let dist = self.dist_from_point(point);
         vec3(point.x - self.a * dist, point.y - self.b * dist, point.z - self.c * dist)
     }
+
+    pub fn normal(&self) -> Vector3<f32> {
+        vec3(self.a, self.b, self.c)
+    }
 }
 
 /// A sphere primitive
@@ -85,6 +89,35 @@ impl From<ncollide3d::shape::Triangle<f32>> for Triangle {
 /// TODO: implement this
 pub fn toi_moving_sphere_aabb(_sphere: &Sphere, _aabb: &Aabb, _move_dir: &Vector3<f32>, move_dist: f32) -> Option<f32> {
     Some(move_dist)
+}
+
+pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector3<f32>, move_dist: f32)
+    -> Option<f32>
+{
+    let plane_normal = plane.normal();
+    let normal_dot_move_dir = plane_normal.dot(*move_dir);
+    if normal_dot_move_dir >= -0.001 {
+        return None;
+    }
+
+    let dist_from_plane = plane.dist_from_point(sphere.center);
+
+    if dist_from_plane < -sphere.radius {
+        return None;
+    }
+
+    if dist_from_plane - sphere.radius > move_dist {
+        return None;
+    }
+
+    let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
+
+    if toi >= 0.0 {
+        Some(toi)
+    }
+    else {
+        None
+    }
 }
 
 /// Time of intersection between a swept sphere and a triangle. We handle this by clipping
@@ -193,7 +226,7 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
         // the ends of the line segment (e.g. a minowski sum - like a capsule). However, we're
         // already testing against the vertices of the triangle above, which I *think* is
         // equivalent.
-        let iters = 20;
+        let iters = 50;
         for i in 1..iters {
             let dist = (i as f32) / (iters as f32);
             let point = edge0 + edge_dir * dist * edge_len;
