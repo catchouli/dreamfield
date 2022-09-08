@@ -1,14 +1,11 @@
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
-use cgmath::{Vector3, vec3, InnerSpace, Vector2, Zero, Quaternion, Rad, Rotation3};
-use dreamfield_system::input;
+use cgmath::{Vector3, vec3, InnerSpace, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix};
 use dreamfield_system::world::WorldChunkManager;
-
-use crate::sim::intersection::Plane;
 
 use super::TestSphere;
 use super::level_collision::{LevelCollision, SpherecastResult};
-use dreamfield_renderer::components::{PlayerCamera, Camera, Position, FpsCamera};
+use dreamfield_renderer::components::{PlayerCamera, Position};
 use dreamfield_system::resources::{SimTime, InputName, InputState};
 
 /// The character height
@@ -113,8 +110,6 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
     let time_delta = sim_time.sim_time_delta as f32;
 
     for (mut cam, mut player_movement) in query.iter_mut() {
-        let camera = &mut cam.camera;
-
         // Get camera movement input
         let move_input = input_state.get_movement_input();
 
@@ -123,18 +118,15 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
 
         // Update camera
         let cam_pos = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
-        let pitch_yaw = player_movement.pitch_yaw;
-
-        camera.set_pos(&cam_pos);
-        camera.set_pitch_yaw(pitch_yaw.x, pitch_yaw.y);
-        camera.update();
+        let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
+        cam.view = cam_transform.invert().unwrap();
 
         // Debug spherecast
         if input_state.inputs[InputName::Rewind as usize] {
             let (_, mut pos) = test_sphere.single_mut();
 
-            let start = camera.pos();
-            let dir = *camera.forward();
+            let start = player_movement.position;
+            let dir = player_movement.forward();
 
             let res = level_collision.sweep_sphere(world.as_mut(), &start, &dir, 10.0, 0.5);
             if let Some(res) = res {

@@ -8,7 +8,6 @@ use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4};
 use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
-use crate::camera::Camera;
 use crate::resources::{ModelManager, TextureManager, ShaderManager};
 use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime};
 use dreamfield_system::WindowSettings;
@@ -59,15 +58,35 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     // Get player camera
     let player_camera = player_query.get_single().expect("Expected one player camera");
 
+    // Create framebuffers if they don't exist
+    if local.framebuffer.is_none() {
+        local.framebuffer = Some(Framebuffer::new(player_camera.render_res.x as i32, player_camera.render_res.y as i32,
+            gl::SRGB8, TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::NEAREST, gl::NEAREST)));
+    }
+    if local.yiq_framebuffer.is_none() {
+        local.yiq_framebuffer = Some(Framebuffer::new(player_camera.render_res.x as i32, player_camera.render_res.y as i32,
+            gl::RGBA32F, TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::LINEAR_MIPMAP_LINEAR, gl::NEAREST)));
+    }
+
     // Render game
     // Update global params
+    local.ubo_global.set_fog_color(&player_camera.fog_color);
+    local.ubo_global.set_fog_dist(&player_camera.fog_range);
+
+    local.ubo_global.set_target_aspect(&player_camera.render_aspect);
+    local.ubo_global.set_render_res(&player_camera.render_res);
+    local.ubo_global.set_render_fov(&player_camera.render_fov_rad);
+
+    local.ubo_global.set_mat_proj(&player_camera.proj);
+
     local.ubo_global.set_sim_time(&(sim_time.sim_time as f32));
-    local.ubo_global.set_mat_view_derive(&player_camera.camera.get_view_matrix());
+    local.ubo_global.set_mat_proj(&player_camera.proj);
+    local.ubo_global.set_mat_view_derive(&player_camera.view);
     local.ubo_global.upload_changed();
 
     // Bind framebuffer and clear
-    unsafe { gl::Viewport(0, 0, RENDER_WIDTH, RENDER_HEIGHT) };
-    local.framebuffer.bind_draw();
+    unsafe { gl::Viewport(0, 0, player_camera.render_res.x as i32, player_camera.render_res.y as i32) };
+    local.framebuffer.as_ref().unwrap().bind_draw();
     unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
 
     // Enable or disable wireframe mode
@@ -108,8 +127,10 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     local.ps1_tess_shader.use_program();
 
     // Get camera pos
-    let pos = camera.camera.pos();
-    let forward = camera.camera.forward();
+    let cam_transform = camera.view.invert().unwrap();
+    let pos = cam_transform.w.truncate();
+    let forward = cam_transform * vec4(0.0, 0.0, -1.0, 0.0);
+    //let forward = camera.camera.forward();
 
     // Work out what chunks can be seen by creating a triangle between the camera position and the
     // corners of the far clip plane, in 2D, and then walk all the chunks between them and draw them
@@ -322,7 +343,7 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
         shader.use_program();
 
         // Draw model
-        let transform = Matrix4::from_translation(pos.pos);
+        let transform = Matrix4::from_translation(pos.pos) * Matrix4::from(pos.rot);
         model.render(&transform, ubo_global, ubo_joints, visual.tessellate);
     }
 }
@@ -354,12 +375,15 @@ pub fn final_composite(local: &RendererResources, window_settings: &Res<WindowSe
         gl::Disable(gl::DEPTH_TEST);
     }
 
+    let yiq_framebuffer = local.yiq_framebuffer.as_ref().unwrap();
+    let framebuffer = local.framebuffer.as_ref().unwrap();
+
     // Composite simulation: convert rgb to yiq color space
     // No SRGB conversion, since we're outputting colors in the YIQ color space. Additionally
     // we're writing to an f32 framebuffer already anyway to avoid precision issues.
     unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB) };
-    local.yiq_framebuffer.bind_draw();
-    local.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+    yiq_framebuffer.bind_draw();
+    framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
     local.composite_yiq_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
@@ -368,17 +392,17 @@ pub fn final_composite(local: &RendererResources, window_settings: &Res<WindowSe
     // Annoyingly the YIQ conversion already outputs sRGB colors, so we have to convert them
     // back to linear in the shader, just for them to be converted back into sRGB. Oh well.
     unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
-    local.framebuffer.bind_draw();
-    local.yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+    framebuffer.bind_draw();
+    yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
     unsafe { gl::GenerateMipmap(gl::TEXTURE_2D) };
     local.composite_resolve_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
-    local.framebuffer.unbind();
+    framebuffer.unbind();
 
     // Render framebuffer to screen
     let (window_width, window_height) = window_settings.window_size;
     unsafe { gl::Viewport(0, 0, window_width, window_height) };
-    local.framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+    framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
     local.blit_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 }

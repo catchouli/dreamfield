@@ -1,20 +1,24 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use cgmath::Vector3;
+use cgmath::{Vector3, Quaternion, Matrix4, Vector2};
 pub use crate::camera::{Camera, FpsCamera};
 use crate::{gl_backend::{GltfModel, Texture, ShaderProgram}, resources::{ShaderManager, TextureManager}};
+
+/// The renderer params
 
 /// A component for representing 3d positions
 #[derive(Component)]
 pub struct Position {
-    pub pos: Vector3<f32>
+    pub pos: Vector3<f32>,
+    pub rot: Quaternion<f32>
 }
 
 impl Position {
-    pub fn new(pos: Vector3<f32>) -> Self {
+    pub fn new(pos: Vector3<f32>, rot: Quaternion<f32>) -> Self {
         Self {
-            pos
+            pos,
+            rot
         }
     }
 }
@@ -133,15 +137,15 @@ impl Visual {
 /// A component for representing a camera
 #[derive(Component)]
 pub struct PlayerCamera {
-    pub camera: FpsCamera
-}
+    pub proj: Matrix4<f32>,
+    pub view: Matrix4<f32>,
 
-impl PlayerCamera {
-    pub fn new(pos: Vector3<f32>, pitch: f32, yaw: f32) -> Self {
-        PlayerCamera {
-            camera: FpsCamera::new_with_pos_rot(pos, pitch, yaw, 0.0)
-        }
-    }
+    pub render_res: Vector2<f32>,
+    pub render_aspect: f32,
+    pub render_fov_rad: f32,
+
+    pub fog_color: Vector3<f32>,
+    pub fog_range: Vector2<f32>
 }
 
 /// A component for representing a pre- or post-processing effect, such as a skysphere
