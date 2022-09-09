@@ -1,7 +1,7 @@
 pub mod level_collision;
-mod player_movement;
-mod ball;
-mod intersection;
+pub mod player_movement;
+pub mod ball;
+pub mod intersection;
 
 use bevy_ecs::schedule::SystemSet;
 

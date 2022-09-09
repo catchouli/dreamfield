@@ -1,5 +1,5 @@
-mod sim;
-mod resources;
+pub mod sim;
+pub mod resources;
 
 use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix};
 use bevy_ecs::prelude::*;

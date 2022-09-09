@@ -27,7 +27,7 @@ impl Plane {
     }
 
     /// Project a point onto the plane
-    pub fn _project_point(&self, point: Vector3<f32>) -> Vector3<f32> {
+    pub fn project(&self, point: Vector3<f32>) -> Vector3<f32> {
         let dist = self.dist_from_point(point);
         vec3(point.x - self.a * dist, point.y - self.b * dist, point.z - self.c * dist)
     }

@@ -3,7 +3,7 @@ use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace};
 use dreamfield_system::world::WorldChunkManager;
 
-use super::{TestSphere, intersection};
+use super::TestSphere;
 use super::intersection::{Plane, Sphere};
 use super::level_collision::LevelCollision;
 use dreamfield_renderer::components::{PlayerCamera, Position};
@@ -169,28 +169,28 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
     let mut right_cmd = right_input * speed * player_movement.right();
     right_cmd.y = 0.0;
 
-    player_movement.velocity += (right_cmd + forward_cmd) * PM_ACCELERATE * time_delta;
+    //player_movement.velocity += (right_cmd + forward_cmd) * PM_ACCELERATE * time_delta;
 
-    // friction
-    let speed = player_movement.velocity.magnitude();
-    if speed < 1.0 {
-        player_movement.velocity.x = 0.0;
-        player_movement.velocity.z = 0.0;
-    }
-    else if speed > 0.0 {
-        let pm_stopspeed = 1.0;
-        let pm_friction = 6.0;
-        let control = if speed < pm_stopspeed { pm_stopspeed } else { speed };
-        let drop = control * pm_friction * time_delta;
+    //// friction
+    //let speed = player_movement.velocity.magnitude();
+    //if speed < 1.0 {
+    //    player_movement.velocity.x = 0.0;
+    //    player_movement.velocity.z = 0.0;
+    //}
+    //else if speed > 0.0 {
+    //    let pm_stopspeed = 1.0;
+    //    let pm_friction = 6.0;
+    //    let control = if speed < pm_stopspeed { pm_stopspeed } else { speed };
+    //    let drop = control * pm_friction * time_delta;
 
-        let mut newspeed = speed - drop;
-        if newspeed < 0.0 {
-            newspeed = 0.0;
-        }
-        newspeed /= speed;
+    //    let mut newspeed = speed - drop;
+    //    if newspeed < 0.0 {
+    //        newspeed = 0.0;
+    //    }
+    //    newspeed /= speed;
 
-        player_movement.velocity *= newspeed;
-    }
+    //    player_movement.velocity *= newspeed;
+    //}
 
     let lat_vel = right_cmd + forward_cmd;
     player_movement.velocity.x = lat_vel.x;
@@ -205,140 +205,104 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
 
         if hit.normal().y >= MIN_WALK_NORMAL {
             player_movement.velocity.y = 0.0;
+        println!("cancelling gravity");
         }
         else {
             player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
+        println!("adding gravity acceleration");
         }
     }
     else {
         player_movement.ground_plane = None;
         player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
+        println!("adding gravity acceleration");
     }
 
-    // Recursive slide
-    let mut clip_planes = Vec::new();
-    if let Some(ground_plane) = player_movement.ground_plane {
-        clip_planes.push(ground_plane);
-    }
-    // Add original velocity as plane
-    let vel_plane_nrm = player_movement.velocity.normalize();
-    let vel_plane_pos = player_movement.position - vel_plane_nrm * COLLIDER_RADIUS;
-    clip_planes.push(Plane::new_from_point_and_normal(vel_plane_pos, vel_plane_nrm));
+    let movement_xz = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
+    player_movement.position = recursive_slide(level, world, player_movement.position, movement_xz, 0);
 
-    recursive_slide(level, world, &mut player_movement.position, &mut player_movement.velocity, 0, time_delta, &mut clip_planes);
+    if player_movement.velocity.y != 0.0 {
+        let movement_y = time_delta * vec3(0.0, player_movement.velocity.y, 0.0);
+        player_movement.position = recursive_slide(level, world, player_movement.position, movement_y, 0);
+    }
 
     // bump out of walls
-    let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    if let Some(contact) = level._sphere_contact_any(world, &collider_pos, COLLIDER_RADIUS) {
-        if contact.depth > 0.0 {
-            let n = contact.normal;
-            player_movement.position += contact.depth * vec3(n.x, n.y, n.z);
-        }
-    }
+    //let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    //if let Some(contact) = level._sphere_contact_any(world, &collider_pos, COLLIDER_RADIUS) {
+    //    if contact.depth > 0.0 {
+    //        let n = contact.normal;
+    //        player_movement.position += contact.depth * vec3(n.x, n.y, n.z);
+    //    }
+    //}
 }
 
-fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, position: &mut Vector3<f32>,
-    velocity: &mut Vector3<f32>, depth: i32, time_delta: f32, clip_planes: &mut Vec<Plane>)
+fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, position: Vector3<f32>,
+    velocity: Vector3<f32>, depth: i32) -> Vector3<f32>
 {
-    const MAX_DEPTH: i32 = 2;
-
-    let mut move_start = *position;
-    let mut remaining_movement = *velocity * time_delta;
-
-    for _ in 0..3 {
-        let move_dist = remaining_movement.magnitude();
-        if move_dist < f32::EPSILON {
-            break;
-        }
-
-        let move_dir = remaining_movement / move_dist;
-
-        // Spherecast to find the next plane to clip against
-        let sphere_start = move_start + vec3(0.0, COLLIDER_RADIUS, 0.0);
-        if let Some(hit) = level.sweep_sphere(world, &sphere_start, &move_dir, move_dist, COLLIDER_RADIUS) {
-            // Check the plane isn't already in there
-            let mut found_plane = false;
-            for plane in clip_planes.iter() {
-                if hit.normal().dot(plane.normal()) > 0.99 {
-                    found_plane = true;
-                }
-            }
-
-            // TODO: should we do something if it is found?
-            if !found_plane {
-                let point = sphere_start + move_dir * hit.toi() - hit.normal() * COLLIDER_RADIUS;
-                let plane = Plane::new_from_point_and_normal(point, *hit.normal());
-                clip_planes.push(plane);
-            }
-        }
-
-        // Clip movement to clip planes
-        let sphere = Sphere::new(move_start + vec3(0.0, COLLIDER_RADIUS, 0.0), COLLIDER_RADIUS);
-        let mut clip_plane = None;
-        let mut clip_toi = move_dist;
-        for (_, plane) in clip_planes.iter().enumerate() {
-            // works ok in some places but was falling through ramp
-            if let Some(toi) = intersection::toi_moving_sphere_plane(&sphere, plane, &move_dir, clip_toi) {
-                if toi < clip_toi {
-                    clip_plane = Some(*plane);
-                    clip_toi = toi;
-                    if clip_toi < 0.01 {
-                        clip_toi = 0.0;
-                    }
-                }
-            }
-            //
-            // Algo idea (based on quake): try and resolve the movement into other clip planes so
-            // that it doesn't go into any of the other clip planes. This can be done recursively.
-            // If we find any solution that doesn't end up intersecting any of the other clip
-            // planes then we can move onto the next iteration and look for more clip planes to
-            // add.
-        }
-
-        let step_move_dist = clip_toi - 0.01;
-        let step_move_time = (step_move_dist / move_dist) * time_delta;
-        // Recursively check this movement is ok
-        //let rec_pos = move_start;
-        //let rec_vel = *velocity;
-        if depth < MAX_DEPTH {
-            //let old_pos = *position;
-            // TODO: make sure we account for time remaining and movement remaining properly. tbh
-            // might be worth just using one or the other, or changing how this recursion works
-            recursive_slide(level, world, position, velocity, depth + 1, step_move_time, clip_planes);
-            //let diff = *position - old_pos;
-            //let dist_moved = diff.magnitude();
-            //let remaining_dist = move_dist - dist_moved;
-            //if remaining_dist > 0.0 {
-            //    remaining_movement = velocity.normalize() * remaining_dist;
-            //}
-        }
-
-        if let Some(plane) = clip_plane {
-            remaining_movement -= plane.normal() * plane.normal().dot(remaining_movement);
-            if remaining_movement.magnitude2() > 0.0 {
-                remaining_movement = remaining_movement.normalize() * (move_dist - step_move_dist);
-            }
-        }
-        else {
-            remaining_movement = vec3(0.0, 0.0, 0.0);
-        }
-
-        //if let Some(plane) = clip_plane {
-        //    remaining_movement -= plane.normal() * plane.normal().dot(remaining_movement);
-        //}
-        //else {
-        //    let step_move_dist = clip_toi - 0.01;
-        //    move_start += move_dir * f32::max(0.0, step_move_dist);
-        //    remaining_movement = vec3(0.0, 0.0, 0.0);
-        //    if remaining_movement.magnitude2() > 0.0 {
-        //        remaining_movement = remaining_movement.normalize() * (move_dist - step_move_dist);
-        //    }
-        //}
-
-        move_start += move_dir * f32::max(0.0, step_move_dist);
+    println!("sliding from {position:?} with velocity {velocity:?}");
+    if depth > 10 {
+        println!("hit 10 recursions");
+        return position;
     }
 
-    *position = move_start;
+    // Find the closest intersection point
+    let sweep_start = position + vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let length = velocity.magnitude();
+
+    if length < f32::EPSILON {
+        return position;
+    }
+
+    let dir = velocity / length;
+
+    // TODO: make sweep_sphere have two versions, one which works in ellipsoid space, and one which
+    // just does the transformation from world and back for other cases. otherwise we end up
+    // transforming back and forth unnecessarily.
+    if let Some(hit) = level.sweep_sphere(world, &sweep_start, &dir, length, COLLIDER_RADIUS) {
+        let toi = f32::max(0.0, hit.toi() - 0.01);
+        let new_pos = position + toi * dir;
+
+        // Calculate sliding normal
+        let sliding_plane = {
+            // TODO: it needs to be in ellipsoid space
+            let plane_origin = *hit.point();
+            // TODO: if this is an ellipsoid we need to scale it by the radius vector
+            let plane_normal = (new_pos - hit.normal()).normalize();
+            println!("got sliding plane at {plane_origin:?} and normal {plane_normal:?}");
+            Plane::new_from_point_and_normal(plane_origin, plane_normal)
+        };
+
+        let remaining_dist = length - toi;
+        let movement_to_subtract = hit.normal() * velocity.dot(*hit.normal());
+        println!("moved {toi}, remaining dist: {remaining_dist}, subtracting movement: {movement_to_subtract:?}");
+        let mut remaining_movement = velocity - movement_to_subtract;
+        if remaining_movement.magnitude2() < f32::EPSILON {
+            return new_pos;
+        }
+        remaining_movement = remaining_movement.normalize() * remaining_dist;
+
+        //return new_pos;
+
+        //let destination_point = (position/COLLIDER_RADIUS) + (velocity/COLLIDER_RADIUS);
+        //let new_destination_point = sliding_plane.project(velocity/COLLIDER_RADIUS);
+        //let new_velocity = destination_point - sliding_plane.dist_from_point(destination_point) * sliding_plane.normal();
+        //let new_destination_point = destination_point -
+            //sliding_plane.dist_from_point(destination_point) *
+            //sliding_plane.normal();
+
+        //let new_vel = new_destination_point - hit.point();
+
+        if remaining_dist < 0.01 {
+            new_pos
+        }
+        else {
+            println!("sliding {} with remaining movement: {remaining_movement:?}", depth + 1);
+            recursive_slide(level, world, new_pos, remaining_movement, depth + 1)
+        }
+    }
+    else {
+        position + velocity
+    }
 }
 
 fn pm_update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
