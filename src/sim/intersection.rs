@@ -2,7 +2,7 @@ use cgmath::{Vector3, vec3, InnerSpace};
 use dreamfield_system::world::aabb::Aabb;
 
 /// A plane primitive
-#[derive(Debug)]
+#[derive(Copy, Clone)]
 pub struct Plane {
     pub a: f32,
     pub b: f32,
@@ -27,7 +27,7 @@ impl Plane {
     }
 
     /// Project a point onto the plane
-    pub fn project_point(&self, point: Vector3<f32>) -> Vector3<f32> {
+    pub fn _project_point(&self, point: Vector3<f32>) -> Vector3<f32> {
         let dist = self.dist_from_point(point);
         vec3(point.x - self.a * dist, point.y - self.b * dist, point.z - self.c * dist)
     }
@@ -113,12 +113,7 @@ pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector
 
     let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
 
-    if toi >= 0.0 {
-        Some(toi)
-    }
-    else {
-        None
-    }
+    Some(f32::max(toi, 0.0))
 }
 
 /// Time of intersection between a swept sphere and a triangle. We handle this by clipping
@@ -187,7 +182,6 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
         // TODO: what case does it solve that this keeps executing?
         if point_in_triangle(triangle, &point_on_plane) {
             nearest_toi = toi;
-            //println!("found intersection with plane at {point_on_plane:?} (toi: {toi})");
         }
     }
 
@@ -228,7 +222,7 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
         // the ends of the line segment (e.g. a minowski sum - like a capsule). However, we're
         // already testing against the vertices of the triangle above, which I *think* is
         // equivalent.
-        let iters = 20;
+        let iters = 5;
         for i in 1..iters {
             let dist = (i as f32) / (iters as f32);
             let point = edge0 + edge_dir * dist * edge_len;

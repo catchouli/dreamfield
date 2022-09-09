@@ -111,12 +111,12 @@ impl LevelCollision {
 
     /// Sphere contact with the level, returning true as soon as it finds an object that intersects with the sphere.
     /// Note that this isn't guaranteed to be the closest contact, as we stop when we find a single contact point.
-    pub fn sphere_contact_any(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32)
+    pub fn _sphere_contact_any(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32)
         -> Option<Contact<f32>>
     {
         let mut found_contact = None;
 
-        self.sphere_contact_all(world, &center, radius, |c| {
+        self._sphere_contact_all(world, &center, radius, |c| {
             found_contact = Some(c);
             false
         });
@@ -127,7 +127,7 @@ impl LevelCollision {
     /// Sphere contact with the level, calling a closure for every intersected triangle. Returning
     /// false from that closure will cause the intersection test to end without calling the
     /// closure again.
-    pub fn sphere_contact_all<F>(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32, mut f: F)
+    pub fn _sphere_contact_all<F>(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32, mut f: F)
     where
         F: FnMut(Contact<f32>) -> bool
     {
@@ -148,7 +148,7 @@ impl LevelCollision {
                     continue;
                 }
 
-                Self::contact_trimesh_ball(&level_transform, mesh, &ball_transform, &ball, 0.0, |c| {
+                Self::_contact_trimesh_ball(&level_transform, mesh, &ball_transform, &ball, 0.0, |c| {
                     f(c)
                 });
             }
@@ -195,7 +195,7 @@ impl LevelCollision {
     }
 
     /// Best contact between a composite shape (`Mesh`, `Compound`) and any other shape.
-    pub fn contact_trimesh_ball<F: FnMut(Contact<f32>) -> bool> (
+    pub fn _contact_trimesh_ball<F: FnMut(Contact<f32>) -> bool> (
         m1: &Isometry<f32>,
         g1: &TriMesh<f32>,
         m2: &Isometry<f32>,
