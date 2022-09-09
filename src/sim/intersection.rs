@@ -127,119 +127,178 @@ pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector
 /// triangle, but one of the sphere's sides still intersects one of the vertices of the triangle.
 /// * Finally, each edge of the triangle, as there may be a case where one of the sphere's sides
 /// slips through between two vertices without intersecting either of them.
+///
+/// We now transform all points into 'ellipsoid space', the space where the sphere is a unit
+/// sphere. This allows us to support ellpsoids in theory, and also simplifies a lot of the math.
+/// http://www.peroxide.dk/papers/collision/collision.pdf
+///
 /// TODO: if we are intersecting, we might want to return a small negative toi to push us
 /// back out, so we don't have to do the weird 'bump' thing. update: it has that but it was causing
 /// weird up and down jumps when going over hills, so something's funny. for now I clamped it to 0
 pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir: &Vector3<f32>, move_dist: f32)
-    -> Option<(f32, Vector3<f32>)>
+    -> Option<(f32, Vector3<f32>, Vector3<f32>)>
 {
-    let move_dir = move_dir.normalize();
-    // One: Check the normal dot product. A positive value means we're moving away from the
-    // triangle and can't possibly intersect it.
+    // The change of basis matrix for R3 (world coordinates) to ellipsoid space simplifies to
+    // dividing by the radius (or the radius vector for an ellipsoid)
+    let cbm = 1.0 / sphere.radius;
+
+    let center = sphere.center * cbm;
+    let velocity = move_dir * move_dist * cbm;
+
     let normal = triangle.normal();
-    let normal_dot_move_dir = normal.dot(move_dir);
-    // TODO: check epsilon needed
-    if normal_dot_move_dir >= -0.001 {
+
+    let v0 = triangle.a * cbm;
+    let v1 = triangle.b * cbm;
+    let v2 = triangle.c * cbm;
+
+    let plane_constant = -v0.x * normal.x - v0.y * normal.y - v0.z * normal.z;
+
+    // First check - that the sphere intersects the plane of the triangle
+
+    // Check triangle is front facing
+    // TODO: if this still isn't accurate enough, let's just make the collision data doubles. This
+    // would allow us to have separate collision and render meshes anyway.
+    if normal.dot(*move_dir) > 0.0 {
         return None;
     }
 
-    // Two: Construct plane of triangle and test against it. This will leave us intersecting with
-    // the triangle if we approach it at any angle but straight on, but is a good start, and will
-    // leave us either touching or intersecting with the triangle.
-    let plane = Plane::new_from_point_and_normal(triangle.a, normal);
-    let dist_from_plane = plane.dist_from_point(sphere.center);
+    // SignedDistance(p) = normal.dot(p) + plane_constant
+    // t0 = 1 - SignedDistance(center) / normal.dot(velocity)
+    // There's a special case when normal.dot(velocity) where the sphere is already intersecting
+    // the plane, either the absolute distance is less than 1 (in which case the sphere intersects
+    // the plane from t0 = 0 and t1 = 1), or the distance is greater than 1 and the collision can
+    // not happen. If it's equal to 1, I guess the sphere is moving parallel and not intersecting.
+    let dist_to_center = normal.dot(center) + plane_constant;
+    let normal_dot_velocity = normal.dot(velocity);
 
-    // If the sphere is on the far side of the plane, we can't intersect with this triangle
-    if dist_from_plane < -sphere.radius {
+    // Calculate the points t0 and t1, between which the swept sphere intersects with the triangle
+    // plane
+    let t0;
+    let embedded_in_plane;
+
+    // If we're not moving parallel to the plane, calculate t0 and t1
+    if normal_dot_velocity != 0.0 {
+        embedded_in_plane = false;
+
+        // Calculate intersection points
+        let mut intersection1 = (1.0 - dist_to_center) / normal_dot_velocity;
+        let mut intersection2 = (-1.0 - dist_to_center) / normal_dot_velocity;
+
+        // Swap intersection points so t0 is the closest
+        if intersection1 > intersection2 {
+            (intersection1, intersection2) = (intersection2, intersection1);
+        }
+
+        // If the range is outside (0..1) then there's no intersection
+        if intersection1 > 1.0 || intersection2 < 0.0 {
+            return None;
+        }
+
+        // Discard t1, it's no longer needed, and clamp t0 to 0..1
+        t0 = f32::clamp(intersection1, 0.0, 1.0);
+    }
+    else if f32::abs(dist_to_center) < 1.0 {
+        embedded_in_plane = true;
+        t0 = 0.0;
+    }
+    else {
         return None;
     }
 
-    // If the plane is too far away to intersect with our movement, then we can't intersect
-    // with the triangle either
-    if dist_from_plane - sphere.radius > move_dist {
-        return None;
-    }
+    // Now there are three cases:
+    // * Collision inside the triangle (at t0, which is the closest possible intersection point)
+    // * Collision with one of the vertices of the triangle
+    // * Collision with one of the edges of the triangle
+    let mut collision_point: Option<Vector3<f32>> = None;
+    let mut t = 1.0;
 
-    // At this point, we know that there's either a valid intersection with the plane up ahead, or
-    // we're already touching (dist = 0) or in contact with the plane. At this point, we need to
-    // intersect with the triangle vertices and edges below to check that there's actually an
-    // intersection with the triangle, and that we didn't just intersect with the plane at some
-    // position away from it.
+    // Check if the intersection point is in the triangle
+    if !embedded_in_plane {
+        let intersection_point = center + t0 * velocity - normal;
+        let triangle = Triangle { a: v0, b: v1, c: v2 };
 
-    // At this point, we need to clip the movement against all of the vertices and edges of the
-    // triangle, to look for intersections that we've missed, and find the closest one.
-    let mut nearest_toi = move_dist;
-
-    // First, however, we handle the case where the intersection point between the plane and the
-    // sphere is inside the triangle, and return that intersection straight away, both as an
-    // early-out, and because if we didn't handle it here, you might walk straight through a
-    // triangle that's bigger than the sphere, because it won't end up intersecting with the
-    // vertices or edges.
-    if normal_dot_move_dir != 0.0 {
-        let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
-        let point_on_plane = sphere.center + move_dir * toi - normal * sphere.radius;
-
-        // TODO: what case does it solve that this keeps executing?
-        if point_in_triangle(triangle, &point_on_plane) {
-            nearest_toi = toi;
+        if point_in_triangle(&triangle, &intersection_point) {
+            collision_point = Some(intersection_point);
+            t = t0;
         }
     }
 
-    // Three: Intersect the sphere with the triangle's vertices. This is basically the sphere caps
-    // from the test below on the edges, thinking about it, but if we just test them here then we
-    // dedpulicate the work.
-    for i in 0..3 {
-        let v = triangle.vertex_at(i);
-        let v_sphere = Sphere::new(*v, sphere.radius);
+    // If we haven't found a collision yet we'll need to sweep the sphere against the vertices and
+    // edges of the triangle. We don't need to do this if we already found a collision, because if
+    // we found a collision inside the triangle above it will always be the first.
+    if collision_point.is_none() {
+        let velocity_magnitude2 = velocity.magnitude2();
 
-        if let Some(hit) = toi_ray_sphere(&v_sphere, &sphere.center, &move_dir) {
-            if hit < nearest_toi {
-                nearest_toi = hit;
+        // Intersect each vertex
+        let vertices = [v0, v1, v2];
+        for v in vertices.iter() {
+            let a = velocity_magnitude2;
+            let b = 2.0 * velocity.dot(center - v);
+            let c = (v - center).magnitude2() - 1.0;
+            if let Some(new_t) = lowest_root(a, b, c, t) {
+                t = new_t;
+                collision_point = Some(*v);
             }
         }
-    }
 
-    // Four: Intersect the sphere with the triangle's edges
-    for i in 0..3 {
-        let edge0 = triangle.vertex_at(i);
-        let edge1 = triangle.vertex_at((i + 1) % 3);
-        let edge = edge1 - edge0;
-        let edge_len = edge.magnitude();
-        let edge_dir = edge / edge_len;
+        // Intersect each edge
+        for i in 0..3 {
+            let p1 = vertices[i];
+            let p2 = vertices[(i+1) % 3];
 
-        // Iteratively figure out sphere sweep toi with triangle edge, slow and not accurate
-        // TODO: implement a proper version of this, I suspect the algorithm will be like:
-        //
-        // * Transform the line segment of the triangle's edge, and the sphere's movement
-        //   direction, so that the line segment is aligned to the y-axis.
-        // * As the cylinder is axis aligned, we can then intersect a line with a circle in 2D to
-        //   get the time of impact.
-        // * Calculate the point of impact, and check if it's on the line segment, to determine if
-        //   the sphere intersects with it.
-        //
-        // Note that this won't fully resolve the swept sphere/line segment intersection, as we're
-        // ignoring the caps of the cylinder. To do it fully we'd need to test against spheres at
-        // the ends of the line segment (e.g. a minowski sum - like a capsule). However, we're
-        // already testing against the vertices of the triangle above, which I *think* is
-        // equivalent.
-        let iters = 5;
-        for i in 1..iters {
-            let dist = (i as f32) / (iters as f32);
-            let point = edge0 + edge_dir * dist * edge_len;
+            let edge = p2 - p1;
+            let center_to_vertex = p1 - center;
 
-            let point_sphere = Sphere::new(point, sphere.radius);
-            if let Some(hit) = toi_ray_sphere(&point_sphere, &sphere.center, &move_dir) {
-                if hit < nearest_toi {
-                    nearest_toi = hit;
+            let edge_magnitude2 = edge.magnitude2();
+            let edge_dot_velocity = edge.dot(velocity);
+            let edge_dot_center_to_vertex = edge.dot(center_to_vertex);
+
+            let a = edge_magnitude2 * -velocity_magnitude2
+                + edge_dot_velocity * edge_dot_velocity;
+            let b = edge_magnitude2 * (2.0 * velocity.dot(center_to_vertex))
+                - 2.0 * edge_dot_velocity * edge_dot_center_to_vertex;
+            let c = edge_magnitude2 * (1.0 - center_to_vertex.magnitude2())
+                + edge_dot_center_to_vertex * edge_dot_center_to_vertex;
+
+            if let Some(new_t) = lowest_root(a, b, c, t) {
+                // Check if intersection is within line segment
+                let f = (edge.dot(velocity) * new_t - edge.dot(center_to_vertex)) / edge.magnitude2();
+                if f >= 0.0 && f <= 1.0 {
+                    t = new_t;
+                    collision_point = Some(p1 + f * edge);
                 }
             }
         }
     }
 
-    // If the nearest toi we've found is less than the movement distance, we have a valid
-    // intersection with this triangle.
-    if nearest_toi < move_dist {
-        Some((nearest_toi, normal))
+    // If we found a collision point, return the distance and point
+    collision_point.map(|point| {
+        (t * move_dist, point / cbm, normal)
+    })
+}
+
+// Solve a quadratic equation
+fn lowest_root(a: f32, b: f32, c: f32, max: f32) -> Option<f32> {
+    let determinant = b * b - 4.0 * a * c;
+
+    if determinant < 0.0 {
+        return None;
+    }
+
+    // possible optimization when determinant = 0 that r1 = r2
+    let sqrt_d = f32::sqrt(determinant);
+    let mut r1 = (-b - sqrt_d) / (2.0 * a);
+    let mut r2 = (-b + sqrt_d) / (2.0 * a);
+
+    if r1 > r2 {
+        (r1, r2) = (r2, r1);
+    }
+
+    if r1 > 0.0 && r1 < max {
+        Some(r1)
+    }
+    else if r2 > 0.0 && r2 < max {
+        Some(r2)
     }
     else {
         None

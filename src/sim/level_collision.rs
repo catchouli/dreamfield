@@ -18,19 +18,25 @@ use super::intersection;
 /// A struct for storing spherecast hits
 pub struct SpherecastResult {
     hit_toi: f32,
+    hit_point: Vector3<f32>,
     hit_normal: Vector3<f32>
 }
 
 impl SpherecastResult {
-    pub fn new(hit_toi: f32, hit_normal: Vector3<f32>) -> Self {
+    pub fn new(hit_toi: f32, hit_point: Vector3<f32>, hit_normal: Vector3<f32>) -> Self {
         Self {
             hit_toi,
+            hit_point,
             hit_normal
         }
     }
 
     pub fn toi(&self) -> f32 {
         self.hit_toi
+    }
+
+    pub fn point(&self) -> &Vector3<f32> {
+        &self.hit_point
     }
 
     pub fn normal(&self) -> &Vector3<f32> {
@@ -73,7 +79,7 @@ impl LevelCollision {
 
         //// We clip this toi by each intersection until we end up with no more intersections
         let mut clipped_toi = length;
-        let mut closest_normal: Option<Vector3<f32>> = None;
+        let mut closest_point_normal: Option<(Vector3<f32>,Vector3<f32>)> = None;
 
         for x in chunk_min_x..=chunk_max_x {
             for z in chunk_min_z..=chunk_max_z {
@@ -93,10 +99,10 @@ impl LevelCollision {
                             let triangle = intersection::Triangle::from(mesh.triangle_at(i));
 
                             let res = intersection::toi_moving_sphere_triangle(&sphere, &triangle, dir, clipped_toi);
-                            if let Some((toi, normal)) = res {
-                                if toi < clipped_toi {
-                                    clipped_toi = f32::max(0.0, toi);
-                                    closest_normal = Some(normal);
+                            if let Some((t0, point, normal)) = res {
+                                if t0 >= 0.0 && t0 < clipped_toi {
+                                    clipped_toi = t0;
+                                    closest_point_normal = Some((point, normal));
                                 }
                             }
                         }
@@ -106,7 +112,7 @@ impl LevelCollision {
         }
 
         // If we have a closest_normal that means there was at least one intersection, otherwise there was none
-        closest_normal.map(|normal| SpherecastResult::new(clipped_toi, normal))
+        closest_point_normal.map(|(point, normal)| SpherecastResult::new(clipped_toi, point, normal))
     }
 
     /// Sphere contact with the level, returning true as soon as it finds an object that intersects with the sphere.

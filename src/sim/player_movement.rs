@@ -113,25 +113,27 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         pmove(level_collision.as_mut(), world.as_mut(), &mut player_movement, &input_state, time_delta);
 
         // Update camera
-        let cam_pos = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0) - player_movement.forward() * 3.0;
-        let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
-        cam.view = cam_transform.invert().unwrap();
+        let cam_pos = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
 
         // Add debug sphere
         {
-            let (_, mut pos) = test_sphere.single_mut();
-            pos.pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
+            //cam_pos -= player_movement.forward() * 3.0;
+            //let (_, mut pos) = test_sphere.single_mut();
+            //pos.pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
         }
+
+        let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
+        cam.view = cam_transform.invert().unwrap();
 
 
         // Debug spherecast
-        if input_state.inputs[InputName::Rewind as usize] {
+        if input_state.inputs[InputName::Jump as usize] {
             let (_, mut pos) = test_sphere.single_mut();
 
-            let start = player_movement.position;
+            let start = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
             let dir = player_movement.forward();
 
-            let res = level_collision.sweep_sphere(world.as_mut(), &start, &dir, 10.0, 0.5);
+            let res = level_collision.sweep_sphere(world.as_mut(), &start, &dir, 15.0, 0.5);
             if let Some(res) = res {
                 pos.pos = start + dir * res.toi();
             }
@@ -197,7 +199,6 @@ fn pmove(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movem
     // Find ground plane
     let ground_start = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
     if let Some(hit) = level.sweep_sphere(world, &ground_start, &vec3(0.0, -1.0, 0.0), 0.02, COLLIDER_RADIUS) {
-        //println!("got ground plane at {}: {:?}", hit.toi(), hit.normal());
         let point = ground_start + vec3(0.0, -1.0, 0.0) * hit.toi() - hit.normal() * COLLIDER_RADIUS;
         let ground_plane = Plane::new_from_point_and_normal(point, *hit.normal());
         player_movement.ground_plane = Some(ground_plane);
@@ -241,29 +242,20 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
 {
     const MAX_DEPTH: i32 = 2;
 
-    //println!();
-    //for _ in 0..depth {
-    //    print!("  ");
-    //}
-    //println!("start recursive slide depth {depth} movement (pos: {:?}, velocity: {:?}", position, velocity);
-
     let mut move_start = *position;
     let mut remaining_movement = *velocity * time_delta;
 
     for _ in 0..3 {
         let move_dist = remaining_movement.magnitude();
         if move_dist < f32::EPSILON {
-            //println!("no more distance to move");
             break;
         }
-        //println!("{:?} ({move_dist}) remaining", remaining_movement);
 
         let move_dir = remaining_movement / move_dist;
 
         // Spherecast to find the next plane to clip against
         let sphere_start = move_start + vec3(0.0, COLLIDER_RADIUS, 0.0);
         if let Some(hit) = level.sweep_sphere(world, &sphere_start, &move_dir, move_dist, COLLIDER_RADIUS) {
-            //println!("got sphere hit at {}: {:?}", hit.toi(), hit.normal());
             // Check the plane isn't already in there
             let mut found_plane = false;
             for plane in clip_planes.iter() {
@@ -288,7 +280,6 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
             // works ok in some places but was falling through ramp
             if let Some(toi) = intersection::toi_moving_sphere_plane(&sphere, plane, &move_dir, clip_toi) {
                 if toi < clip_toi {
-                    //println!("clipping against plane {:?}", plane.normal());
                     clip_plane = Some(*plane);
                     clip_toi = toi;
                     if clip_toi < 0.01 {
@@ -310,7 +301,6 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
         //let rec_pos = move_start;
         //let rec_vel = *velocity;
         if depth < MAX_DEPTH {
-            //println!("recursive slide {}", depth + 1);
             //let old_pos = *position;
             // TODO: make sure we account for time remaining and movement remaining properly. tbh
             // might be worth just using one or the other, or changing how this recursion works

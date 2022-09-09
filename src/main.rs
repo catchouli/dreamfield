@@ -90,25 +90,25 @@ fn init_entities(world: &mut World) {
         //.insert(PlayerMovement::new_pos_look(vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099)));
 
     // Create fire orb
-    world.spawn()
-        .insert(Ball::default())
-        .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+    //world.spawn()
+    //    .insert(Ball::default())
+    //    .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
     world.spawn()
         .insert(TestSphere {})
         .insert(Position::new(vec3(-9.0, 0.5, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new("white_sphere", false));
 
-    world.spawn()
-        .insert(Position::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
-    world.spawn()
-        .insert(Position::new(vec3(0.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
-    world.spawn()
-        .insert(Position::new(vec3(-8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
+    //world.spawn()
+    //    .insert(Position::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
+    //world.spawn()
+    //    .insert(Position::new(vec3(0.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
+    //world.spawn()
+    //    .insert(Position::new(vec3(-8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
 }
 
 /// Create the PlayerCamera with all our renderer params
