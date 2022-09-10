@@ -21,13 +21,9 @@ impl Plane {
         Self { a, b, c, d }
     }
 
-    /// Get the distance of the plane from a point
+    /// Get the distance from a point to the plane
     pub fn dist_from_point(&self, point: Vector3<f32>) -> f32 {
         self.a * point.x + self.b * point.y + self.c * point.z + self.d
-    }
-
-    pub fn signed_distance_to(&self, point: Vector3<f32>) -> f32 {
-        point.dot(self.normal()) + self.d
     }
 
     /// Project a point onto the plane
@@ -36,6 +32,7 @@ impl Plane {
         vec3(point.x - self.a * dist, point.y - self.b * dist, point.z - self.c * dist)
     }
 
+    // Get the normal of the plane
     pub fn normal(&self) -> Vector3<f32> {
         vec3(self.a, self.b, self.c)
     }
@@ -90,6 +87,16 @@ impl From<ncollide3d::shape::Triangle<f32>> for Triangle {
     }
 }
 
+impl From<[Vector3<f32>; 3]> for Triangle {
+    fn from(v: [Vector3<f32>; 3]) -> Self {
+        Self {
+            a: v[0],
+            b: v[1],
+            c: v[2],
+        }
+    }
+}
+
 /// Time of intersection between a swept sphere and an AABB
 /// TODO: implement this
 pub fn toi_moving_sphere_aabb(_sphere: &Sphere, _aabb: &Aabb, _move_dir: &Vector3<f32>, move_dist: f32) -> Option<f32> {
@@ -136,33 +143,26 @@ pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector
 /// sphere. This allows us to support ellpsoids in theory, and also simplifies a lot of the math.
 /// http://www.peroxide.dk/papers/collision/collision.pdf
 ///
-/// TODO: if we are intersecting, we might want to return a small negative toi to push us
-/// back out, so we don't have to do the weird 'bump' thing. update: it has that but it was causing
-/// weird up and down jumps when going over hills, so something's funny. for now I clamped it to 0
-pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir: &Vector3<f32>, move_dist: f32)
+/// The return values are the time of impact from 0..1 along the velocity, the point of
+/// intersection with the triangle, and the normal of the intersected triangle.
+pub fn toi_unit_sphere_triangle(center: Vector3<f32>, velocity: Vector3<f32>, triangle: &Triangle)
     -> Option<(f32, Vector3<f32>, Vector3<f32>)>
 {
     // The change of basis matrix for R3 (world coordinates) to ellipsoid space simplifies to
     // dividing by the radius (or the radius vector for an ellipsoid)
-    let cbm = 1.0 / sphere.radius;
-
-    let center = sphere.center * cbm;
-    let velocity = move_dir * move_dist * cbm;
-
     let normal = triangle.normal();
 
-    let v0 = triangle.a * cbm;
-    let v1 = triangle.b * cbm;
-    let v2 = triangle.c * cbm;
+    let v0 = triangle.a;
+    let v1 = triangle.b;
+    let v2 = triangle.c;
 
     let plane_constant = -v0.x * normal.x - v0.y * normal.y - v0.z * normal.z;
 
     // First check - that the sphere intersects the plane of the triangle
 
     // Check triangle is front facing
-    // TODO: if this still isn't accurate enough, let's just make the collision data doubles. This
-    // would allow us to have separate collision and render meshes anyway.
-    if normal.dot(*move_dir) > 0.0 {
+    let normal_dot_velocity = normal.dot(velocity);
+    if normal_dot_velocity > 0.0 {
         return None;
     }
 
@@ -173,7 +173,6 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
     // the plane from t0 = 0 and t1 = 1), or the distance is greater than 1 and the collision can
     // not happen. If it's equal to 1, I guess the sphere is moving parallel and not intersecting.
     let dist_to_center = normal.dot(center) + plane_constant;
-    let normal_dot_velocity = normal.dot(velocity);
 
     // Calculate the points t0 and t1, between which the swept sphere intersects with the triangle
     // plane
@@ -277,7 +276,7 @@ pub fn toi_moving_sphere_triangle(sphere: &Sphere, triangle: &Triangle, move_dir
 
     // If we found a collision point, return the distance and point
     collision_point.map(|point| {
-        (t * move_dist, point / cbm, normal)
+        (t, point, normal)
     })
 }
 

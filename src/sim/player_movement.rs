@@ -1,11 +1,11 @@
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
-use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2};
+use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise};
 use dreamfield_system::world::WorldChunkManager;
 
 use super::TestSphere;
 use super::intersection::Plane;
-use super::level_collision::LevelCollision;
+use super::level_collision::{LevelCollision, SpherecastResult};
 use dreamfield_renderer::components::{PlayerCamera, Position};
 use dreamfield_system::resources::{SimTime, InputName, InputState};
 
@@ -13,10 +13,11 @@ use dreamfield_system::resources::{SimTime, InputName, InputState};
 const CHAR_HEIGHT: f32 = 1.8;
 
 /// The character's collider radius
-const COLLIDER_RADIUS: f32 = 0.5;
+const COLLIDER_RADIUS: Vector3<f32> = vec3(0.5, 0.5, 0.5);
 
-/// Height that we can step up onto objects
-const _STEP_OFFSET: f32 = 0.2;
+/// The character's collider change of basis matrix (to convert world coordinates to e-space, where
+/// the collider is a unit sphere)
+const COLLIDER_CBM: Vector3<f32> = vec3(1.0 / COLLIDER_RADIUS.x, 1.0 / COLLIDER_RADIUS.y, 1.0 / COLLIDER_RADIUS.z);
 
 /// The minimum ground_normal y value to stop you from walking on steep slopes
 const MIN_WALK_NORMAL: f32 = 0.7;
@@ -44,13 +45,13 @@ const WORLD_UP: Vector3<f32> = vec3(0.0, 1.0, 0.0);
 const WORLD_RIGHT: Vector3<f32> = vec3(1.0, 0.0, 0.0);
 
 /// The acceleration when on the ground
-const ACCELERATE: f32 = 15.0;
+const ACCELERATE: f32 = 20.0;
 
 /// The acceleration when in the air
-const AIR_ACCELERATE: f32 = 1.0;
+const AIR_ACCELERATE: f32 = 20.0;
 
 /// The ground friction as percentage of speed to lose per second
-const GROUND_FRICTION: f32 = 15.0;
+const GROUND_FRICTION: f32 = 20.0;
 
 /// Maximum walking speed on the ground
 const GROUND_MAX_SPEED: f32 = 3.0;
@@ -59,7 +60,7 @@ const GROUND_MAX_SPEED: f32 = 3.0;
 const RUNNING_MULTIPLIER: f32 = 2.0;
 
 /// Jump initial acceleration (instant)
-const INSTANT_JUMP_ACCELERATION: f32 = 2.0;
+const INSTANT_JUMP_ACCELERATION: f32 = 3.0;
 
 /// Jump acceleration per second thereafter
 const CONTINUED_JUMP_ACCELERATION: f32 = 3.0;
@@ -138,12 +139,14 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         if input_state.inputs[InputName::Debug as usize] {
             let (_, mut pos) = test_sphere.single_mut();
 
-            let start = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
-            let dir = player_movement.forward();
+            let radius = 0.5;
 
-            let res = level_collision.sweep_sphere(world.as_mut(), &start, &dir, 15.0, 0.5);
+            let start = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
+            let velocity = 15.0 * player_movement.forward();
+
+            let res = level_collision.sweep_sphere(world.as_mut(), start, velocity, radius);
             if let Some(res) = res {
-                pos.pos = start + dir * res.toi();
+                pos.pos = start + velocity * res.toi();
             }
             else {
                 pos.pos = vec3(9.0, 0.0, -9.0);
@@ -164,13 +167,13 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
         return;
     }
 
-    // Find ground plane
-    let ground_start = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    player_movement.ground_plane = level
-        .sweep_sphere(world, &ground_start, &vec3(0.0, -1.0, 0.0), 0.05, COLLIDER_RADIUS)
+    // Find ground plane, converting to ellipsoid space first
+    let position_e_space = player_movement.position.mul_element_wise(COLLIDER_CBM);
+    player_movement.ground_plane = sweep_unit(level, world, position_e_space, vec3(0.0, -0.02, 0.0))
         .map(|hit| {
-            let point = ground_start + vec3(0.0, -1.0, 0.0) * hit.toi() - hit.normal() * COLLIDER_RADIUS;
-            Plane::new_from_point_and_normal(point, *hit.normal())
+            let hit_point_world = hit.point().div_element_wise(COLLIDER_CBM);
+            let hit_normal_world = hit.normal().div_element_wise(COLLIDER_CBM).normalize();
+            Plane::new_from_point_and_normal(hit_point_world, hit_normal_world)
         });
 
     // Apply gravity acceleration
@@ -195,7 +198,6 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
     }
 
     // Apply jump acceleration
-    println!("jump time: {}, jump held: {}", player_movement.jump_timer, player_movement.jump_held);
     if input_state.inputs[InputName::Jump as usize] {
         // Start jump if we're on the ground
         if !steep_slope && !player_movement.jump_held && player_movement.jump_timer == 0.0 {
@@ -241,118 +243,111 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
         player_movement.velocity.z *= speed_ratio;
     }
 
+    // Convert position and velocity to e-space for unit sphere sweep
+    let mut position_es = player_movement.position
+        .mul_element_wise(COLLIDER_CBM);
+    let velocity_es = player_movement.velocity
+        .mul_element_wise(COLLIDER_CBM);
+
     // Update lateral movement
-    let movement_xz = time_delta * vec3(player_movement.velocity.x, 0.0, player_movement.velocity.z);
-    let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    let final_collider_pos = recursive_slide(level, world, collider_pos, movement_xz, 0, steep_slope);
-    player_movement.position = final_collider_pos - vec3(0.0, COLLIDER_RADIUS, 0.0);
+    let movement_xz_es = time_delta * vec3(velocity_es.x, 0.0, velocity_es.z);
+    position_es = recursive_slide(level, world, position_es, movement_xz_es, 0);
 
     // Add gravity
     if player_movement.velocity.y != 0.0 {
-        let movement_y = time_delta * vec3(0.0, player_movement.velocity.y, 0.0);
-        // TODO: make a function that takes into account this collider pos for us so we don't have
-        // to always remember. even better, make it use an ellipse too.
-        let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
-        // TODO: why doesn't this slide down slopes? hmm
-        let final_collider_pos = recursive_slide(level, world, collider_pos, movement_y, 0, steep_slope);
-        player_movement.position = final_collider_pos - vec3(0.0, COLLIDER_RADIUS, 0.0);
+        let movement_y_es = time_delta * vec3(0.0, velocity_es.y, 0.0);
+        position_es = recursive_slide(level, world, position_es, movement_y_es, 0);
     }
 
-    // bump out of walls
-    let collider_pos = player_movement.position + vec3(0.0, COLLIDER_RADIUS, 0.0);
-    if let Some(contact) = level._sphere_contact_any(world, &collider_pos, COLLIDER_RADIUS) {
-        if contact.depth > 0.0 {
-            log::warn!("Got stuck somehow, bumping out");
-            let n = contact.normal;
-            player_movement.position += contact.depth * vec3(n.x, n.y, n.z);
-            player_movement.velocity = vec3(0.0, 0.0, 0.0);
-        }
-    }
+    // Convert player position back to R3 (world space)
+    player_movement.position = position_es
+        .div_element_wise(COLLIDER_CBM);
+
+    // Bump out of walls if we get stuck
+    // TODO: reimplement without ncollide3d, it's less likely now but will probably happen
+    // sometimes
 }
 
+/// Sweep a unit sphere through the world from the start with a given velocity. Start and velocity
+/// must be converted to e-space first by multiplying by COLLIDER_CBM, and then the results must
+/// eventually be converted back to world space by doing the opposite.
+fn sweep_unit(level: &mut LevelCollision, world: &mut WorldChunkManager, start: Vector3<f32>, velocity: Vector3<f32>)
+    -> Option<SpherecastResult>
+{
+    // Add 1 radius to the starting y coordinate so the base of the sphere is at the player's feet
+    let start = start + vec3(0.0, 1.0, 0.0);
+
+    // Sweep the scene
+    let result = level.sweep_unit_sphere(world, start, velocity, COLLIDER_CBM);
+
+    // Subtract radius back from intersection point if there was a hit
+    result.map(|result| {
+        let toi = result.toi();
+        let point = result.point() - vec3(0.0, 1.0, 0.0);
+        let normal = *result.normal();
+        SpherecastResult::new(toi, point, normal)
+    })
+}
+
+/// Move through the world sliding on surfaces we collide with
 fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, position: Vector3<f32>,
-    velocity: Vector3<f32>, depth: i32, steep_slope: bool) -> Vector3<f32>
+    velocity: Vector3<f32>, depth: i32) -> Vector3<f32>
 {
     const MAX_RECURSION_DEPTH: i32 = 5;
     const VERY_CLOSE_DISTANCE: f32 = 0.01;
 
+    // If we hit the maximum recursion, just return the current position and don't advance anymore
     if depth >= MAX_RECURSION_DEPTH {
         return position;
     }
 
-    // Find the closest intersection point
-    let sweep_start = position;
-    let length = velocity.magnitude();
-
-    if length < f32::EPSILON {
+    // If the velocity is 0, stop advancing too
+    let velocity_length = velocity.magnitude();
+    if velocity_length == 0.0 {
         return position;
     }
 
-    let dir = velocity / length;
-
-    // TODO: make sweep_sphere have two versions, one which works in ellipsoid space, and one which
-    // just does the transformation from world and back for other cases. otherwise we end up
-    // transforming back and forth unnecessarily.
-    // TODO: actually, support ellipses, is probably more smarter
-    let hit = level.sweep_sphere(world, &sweep_start, &dir, length, COLLIDER_RADIUS);
+    // Sphere sweep and find next intersection point
+    let hit = sweep_unit(level, world, position, velocity);
     if hit.is_none() {
         return position + velocity;
     }
     let hit = hit.unwrap();
 
-    // The original destination point
-    let destination_point = position + velocity;
-    let mut new_base_point = position;
+    // Only update position if we aren't already very close
+    let hit_distance = hit.toi() * velocity_length;
+    let (new_position, hit_point) = match hit_distance > VERY_CLOSE_DISTANCE {
+        true => {
+            let velocity_dir = velocity / velocity_length;
 
-    let mut hit_point = *hit.point();
+            // Update position to just before the hit point so we don't move into it
+            let new_position = position + velocity_dir * (hit_distance - VERY_CLOSE_DISTANCE);
 
-    if hit.toi() > VERY_CLOSE_DISTANCE {
-        let v = if velocity.x != 0.0 || velocity.y != 0.0 || velocity.z != 0.0 {
-            let nearest_distance = hit.toi();
-            velocity.normalize() * (nearest_distance - VERY_CLOSE_DISTANCE)
-        } else {
-            vec3(0.0, 0.0, 0.0)
-        };
+            // Update the hit point too so that it doesn't throw off the plane calculation
+            let hit_point = hit.point() - VERY_CLOSE_DISTANCE * velocity_dir;
 
-        new_base_point = position + v;
+            (new_position, hit_point)
+        },
+        false => (position, *hit.point())
+    };
 
-        if v.x != 0.0 || v.y != 0.0 || v.z != 0.0 {
-            let v_dir = v.normalize();
-            hit_point -= VERY_CLOSE_DISTANCE * v_dir;
-        }
+    // Calculate sliding normal using clever math from triangle soup paper
+    let slide_plane_origin = hit_point;
+    let slide_plane_normal = (new_position - hit_point).normalize();
+    let slide_plane = Plane::new_from_point_and_normal(slide_plane_origin, slide_plane_normal);
+
+    // Project original destination onto plane, and subtract it the intersection point from it to
+    // get a new velocity
+    let original_destination = position + velocity;
+    let new_destination_point = slide_plane.project(original_destination);
+    let new_velocity_vector = new_destination_point - hit_point;
+
+    // If the new velocity is too low, just return the new position and stop moving
+    if new_velocity_vector.magnitude2() < (VERY_CLOSE_DISTANCE * VERY_CLOSE_DISTANCE) {
+        return new_position;
     }
 
-    // Convert
-    let cbm = 1.0 / COLLIDER_RADIUS;
-    let point_es = hit_point * cbm;
-    let destination_point_es = destination_point  * cbm;
-    let new_base_point_es = new_base_point  * cbm;
-
-    let slide_plane_origin_es = point_es;
-    let slide_plane_normal_es = (new_base_point_es - point_es).normalize();
-    let slide_plane_es = Plane::new_from_point_and_normal(slide_plane_origin_es, slide_plane_normal_es);
-
-    let new_destination_point_es = destination_point_es - slide_plane_es.signed_distance_to(destination_point_es) * slide_plane_normal_es;
-    let new_velocity_vector_es = new_destination_point_es - point_es;
-
-    if new_velocity_vector_es.magnitude() < VERY_CLOSE_DISTANCE {
-        return new_base_point;
-    }
-
-    let mut new_velocity_vector = new_velocity_vector_es / cbm;
-
-    if steep_slope && new_velocity_vector.y > 0.0 {
-        if new_velocity_vector.x != 0.0 || new_velocity_vector.z != 0.0 {
-            let vel_length = new_velocity_vector.magnitude();
-            new_velocity_vector.y = 0.0;
-            new_velocity_vector = new_velocity_vector.normalize() * vel_length;
-        }
-        else {
-            new_velocity_vector = vec3(0.0, 0.0, 0.0);
-        }
-    }
-
-    recursive_slide(level, world, new_base_point, new_velocity_vector, depth + 1, steep_slope)
+    recursive_slide(level, world, new_position, new_velocity_vector, depth + 1)
 }
 
 /// Update the view direction
