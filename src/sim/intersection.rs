@@ -1,4 +1,4 @@
-use cgmath::{Vector3, vec3, InnerSpace};
+use cgmath::{Vector3, vec3, InnerSpace, ElementWise};
 use dreamfield_system::world::aabb::Aabb;
 
 /// A plane primitive
@@ -61,12 +61,22 @@ pub struct Triangle {
 }
 
 impl Triangle {
+    pub fn new(a: Vector3<f32>, b: Vector3<f32>, c: Vector3<f32>) -> Self {
+        Self {
+            a,
+            b,
+            c
+        }
+    }
+
+    /// Calculate normal of triangle
     pub fn normal(&self) -> Vector3<f32> {
         let ab = self.b - self.a;
         let ac = self.c - self.a;
         ab.cross(ac).normalize()
     }
 
+    /// Get the nth vertex of a triangle
     pub fn vertex_at(&self, i: usize) -> &Vector3<f32> {
         match i {
             0 => &self.a,
@@ -75,25 +85,14 @@ impl Triangle {
             _ => panic!("vertex_at: i must be 0 <= i <= 2")
         }
     }
-}
 
-impl From<ncollide3d::shape::Triangle<f32>> for Triangle {
-    fn from(triangle: ncollide3d::shape::Triangle<f32>) -> Self {
-        Self {
-            a: vec3(triangle.a.x, triangle.a.y, triangle.a.z),
-            b: vec3(triangle.b.x, triangle.b.y, triangle.b.z),
-            c: vec3(triangle.c.x, triangle.c.y, triangle.c.z)
-        }
-    }
-}
-
-impl From<[Vector3<f32>; 3]> for Triangle {
-    fn from(v: [Vector3<f32>; 3]) -> Self {
-        Self {
-            a: v[0],
-            b: v[1],
-            c: v[2],
-        }
+    /// Apply a change of basis matrix (scale only, for ellipsoid space) to a triangle
+    pub fn apply_cbm(&self, cbm: Vector3<f32>) -> Self {
+        Self::new(
+            self.a.mul_element_wise(cbm),
+            self.b.mul_element_wise(cbm),
+            self.c.mul_element_wise(cbm)
+        )
     }
 }
 

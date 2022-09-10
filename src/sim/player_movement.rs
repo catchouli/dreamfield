@@ -13,14 +13,14 @@ use dreamfield_system::resources::{SimTime, InputName, InputState};
 const CHAR_HEIGHT: f32 = 1.8;
 
 /// The character's collider radius
-const COLLIDER_RADIUS: Vector3<f32> = vec3(0.5, 0.5, 0.5);
+const COLLIDER_RADIUS: Vector3<f32> = vec3(0.5, CHAR_HEIGHT * 0.5, 0.5);
 
 /// The character's collider change of basis matrix (to convert world coordinates to e-space, where
 /// the collider is a unit sphere)
 const COLLIDER_CBM: Vector3<f32> = vec3(1.0 / COLLIDER_RADIUS.x, 1.0 / COLLIDER_RADIUS.y, 1.0 / COLLIDER_RADIUS.z);
 
 /// The minimum ground_normal y value to stop you from walking on steep slopes
-const MIN_WALK_NORMAL: f32 = 0.7;
+const MIN_WALK_NORMAL: f32 = 0.85;
 
 /// The camera look speed
 const CAM_LOOK_SPEED: f32 = 0.5;
@@ -155,6 +155,7 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
     }
 }
 
+// TODO: make sweep work for single point, so we can use it to check if we're stuck and escape
 fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movement: &mut PlayerMovement,
     input_state: &InputState, time_delta: f32)
 {
@@ -263,9 +264,8 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
     player_movement.position = position_es
         .div_element_wise(COLLIDER_CBM);
 
-    // Bump out of walls if we get stuck
-    // TODO: reimplement without ncollide3d, it's less likely now but will probably happen
-    // sometimes
+    // TODO: might want to reimplement the 'bump' behavior for if we get stuck, now that we've
+    // removed ncollide we don't have it anymore
 }
 
 /// Sweep a unit sphere through the world from the start with a given velocity. Start and velocity

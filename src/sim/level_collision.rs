@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
 use dreamfield_system::world::{world_chunk::{ChunkIndex, VERTEX_STRIDE, INDEX_STRIDE, WorldChunk}, WorldChunkManager, aabb::Aabb};
-use cgmath::{Vector3, vec2, vec3, ElementWise};
+use cgmath::{Vector3, vec3, ElementWise};
 
-use ncollide3d::bounding_volume::BoundingVolume;
-use ncollide3d::shape::{TriMesh, Ball, CompositeShape, Shape};
-use ncollide3d::math::{Point, Isometry, Translation};
-use ncollide3d::query::Contact;
-use ncollide3d::query::visitors::BoundingVolumeInterferencesCollector;
+use crate::sim::intersection::Triangle;
 
 use super::intersection;
 
@@ -43,7 +39,7 @@ impl SpherecastResult {
 
 /// The level collision service
 pub struct LevelCollision {
-    chunk_meshes: HashMap<ChunkIndex, Option<(Aabb, Vec<(Aabb, TriMesh<f32>)>)>>,
+    chunk_meshes: HashMap<ChunkIndex, Option<(Aabb, Vec<(Aabb, Vec<Triangle>)>)>>,
 }
 
 impl Default for LevelCollision {
@@ -112,13 +108,8 @@ impl LevelCollision {
                             //continue;
                         //}
 
-                        for i in 0..mesh.nparts() {
-                            let triangle = intersection::Triangle::from(
-                                mesh.triangle_at(i)
-                                    .vertices()
-                                    .map(|v| {
-                                        vec3(v.x * cbm.x, v.y * cbm.y, v.z * cbm.z)
-                                    }));
+                        for triangle in mesh.iter() {
+                            let triangle = triangle.apply_cbm(cbm);
 
                             let res = intersection::toi_unit_sphere_triangle(start, velocity, &triangle);
                             if let Some((toi, _, _)) = res {
@@ -141,55 +132,9 @@ impl LevelCollision {
         closest_intersection.map(|(toi, point, normal)| SpherecastResult::new(toi, point, normal))
     }
 
-    /// Sphere contact with the level, returning true as soon as it finds an object that intersects with the sphere.
-    /// Note that this isn't guaranteed to be the closest contact, as we stop when we find a single contact point.
-    pub fn _sphere_contact_any(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32)
-        -> Option<Contact<f32>>
-    {
-        let mut found_contact = None;
-
-        self._sphere_contact_all(world, &center, radius, |c| {
-            found_contact = Some(c);
-            false
-        });
-
-        found_contact
-    }
-
-    /// Sphere contact with the level, calling a closure for every intersected triangle. Returning
-    /// false from that closure will cause the intersection test to end without calling the
-    /// closure again.
-    pub fn _sphere_contact_all<F>(&mut self, world: &mut WorldChunkManager, center: &Vector3<f32>, radius: f32, mut f: F)
-    where
-        F: FnMut(Contact<f32>) -> bool
-    {
-        let chunk_index = WorldChunk::point_to_chunk_index_2d(&vec2(center.x, center.z));
-        if let Some((chunk_aabb, meshes)) = self.get_chunk_meshes(world, chunk_index).as_ref() {
-            // Check if the chunk aabb intersects the sphere
-            if !chunk_aabb.intersects_sphere(&center, radius) {
-                return;
-            }
-
-            // Calculate query parameters
-            let ball = Ball::new(radius);
-            let ball_transform = Isometry::from(Translation::new(center.x, center.y, center.z));
-            let level_transform = Isometry::identity();
-
-            for (aabb, mesh) in meshes.iter() {
-                if !aabb.intersects_sphere(&center, radius) {
-                    continue;
-                }
-
-                Self::_contact_trimesh_ball(&level_transform, mesh, &ball_transform, &ball, 0.0, |c| {
-                    f(c)
-                });
-            }
-        }
-    }
-
     /// Get the meshes for a chunk, loading them if necessary from the world chunk manager
     fn get_chunk_meshes(&mut self, world: &mut WorldChunkManager, chunk_index: ChunkIndex)
-        -> &Option<(Aabb, Vec<(Aabb, TriMesh<f32>)>)>
+        -> &Option<(Aabb, Vec<(Aabb, Vec<Triangle>)>)>
     {
         self.chunk_meshes
             .entry(chunk_index)
@@ -198,7 +143,7 @@ impl LevelCollision {
 
     /// Load the meshes for a chunk from the world chunk manager
     fn load_chunk_meshes(world: &mut WorldChunkManager, chunk_index: ChunkIndex)
-        -> Option<(Aabb, Vec<(Aabb, TriMesh<f32>)>)>
+        -> Option<(Aabb, Vec<(Aabb, Vec<Triangle>)>)>
     {
         world.get_or_load_chunk(chunk_index)
             .as_ref()
@@ -206,54 +151,32 @@ impl LevelCollision {
                 log::info!("Loading {} chunk meshes for chunk {}, {}", chunk.meshes().len(), chunk_index.0, chunk_index.1);
 
                 let meshes = chunk.meshes().iter().map(|mesh| {
-                    let mut points = Vec::with_capacity(mesh.vertices().len() / VERTEX_STRIDE);
-                    let mut indices = Vec::with_capacity(mesh.indices().len() / INDEX_STRIDE);
+                    let vertices = mesh.vertices();
 
-                    assert!(mesh.vertices().len() % VERTEX_STRIDE == 0);
-                    for v in mesh.vertices().chunks_exact(VERTEX_STRIDE) {
-                        points.push(Point::new(v[0], v[1], v[2]));
-                    }
+                    let mut triangles = Vec::with_capacity(mesh.indices().len() / INDEX_STRIDE);
 
                     assert!(mesh.indices().len() % INDEX_STRIDE == 0);
                     for i in mesh.indices().chunks(INDEX_STRIDE) {
-                        indices.push(Point::new(i[0] as usize, i[1] as usize, i[2] as usize));
+                        let i0 = i[0] as usize * VERTEX_STRIDE;
+                        let i1 = i[1] as usize * VERTEX_STRIDE;
+                        let i2 = i[2] as usize * VERTEX_STRIDE;
+
+                        let v1 = &vertices[i0..i0+3];
+                        let v2 = &vertices[i1..i1+3];
+                        let v3 = &vertices[i2..i2+3];
+
+                        triangles.push(Triangle::new(
+                            vec3(v1[0], v1[1], v1[2]),
+                            vec3(v2[0], v2[1], v2[2]),
+                            vec3(v3[0], v3[1], v3[2])
+                        ));
                     }
 
-                    (mesh.aabb().clone(), TriMesh::new(points, indices, None))
+                    // TODO: we could make the builder generate collision specific meshes
+                    (mesh.aabb().clone(), triangles)
                 }).collect();
 
                 (chunk.aabb().clone(), meshes)
             })
-    }
-
-    /// Best contact between a composite shape (`Mesh`, `Compound`) and any other shape.
-    pub fn _contact_trimesh_ball<F: FnMut(Contact<f32>) -> bool> (
-        m1: &Isometry<f32>,
-        g1: &TriMesh<f32>,
-        m2: &Isometry<f32>,
-        g2: &Ball<f32>,
-        prediction: f32,
-        mut f: F,
-    ) -> Option<Contact<f32>>
-    {
-        // Find new collisions
-        let ls_m2 = m1.inverse() * m2.clone();
-        let ls_aabb2 = g2.aabb(&ls_m2).loosened(prediction);
-
-        let mut interferences = Vec::new();
-        {
-            let mut visitor = BoundingVolumeInterferencesCollector::new(&ls_aabb2, &mut interferences);
-            g1.bvh().visit(&mut visitor);
-        }
-
-        for i in interferences.into_iter() {
-            if let Some(c) = ncollide3d::query::contact(&m1, &g1.triangle_at(i), &m2, g2, prediction) {
-                if !f(c) {
-                    return Some(c);
-                }
-            }
-        }
-
-        None
     }
 }

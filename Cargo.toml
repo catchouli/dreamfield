@@ -13,7 +13,6 @@ gl = "0.14.0"
 glfw = "0.45.0"
 image = "0.24.2"
 std140 = { git = "https://github.com/catchouli/std140.rs" }
-ncollide3d = "0.33.0"
 byteorder = "1.4.3"
 bevy_ecs = "0.8.1"
 gltf = { version = "1.0", features = ["extras", "names"] }
