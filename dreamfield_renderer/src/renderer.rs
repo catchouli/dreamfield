@@ -300,8 +300,7 @@ fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) 
         .or_insert_with(|| {
             let dest_format = gl::SRGB8_ALPHA8;
             let tex_params = TextureParams::repeat_nearest();
-            let tex_format = gl::RGBA;
-            Texture::new_from_buf(&texture.pixels(), texture.width() as i32, texture.height() as i32, tex_format,
+            Texture::new_from_buf(&texture.pixels(), texture.width() as i32, texture.height() as i32, texture.format(),
                 gl::UNSIGNED_BYTE, dest_format, tex_params).expect("Failed to create world texture")
         })
 }

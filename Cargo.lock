@@ -436,7 +436,6 @@ dependencies = [
  "gl",
  "glfw",
  "gltf",
- "image 0.24.3",
  "include_dir",
  "log",
  "serde",
