@@ -19,8 +19,11 @@ const COLLIDER_RADIUS: Vector3<f32> = vec3(0.5, CHAR_HEIGHT * 0.5, 0.5);
 /// the collider is a unit sphere)
 const COLLIDER_CBM: Vector3<f32> = vec3(1.0 / COLLIDER_RADIUS.x, 1.0 / COLLIDER_RADIUS.y, 1.0 / COLLIDER_RADIUS.z);
 
+/// A tiny value which stops us from coming too close to walls
+const MIN_DISTANCE_FROM_WALLS: f32 = 0.01;
+
 /// The minimum ground_normal y value to stop you from walking on steep slopes
-const MIN_WALK_NORMAL: f32 = 0.85;
+const MIN_WALK_NORMAL: f32 = 0.95;
 
 /// The camera look speed
 const CAM_LOOK_SPEED: f32 = 0.5;
@@ -66,7 +69,7 @@ const INSTANT_JUMP_ACCELERATION: f32 = 3.0;
 const CONTINUED_JUMP_ACCELERATION: f32 = 3.0;
 
 /// Number of seconds jump can be held for
-const JUMP_TIME_LIMIT: f32 = 1.5;
+const JUMP_TIME_LIMIT: f32 = 0.0;
 
 /// The PlayerMovement component
 #[derive(Component)]
@@ -79,7 +82,6 @@ pub struct PlayerMovement {
     pub walking: bool,
     /// Seconds since player started holding the jump button
     pub jump_timer: f32,
-    pub jump_held: bool
 }
 
 #[derive(PartialEq)]
@@ -98,7 +100,6 @@ impl PlayerMovement {
             ground_plane: None,
             walking: false,
             jump_timer: 0.0,
-            jump_held: false
         }
     }
 
@@ -136,7 +137,7 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
         cam.view = cam_transform.invert().unwrap();
 
         // Debug spherecast
-        if input_state.inputs[InputName::Debug as usize] {
+        if input_state.is_held(InputName::Debug) {
             let (_, mut pos) = test_sphere.single_mut();
 
             let radius = 0.5;
@@ -169,13 +170,19 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
     }
 
     // Find ground plane, converting to ellipsoid space first
-    let position_e_space = player_movement.position.mul_element_wise(COLLIDER_CBM);
-    player_movement.ground_plane = sweep_unit(level, world, position_e_space, vec3(0.0, -0.02, 0.0))
-        .map(|hit| {
-            let hit_point_world = hit.point().div_element_wise(COLLIDER_CBM);
-            let hit_normal_world = hit.normal().div_element_wise(COLLIDER_CBM).normalize();
-            Plane::new_from_point_and_normal(hit_point_world, hit_normal_world)
-        });
+    {
+        let position_e_space = player_movement.position.mul_element_wise(COLLIDER_CBM);
+        player_movement.ground_plane = sweep_unit(level, world, position_e_space, vec3(0.0, -0.02, 0.0))
+            .map(|hit| {
+                let hit_point_world = hit.point().div_element_wise(COLLIDER_CBM);
+                let hit_normal_world = hit.normal().div_element_wise(COLLIDER_CBM).normalize();
+                if hit.toi() == 0.0 {
+                    println!("Found intersection at 0.0 when checking for ground plane - stuck?");
+                    player_movement.position += hit_normal_world * 0.1;
+                }
+                Plane::new_from_point_and_normal(hit_point_world, hit_normal_world)
+            });
+    }
 
     // Apply gravity acceleration
     player_movement.velocity.y -= GRAVITY_ACCELERATION * time_delta;
@@ -191,33 +198,24 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
             }
             steep_slope = false;
             acceleration = ACCELERATE;
-
-            if !input_state.inputs[InputName::Jump as usize] {
-                player_movement.jump_timer = 0.0;
-            }
+            player_movement.jump_timer = 0.0;
         }
     }
 
     // Apply jump acceleration
-    if input_state.inputs[InputName::Jump as usize] {
-        // Start jump if we're on the ground
-        if !steep_slope && !player_movement.jump_held && player_movement.jump_timer == 0.0 {
-            player_movement.velocity.y += INSTANT_JUMP_ACCELERATION;
-        }
-        else {
-            let jump_time_remaining = f32::max(0.0, JUMP_TIME_LIMIT - player_movement.jump_timer);
-            let jump_acceleration_frame = f32::min(jump_time_remaining, time_delta) * CONTINUED_JUMP_ACCELERATION;
-            player_movement.velocity.y += jump_acceleration_frame;
-        }
-        player_movement.jump_held = true;
+    if input_state.is_just_pressed(InputName::Jump) && !steep_slope {
+        // Start jump
+        player_movement.velocity.y += INSTANT_JUMP_ACCELERATION;
         player_movement.jump_timer += time_delta;
     }
-    else {
-        player_movement.jump_held = false;
+    else if input_state.is_held(InputName::Jump) && player_movement.jump_timer > 0.0 {
+        let jump_time_remaining = f32::max(0.0, JUMP_TIME_LIMIT - player_movement.jump_timer);
+        let jump_acceleration_frame = f32::min(jump_time_remaining, time_delta) * CONTINUED_JUMP_ACCELERATION;
+        player_movement.velocity.y += jump_acceleration_frame;
     }
 
     // Increase max speed and acceleration if the hax button is pressed
-    if input_state.inputs[InputName::Run as usize] {
+    if input_state.is_held(InputName::Run) {
         acceleration *= RUNNING_MULTIPLIER;
         max_speed *= RUNNING_MULTIPLIER;
     }
@@ -260,12 +258,15 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
         position_es = recursive_slide(level, world, position_es, movement_y_es, 0);
     }
 
+    // TODO: might want to reimplement the 'bump' behavior for if we get stuck, now that we've
+    // removed ncollide we don't have it anymore
+    //if let Some(result) = sweep_unit(level, world, position_es, vec3(0.0, 0.0, 0.0)) {
+    //    println!("stuck in level: {}", result.toi());
+    //}
+
     // Convert player position back to R3 (world space)
     player_movement.position = position_es
         .div_element_wise(COLLIDER_CBM);
-
-    // TODO: might want to reimplement the 'bump' behavior for if we get stuck, now that we've
-    // removed ncollide we don't have it anymore
 }
 
 /// Sweep a unit sphere through the world from the start with a given velocity. Start and velocity
@@ -294,7 +295,6 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
     velocity: Vector3<f32>, depth: i32) -> Vector3<f32>
 {
     const MAX_RECURSION_DEPTH: i32 = 5;
-    const VERY_CLOSE_DISTANCE: f32 = 0.01;
 
     // If we hit the maximum recursion, just return the current position and don't advance anymore
     if depth >= MAX_RECURSION_DEPTH {
@@ -316,15 +316,15 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
 
     // Only update position if we aren't already very close
     let hit_distance = hit.toi() * velocity_length;
-    let (new_position, hit_point) = match hit_distance > VERY_CLOSE_DISTANCE {
+    let (new_position, hit_point) = match hit_distance > MIN_DISTANCE_FROM_WALLS {
         true => {
             let velocity_dir = velocity / velocity_length;
 
             // Update position to just before the hit point so we don't move into it
-            let new_position = position + velocity_dir * (hit_distance - VERY_CLOSE_DISTANCE);
+            let new_position = position + velocity_dir * (hit_distance - MIN_DISTANCE_FROM_WALLS);
 
             // Update the hit point too so that it doesn't throw off the plane calculation
-            let hit_point = hit.point() - VERY_CLOSE_DISTANCE * velocity_dir;
+            let hit_point = hit.point() - MIN_DISTANCE_FROM_WALLS * velocity_dir;
 
             (new_position, hit_point)
         },
@@ -340,10 +340,10 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
     // get a new velocity
     let original_destination = position + velocity;
     let new_destination_point = slide_plane.project(original_destination);
-    let new_velocity_vector = new_destination_point - hit_point;
+    let mut new_velocity_vector = new_destination_point - hit_point;
 
     // If the new velocity is too low, just return the new position and stop moving
-    if new_velocity_vector.magnitude2() < (VERY_CLOSE_DISTANCE * VERY_CLOSE_DISTANCE) {
+    if new_velocity_vector.magnitude2() < (MIN_DISTANCE_FROM_WALLS * MIN_DISTANCE_FROM_WALLS) {
         return new_position;
     }
 
@@ -354,7 +354,7 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
 fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
     let (horz_input, vert_input) = input_state.get_look_input();
 
-    let look_speed = match input_state.inputs[InputName::Run as usize] {
+    let look_speed = match input_state.is_held(InputName::Run) {
         false => CAM_LOOK_SPEED,
         true => CAM_LOOK_SPEED_FAST,
     };
@@ -375,7 +375,7 @@ fn get_movement_vector(player_movement: &PlayerMovement, input_state: &InputStat
 fn player_move_noclip(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
     let (forward_input, right_input) = input_state.get_movement_input();
 
-    let speed = match input_state.inputs[InputName::Run as usize] {
+    let speed = match input_state.is_held(InputName::Run) {
         false => GROUND_MAX_SPEED,
         true => GROUND_MAX_SPEED * 2.0,
     };

@@ -54,6 +54,7 @@ impl Sphere {
 }
 
 /// A triangle primitive
+#[derive(Debug)]
 pub struct Triangle {
     pub a: Vector3<f32>,
     pub b: Vector3<f32>,
@@ -96,38 +97,171 @@ impl Triangle {
     }
 }
 
-/// Time of intersection between a swept sphere and an AABB
-/// TODO: implement this
-pub fn toi_moving_sphere_aabb(_sphere: &Sphere, _aabb: &Aabb, _move_dir: &Vector3<f32>, move_dist: f32) -> Option<f32> {
-    Some(move_dist)
-}
-
-pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector3<f32>, move_dist: f32)
+pub fn toi_unit_sphere_plane(center: Vector3<f32>, velocity: Vector3<f32>, point: Vector3<f32>, normal: Vector3<f32>)
     -> Option<f32>
 {
-    let plane_normal = plane.normal();
-    let normal_dot_move_dir = plane_normal.dot(*move_dir);
-    if normal_dot_move_dir >= -0.001 {
-        return None;
+    let plane_constant = -point.x * normal.x - point.y * normal.y - point.z * normal.z;
+    let normal_dot_velocity = normal.dot(velocity);
+    let dist_to_center = normal.dot(center) + plane_constant;
+
+    // If we're not moving parallel to the plane, calculate t0 and t1
+    if normal_dot_velocity != 0.0 {
+        // Calculate intersection points
+        let mut t0 = (1.0 - dist_to_center) / normal_dot_velocity;
+        let mut t1 = (-1.0 - dist_to_center) / normal_dot_velocity;
+
+        // Swap intersection points so t0 is the closest
+        if t0 > t1 {
+            (t0, t1) = (t1, t0);
+        }
+
+        // If the range is outside (0..1) then there's no intersection
+        if t0 > 1.0 || t1 < 0.0 {
+            return None;
+        }
+
+        // Discard t1, it's no longer needed, and clamp t0 to 0..1
+        Some(f32::clamp(t0, 0.0, 1.0))
     }
-
-    let dist_from_plane = plane.dist_from_point(sphere.center);
-
-    if dist_from_plane < -sphere.radius {
-        return None;
+    else if f32::abs(dist_to_center) < 1.0 {
+        // Embedded in plane
+        Some(dist_to_center - 1.0)
     }
-
-    if dist_from_plane - sphere.radius > move_dist {
-        return None;
+    else {
+        None
     }
-
-    let toi = (dist_from_plane - sphere.radius) / -normal_dot_move_dir;
-
-    Some(f32::max(toi, 0.0))
 }
 
-/// Time of intersection between a swept sphere and a triangle. We handle this by clipping
-/// the motion against, in order:
+/// Test for intersection between a swept unit sphere and an AABB, which works the same way as
+/// toi_unit_sphere_triangle, and can be used the same way by transforming the coordinates from R3
+/// to e-space.
+pub fn intersect_unit_sphere_aabb(center: Vector3<f32>, velocity: Vector3<f32>, min: Vector3<f32>, max: Vector3<f32>)
+    -> bool
+{
+    const NORMALS: [Vector3<f32>; 6] = [
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(-1.0, 0.0, 0.0),
+        vec3(0.0, -1.0, 0.0),
+        vec3(0.0, 0.0, -1.0),
+    ];
+
+    const VERTICES: [Vector3<f32>; 8] = [
+        vec3(0.0, 0.0, 0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(1.0, 1.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(1.0, 0.0, 1.0),
+        vec3(1.0, 1.0, 1.0),
+        vec3(0.0, 1.0, 1.0),
+    ];
+
+    const EDGES: [(usize, usize); 12] = [
+        // Front face
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        // Back face
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        // Z-facing edges
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
+
+    // If the sphere's center is inside the aabb, then it definitely intersects
+    if center.x >= min.x && center.y >= min.y && center.z >= min.z &&
+        center.x <= max.x && center.y <= max.y && center.z <= max.z
+    {
+        return true;
+    }
+
+    // Check 6 planes of the AABB, if we got a hit in any of them, it's definitely an intersection
+    for normal in NORMALS.iter() {
+        let point = if normal.x < 0.0 || normal.y < 0.0 || normal.z < 0.0 { min } else { max };
+        //let plane = Plane::new_from_point_and_normal(point, normal);
+
+        if let Some(new_hit) = toi_unit_sphere_plane(center, velocity, point, *normal) {
+            let hit_point = center + velocity * new_hit - normal;
+            // Here I do this somewhat awful check, because if the AABB is flat in one dimension,
+            // we might miss intersections in another dimension just because the value isn't
+            // exactly equal to the coordinate. So we check in the dimension of the current plane
+            // instead.
+            if normal.x != 0.0 && hit_point.x >= min.x && hit_point.y <= max.x {
+                return true;
+            }
+            else if normal.y != 0.0 && hit_point.y >= min.y && hit_point.y <= max.y {
+                return true;
+            }
+            else if normal.z != 0.0 && hit_point.z >= min.z && hit_point.y <= max.z {
+                return true;
+            }
+        }
+    }
+
+    // We also have to check the vertices and edges just in case the sphere is brushing past them
+    // but not actually contacting one of the faces of the AABB. Vertices first...
+    let size = max - min;
+    let velocity_magnitude2 = velocity.magnitude2();
+
+    for v in VERTICES {
+        let v = min + size.mul_element_wise(v);
+
+        let a = velocity_magnitude2;
+        let b = 2.0 * velocity.dot(center - v);
+        let c = (v - center).magnitude2() - 1.0;
+
+        if lowest_root(a, b, c, f32::MAX).is_some() {
+            return true;
+        }
+    }
+
+    // And edges...
+    for (p1, p2) in EDGES {
+        let p1 = min + size.mul_element_wise(VERTICES[p1]);
+        let p2 = min + size.mul_element_wise(VERTICES[p2]);
+
+        let edge = p2 - p1;
+        let center_to_vertex = p1 - center;
+
+        let edge_magnitude2 = edge.magnitude2();
+        let edge_dot_velocity = edge.dot(velocity);
+        let edge_dot_center_to_vertex = edge.dot(center_to_vertex);
+
+        let a = edge_magnitude2 * -velocity_magnitude2
+            + edge_dot_velocity * edge_dot_velocity;
+        let b = edge_magnitude2 * (2.0 * velocity.dot(center_to_vertex))
+            - 2.0 * edge_dot_velocity * edge_dot_center_to_vertex;
+        let c = edge_magnitude2 * (1.0 - center_to_vertex.magnitude2())
+            + edge_dot_center_to_vertex * edge_dot_center_to_vertex;
+
+        if let Some(new_t) = lowest_root(a, b, c, f32::MAX) {
+            // Check if intersection is within line segment
+            let f = (edge.dot(velocity) * new_t - edge.dot(center_to_vertex)) / edge.magnitude2();
+            if f >= 0.0 && f <= 1.0 {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/// Time of intersection between a swept unit sphere and a triangle. This can be used to do swept
+/// ellipsoid tests by first transforming the sphere center, velocity, and triangle vertices from
+/// R3 (world space) to e-space (ellipsoid space, where the ellipsoid is a unit sphere with radius
+/// 1). This can be done by simply dividing the coordinate values component-wise by the radius
+/// vector (r.x, r.y, r.z) (a shorthand for a change of basis matrix which is just a sphere).
+/// The result can then be converted back into R3 by doing the inverse.
+///
+/// We handle this by clipping the motion against, in order:
 /// * The plane of the triangle. If the intersection point is in the triangle, we can report that
 /// intersection right away. This also handles the case where the sphere intersects with a triangle
 /// much larger than itself, and would pass through in between the vertices and edges. If the sphere
@@ -147,8 +281,6 @@ pub fn toi_moving_sphere_plane(sphere: &Sphere, plane: &Plane, move_dir: &Vector
 pub fn toi_unit_sphere_triangle(center: Vector3<f32>, velocity: Vector3<f32>, triangle: &Triangle)
     -> Option<(f32, Vector3<f32>, Vector3<f32>)>
 {
-    // The change of basis matrix for R3 (world coordinates) to ellipsoid space simplifies to
-    // dividing by the radius (or the radius vector for an ellipsoid)
     let normal = triangle.normal();
 
     let v0 = triangle.a;
@@ -156,17 +288,17 @@ pub fn toi_unit_sphere_triangle(center: Vector3<f32>, velocity: Vector3<f32>, tr
     let v2 = triangle.c;
 
     let plane_constant = -v0.x * normal.x - v0.y * normal.y - v0.z * normal.z;
+    let normal_dot_velocity = normal.dot(velocity);
+
+    // Check triangle is front facing (disabled - but could be useful in case cases)
+    //if normal_dot_velocity > 0.0 {
+    //    return None;
+    //}
 
     // First check - that the sphere intersects the plane of the triangle
-
-    // Check triangle is front facing
-    let normal_dot_velocity = normal.dot(velocity);
-    if normal_dot_velocity > 0.0 {
-        return None;
-    }
-
-    // SignedDistance(p) = normal.dot(p) + plane_constant
-    // t0 = 1 - SignedDistance(center) / normal.dot(velocity)
+    //   SignedDistance(p) = normal.dot(p) + plane_constant
+    //   t0 = 1 - SignedDistance(center) / normal.dot(velocity)
+    //   t1 = -1 - SignedDistance(center) / normal.dot(velocity)
     // There's a special case when normal.dot(velocity) where the sphere is already intersecting
     // the plane, either the absolute distance is less than 1 (in which case the sphere intersects
     // the plane from t0 = 0 and t1 = 1), or the distance is greater than 1 and the collision can
@@ -279,7 +411,7 @@ pub fn toi_unit_sphere_triangle(center: Vector3<f32>, velocity: Vector3<f32>, tr
     })
 }
 
-// Solve a quadratic equation
+// Solve a quadratic equation and find the lowest non-zero root
 fn lowest_root(a: f32, b: f32, c: f32, max: f32) -> Option<f32> {
     let determinant = b * b - 4.0 * a * c;
 

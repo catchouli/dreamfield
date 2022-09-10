@@ -98,15 +98,19 @@ impl LevelCollision {
             for z in chunk_min_z..=chunk_max_z {
                 if let Some((_aabb, meshes)) = self.get_chunk_meshes(world, (x, z)) {
                     // Check if the sphere is going to intersect the abbb at all and return None if not
-                    //if intersection::toi_moving_sphere_aabb(&sphere, aabb, dir, clipped_toi).is_none() {
-                        //return None;
+                    //if intersection::toi_unit_sphere_aabb(start, velocity, aabb).is_none() {
+                    //    return None;
                     //}
 
                     // Check each mesh in the chunk for intersections
-                    for (_mesh_aabb, mesh) in meshes.iter() {
-                        //if intersection::toi_moving_sphere_aabb(&sphere, mesh_aabb, dir, clipped_toi).is_none() {
-                            //continue;
-                        //}
+                    for (mesh_aabb, mesh) in meshes.iter() {
+                        let (min, max) = mesh_aabb.min_max()
+                            .map(|(min, max)| (min.mul_element_wise(cbm), max.mul_element_wise(cbm)))
+                            .expect("Chunk mesh aabb had no min/max");
+
+                        if !intersection::intersect_unit_sphere_aabb(start, velocity, min, max) {
+                            continue;
+                        }
 
                         for triangle in mesh.iter() {
                             let triangle = triangle.apply_cbm(cbm);

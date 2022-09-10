@@ -27,6 +27,7 @@ pub enum InputName {
 #[derive(Copy, Clone)]
 pub struct InputState {
     pub inputs: [bool; InputName::Last as usize],
+    pub last_inputs: [bool; InputName::Last as usize],
     pub cursor_captured: bool,
     pub mouse_diff: (f64, f64)
 }
@@ -35,9 +36,25 @@ impl InputState {
     pub fn new() -> Self {
         Self {
             inputs: [false; InputName::Last as usize],
+            last_inputs: [false; InputName::Last as usize],
             cursor_captured: false,
             mouse_diff: (0.0, 0.0)
         }
+    }
+
+    /// Get whether the input is held
+    pub fn is_held(&self, name: InputName) -> bool {
+        self.inputs[name as usize]
+    }
+
+    /// Get whether the input has just been released
+    pub fn is_just_released(&self, name: InputName) -> bool {
+        !self.inputs[name as usize] && self.last_inputs[name as usize]
+    }
+
+    /// Get whether the input has just been pressed
+    pub fn is_just_pressed(&self, name: InputName) -> bool {
+        self.inputs[name as usize] && !self.last_inputs[name as usize]
     }
 
     // Get the look input as a normalized float from 1 to -1. The first element is the left/right

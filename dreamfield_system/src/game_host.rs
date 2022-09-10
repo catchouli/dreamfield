@@ -81,6 +81,14 @@ impl GameHost {
                 update_schedule.run(&mut world);
                 let elapsed = now.elapsed();
                 println!("Update time: {:.2?}", elapsed);
+
+                // Save old input states, we do this after each update so that we don't have a
+                // 'first input' in multiple updates.
+                world.resource_scope(|_, mut input_state: Mut<InputState>| {
+                    for i in 0..input_state.inputs.len() {
+                        input_state.last_inputs[i] = input_state.inputs[i];
+                    }
+                });
             }
 
             // Render
