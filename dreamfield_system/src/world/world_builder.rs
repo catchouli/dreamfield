@@ -204,13 +204,13 @@ impl WorldBuilder {
     /// Convert gltf image format to a gl enum
     fn format_to_gl_enum(format: Format) -> u32 {
         match format {
-            Format::R8 => gl::RGBA,
-            Format::R8G8 => gl::RGBA,
-            Format::R8G8B8 => gl::RGBA,
+            Format::R8 => gl::RED,
+            Format::R8G8 => gl::RG,
+            Format::R8G8B8 => gl::RGB,
             Format::R8G8B8A8 => gl::RGBA,
-            Format::R16 => gl::RGBA16,
-            Format::R16G16 => gl::RGBA16,
-            Format::R16G16B16 => gl::RGBA16,
+            Format::R16 => gl::R16,
+            Format::R16G16 => gl::RG16,
+            Format::R16G16B16 => gl::RGB16,
             Format::R16G16B16A16 => gl::RGBA16,
             Format::B8G8R8 => gl::BGR,
             Format::B8G8R8A8 => gl::BGRA
