@@ -1,4 +1,4 @@
-use cgmath::{Vector3, vec3};
+use cgmath::{Vector3, vec3, ElementWise};
 use speedy::{Readable, Writable};
 use super::wrapped_vectors::WrappedVector3;
 
@@ -83,5 +83,33 @@ impl Aabb {
         else {
             false
         }
+    }
+
+    pub fn intersects_aabb(&self, other: &Aabb) -> bool {
+        if let Some((a_min, a_max)) = &self.min_max {
+            let a_min = a_min.as_vec();
+            let a_max = a_max.as_vec();
+            if let Some((b_min, b_max)) = &other.min_max {
+                let b_min = b_min.as_vec();
+                let b_max = b_max.as_vec();
+
+                return a_min.x <= b_max.x && a_max.x >= b_min.x &&
+                       a_min.y <= b_max.y && a_max.y >= b_min.y &&
+                       a_min.z <= b_max.z && a_max.z >= b_min.z;
+            }
+        }
+
+        false
+    }
+
+    /// Apply a change of basis matrix (scale only, for ellipsoid space) to an aabb
+    pub fn apply_cbm(&self, cbm: Vector3<f32>) -> Self {
+        let mut aabb = Aabb::new();
+
+        if let Some((min, max)) = &self.min_max {
+            aabb.set_min_max(&min.as_vec().mul_element_wise(cbm), &max.as_vec().mul_element_wise(cbm));
+        }
+
+        aabb
     }
 }

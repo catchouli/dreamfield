@@ -340,7 +340,7 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
     // get a new velocity
     let original_destination = position + velocity;
     let new_destination_point = slide_plane.project(original_destination);
-    let mut new_velocity_vector = new_destination_point - hit_point;
+    let new_velocity_vector = new_destination_point - hit_point;
 
     // If the new velocity is too low, just return the new position and stop moving
     if new_velocity_vector.magnitude2() < (MIN_DISTANCE_FROM_WALLS * MIN_DISTANCE_FROM_WALLS) {
