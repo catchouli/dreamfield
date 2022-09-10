@@ -153,8 +153,9 @@ impl GameHost {
             Key::Left => Some(InputName::CamLookLeft),
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
-            Key::LeftShift => Some(InputName::CamSpeed),
+            Key::LeftShift => Some(InputName::Run),
             Key::Space => Some(InputName::Jump),
+            Key::U => Some(InputName::Debug),
             _ => None
         }
     }
@@ -174,7 +175,7 @@ impl GameHost {
             Key::Left => Some(InputName::CamLookLeft),
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
-            Key::LeftShift => Some(InputName::CamSpeed),
+            Key::LeftShift => Some(InputName::Run),
             Key::Space => Some(InputName::Jump),
             _ => None
         }

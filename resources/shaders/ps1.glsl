@@ -174,9 +174,8 @@ void main() {
     float alpha = base_color.a * base_color_tex.a;
 
     // Alpha clip low opacity fragments
-    // TODO: it messes the monkey head up, fix and reenable
-    //if (alpha < 0.1)
-        //discard;
+    if (alpha < 0.1)
+        discard;
 
     // Calculate vertex lighting for fragment
     const vec3 AMBIENT_LIGHT = vec3(0.01);

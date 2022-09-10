@@ -123,6 +123,10 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
 fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkManager>, models: &Res<ModelManager>,
     camera: &PlayerCamera)
 {
+    local.ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
+    local.ubo_joints.bind(bindings::UniformBlockBinding::JointParams);
+    local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
+
     unsafe { gl::Enable(gl::DEPTH_TEST); }
     local.ps1_tess_shader.use_program();
 
@@ -130,7 +134,6 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     let cam_transform = camera.view.invert().unwrap();
     let pos = cam_transform.w.truncate();
     let forward = cam_transform * vec4(0.0, 0.0, -1.0, 0.0);
-    //let forward = camera.camera.forward();
 
     // Work out what chunks can be seen by creating a triangle between the camera position and the
     // corners of the far clip plane, in 2D, and then walk all the chunks between them and draw them
@@ -209,6 +212,8 @@ fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunk
         // Draw meshes in chunk
         local.ubo_global.set_mat_model_derive(&Matrix4::identity());
         local.ubo_global.upload_changed();
+        local.ubo_joints.set_skinning_enabled(&false);
+        local.ubo_joints.upload_changed();
 
         for mesh in chunk.meshes().iter() {
             // Bind material
@@ -236,6 +241,7 @@ fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunk
                 local.ubo_material.set_has_base_color_texture(&false);
                 local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
             }
+            local.ubo_material.upload_changed();
 
             // Draw mesh
             let count = mesh.indices().len() as i32;

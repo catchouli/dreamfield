@@ -37,6 +37,7 @@ pub fn create_model_manager() -> ModelManager {
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
         ("tree", include_bytes!("../resources/models/tree.glb")),
         ("white_sphere", include_bytes!("../resources/models/white_sphere.glb")),
-        ("samy", include_bytes!("../resources/models/samy_diamond.glb"))
+        ("samy", include_bytes!("../resources/models/samy_diamond.glb")),
+        ("elf", include_bytes!("../resources/models/elf.glb"))
     ])
 }

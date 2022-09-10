@@ -1,16 +1,16 @@
 pub mod sim;
 pub mod resources;
 
-use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix};
+use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, Rotation3};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
-use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, Position, ScreenEffect, RunTime};
+use dreamfield_renderer::components::{PlayerCamera, Visual, Position, ScreenEffect, RunTime, Animation};
 use dreamfield_system::{GameHost, WindowSettings};
 use dreamfield_system::resources::{InputState, SimTime};
 
-use sim::{PlayerMovement, Ball, TestSphere, PlayerMovementMode};
+use sim::{PlayerMovement, TestSphere, PlayerMovementMode, Ball};
 use sim::level_collision::LevelCollision;
 
 /// The width of the window
@@ -84,21 +84,27 @@ fn init_entities(world: &mut World) {
         // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
         // duplicated.
         //.insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
-        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Clip, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
+        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
         //.insert(PlayerMovement::new_pos_look(vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099)));
 
     // Create fire orb
-    //world.spawn()
-    //    .insert(Ball::default())
-    //    .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-    //    .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+    world.spawn()
+        .insert(Ball::default())
+        .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
+    // Test sphere
     world.spawn()
         .insert(TestSphere {})
         .insert(Position::new(vec3(-9.0, 0.5, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new("white_sphere", false));
+
+    // Elf
+    world.spawn()
+        .insert(Position::new(vec3(-111.0, 5.2, 65.72), Quaternion::from_angle_y(Deg(231.0))))
+        .insert(Visual::new_with_anim("elf", false, Animation::Loop("Idle".to_string())));
 
     //world.spawn()
     //    .insert(Position::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))

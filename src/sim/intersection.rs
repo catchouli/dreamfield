@@ -26,6 +26,10 @@ impl Plane {
         self.a * point.x + self.b * point.y + self.c * point.z + self.d
     }
 
+    pub fn signed_distance_to(&self, point: Vector3<f32>) -> f32 {
+        point.dot(self.normal()) + self.d
+    }
+
     /// Project a point onto the plane
     pub fn project(&self, point: Vector3<f32>) -> Vector3<f32> {
         let dist = self.dist_from_point(point);
@@ -299,23 +303,6 @@ fn lowest_root(a: f32, b: f32, c: f32, max: f32) -> Option<f32> {
     }
     else if r2 > 0.0 && r2 < max {
         Some(r2)
-    }
-    else {
-        None
-    }
-}
-
-/// Find the time of impact between a line segment and a sphere
-fn toi_ray_sphere(sphere: &Sphere, ray_start: &Vector3<f32>, ray_dir: &Vector3<f32>) -> Option<f32> {
-    let offset = ray_start - sphere.center;
-
-    // Ray dir is normalised so a = 0.0
-    let a = 1.0;
-    let b = 2.0 * ray_dir.dot(offset);
-    let c = offset.dot(offset) - (sphere.radius * sphere.radius);
-
-    if b * b - 4.0 * a * c >= 0.0 {
-        Some((-b - f32::sqrt((b * b) - 4.0 * a * c)) / (2.0 * a))
     }
     else {
         None
