@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise};
@@ -70,6 +72,12 @@ const CONTINUED_JUMP_ACCELERATION: f32 = 3.0;
 
 /// Number of seconds jump can be held for
 const JUMP_TIME_LIMIT: f32 = 0.0;
+
+/// The min limit for pitch
+const PITCH_MIN: f32 = -PI * 0.4;
+
+/// The min limit for pitch
+const PITCH_MAX: f32 = PI * 0.4;
 
 /// The PlayerMovement component
 #[derive(Component)]
@@ -365,8 +373,8 @@ fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputS
 
     let pitch_yaw = &mut player_movement.pitch_yaw;
 
-    pitch_yaw.x += vert_input * look_speed * time_delta;
-    pitch_yaw.y += horz_input * look_speed * time_delta;
+    pitch_yaw.x = f32::clamp(pitch_yaw.x + vert_input * look_speed * time_delta, PITCH_MIN, PITCH_MAX);
+    pitch_yaw.y = pitch_yaw.y + horz_input * look_speed * time_delta;
 }
 
 /// Get the movement vector based on the player's input
