@@ -3,7 +3,7 @@ use std::time::Instant;
 use bevy_ecs::{world::World, schedule::Schedule};
 use glfw::{Action, Context, Key};
 use crate::fixed_timestep::FixedTimestep;
-use crate::resources::SimTime;
+use crate::resources::{SimTime, Diagnostics};
 use crate::input::{InputState, InputName};
 use crate::glfw_system::GlfwWindow;
 
@@ -73,14 +73,19 @@ impl GameHost {
             fixed_timestep.update_actual_time(self.window.glfw.get_time());
             while fixed_timestep.should_update() {
                 // Update sim time
-                let mut sim_time_res: Mut<SimTime> = world.get_resource_mut().unwrap();
-                sim_time_res.sim_time = fixed_timestep.sim_time();
+                world.resource_scope(|_, mut sim_time: Mut<SimTime>| {
+                    sim_time.sim_time = fixed_timestep.sim_time();
+                });
 
                 // Simulate game state
-                let now = Instant::now();
+                let update_start = Instant::now();
                 update_schedule.run(&mut world);
-                let elapsed = now.elapsed();
-                println!("Update time: {:.2?}", elapsed);
+                let update_time = update_start.elapsed();
+
+                // Update diagnostics
+                world.resource_scope(|_, mut diagnostics: Mut<Diagnostics>| {
+                    diagnostics.update_time = update_time;
+                });
 
                 // Save old input states, we do this after each update so that we don't have a
                 // 'first input' in multiple updates.
@@ -92,8 +97,15 @@ impl GameHost {
             }
 
             // Render
+            let render_start = Instant::now();
             render_schedule.run(&mut world);
+            let render_time = render_start.elapsed();
             self.window.window.swap_buffers();
+
+            // Update diagnostics
+            world.resource_scope(|_, mut diagnostics: Mut<Diagnostics>| {
+                diagnostics.render_time = render_time;
+            });
         }
     }
 

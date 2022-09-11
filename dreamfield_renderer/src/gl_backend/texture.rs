@@ -8,7 +8,9 @@ use super::bindings;
 
 /// A texture
 pub struct Texture {
-    id: u32
+    id: u32,
+    width: i32,
+    height: i32
 }
 
 pub struct TextureParams {
@@ -93,7 +95,7 @@ impl Texture {
                            source_type,
                            &buf[0] as *const u8 as *const GLvoid);
 
-            Ok(Texture { id: texture })
+            Ok(Texture { id: texture, width, height })
         }
     }
 
@@ -185,6 +187,16 @@ impl Texture {
             buf[i * 4 + 2] = b as u8;
             buf[i * 4 + 3] = a as u8;
         }
+    }
+
+    /// Get the width of the texture
+    pub fn width(&self) -> i32 {
+        self.width
+    }
+
+    /// Get the height of the texture
+    pub fn height(&self) -> i32 {
+        self.height
     }
 }
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use cgmath::{Vector3, Quaternion, Matrix4, Vector2};
+use cgmath::{Vector3, Quaternion, Matrix4, Vector2, Vector4};
 pub use crate::camera::{Camera, FpsCamera};
 use crate::{gl_backend::{GltfModel, Texture, ShaderProgram}, resources::{ShaderManager, TextureManager}};
 
@@ -211,3 +211,35 @@ impl ScreenEffect {
         &self.texture_ref
     }
 }
+
+/// A component for drawing text on the screen
+#[derive(Component)]
+pub struct TextBox {
+    pub shader: String,
+    pub font_name: String,
+    pub font_variant: String,
+    pub text: String,
+    /// The x and y spacing between glyphs, in pixels
+    pub spacing: Option<Vector2<f32>>,
+    /// The window-space bounds of the textbox, text is wrapped and clipped to this region
+    pub bounds: Option<Vector4<f32>>,
+}
+
+impl TextBox {
+    pub fn new(shader: &str, font_name: &str, font_variant: &str, text: &str, spacing: Option<Vector2<f32>>,
+        bounds: Option<Vector4<f32>>) -> Self
+    {
+        Self {
+            shader: shader.to_string(),
+            font_name: font_name.to_string(),
+            font_variant: font_variant.to_string(),
+            text: text.to_string(),
+            spacing,
+            bounds,
+        }
+    }
+}
+
+/// A tag component for the debug diagnostics
+#[derive(Component)]
+pub struct DiagnosticsTextBox;

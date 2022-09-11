@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 pub use crate::input::{InputState, InputName};
 
 /// The SimTime resource
@@ -11,6 +13,23 @@ impl SimTime {
         Self {
             sim_time,
             sim_time_delta
+        }
+    }
+}
+
+/// The Diagnostics resource (e.g. update and render time, etc)
+pub struct Diagnostics {
+    pub update_time: Duration,
+    pub render_time: Duration,
+    pub frame_time: Duration,
+}
+
+impl Default for Diagnostics {
+    fn default() -> Self {
+        Self {
+            update_time: Default::default(),
+            render_time: Default::default(),
+            frame_time: Default::default()
         }
     }
 }

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use bevy_ecs::world::{FromWorld, World};
-use crate::gl_backend::{Mesh, VertexAttrib, Texture, GltfModel, UniformBuffer, Framebuffer,
-    GlobalParams, JointParams, ShaderProgram, MaterialParams};
+use crate::gl_backend::{Mesh, EditableMesh, VertexAttrib, Texture, GltfModel, UniformBuffer,
+    Framebuffer, GlobalParams, JointParams, ShaderProgram, MaterialParams};
 use crate::resources::ShaderManager;
 
 /// The renderer state resource
@@ -20,7 +20,8 @@ pub struct RendererResources {
     pub blit_shader: Arc<ShaderProgram>,
     pub models: HashMap<String, Arc<GltfModel>>,
     pub world_meshes: HashMap<i32, Mesh>,
-    pub world_textures: HashMap<i32, Texture>
+    pub world_textures: HashMap<i32, Texture>,
+    pub text_mesh: EditableMesh,
 }
 
 impl FromWorld for RendererResources {
@@ -49,6 +50,11 @@ impl FromWorld for RendererResources {
             VertexAttrib { index: 1, size: 2, attrib_type: gl::FLOAT },
             ]);
 
+        let text_mesh = EditableMesh::new(vec![
+            VertexAttrib { index: 0, size: 3, attrib_type: gl::FLOAT },
+            VertexAttrib { index: 1, size: 2, attrib_type: gl::FLOAT },
+        ]);
+
         // Load shaders
         // TODO: it would be nice if the shaders were specified by components on entities instead
         // of hardcoded here, and the composite/resolve were converted to screen-space effects
@@ -73,7 +79,8 @@ impl FromWorld for RendererResources {
             blit_shader,
             models: HashMap::new(),
             world_meshes: HashMap::new(),
-            world_textures: HashMap::new()
+            world_textures: HashMap::new(),
+            text_mesh
         }
     }
 }

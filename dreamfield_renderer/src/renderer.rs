@@ -1,21 +1,22 @@
 mod renderer_resources;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use bevy_ecs::schedule::SystemSet;
 use bevy_ecs::system::{Local, Res, Query, ResMut};
-use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4};
+use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4, vec3};
 use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
-use crate::resources::{ModelManager, TextureManager, ShaderManager};
-use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime};
+use crate::resources::{ModelManager, TextureManager, ShaderManager, FontManager};
+use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime, TextBox, DiagnosticsTextBox};
 use dreamfield_system::WindowSettings;
 use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex};
 use dreamfield_system::world::world_texture::WorldTexture;
 use dreamfield_system::world::wrapped_vectors::WrappedVector3;
-use dreamfield_system::resources::SimTime;
+use dreamfield_system::resources::{SimTime, Diagnostics};
 
 pub const RENDER_WIDTH: i32 = 320;
 pub const RENDER_HEIGHT: i32 = 240;
@@ -37,15 +38,16 @@ pub const HALF_FOV_RADIANS: f32 = FOV_RADIANS / 2.0;
 /// The render systems
 pub fn systems() -> SystemSet {
     SystemSet::new()
+        .with_system(update_diagnostics)
         .with_system(renderer_system)
 }
 
 /// The renderer system
 fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
-    mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
+    fonts: Res<FontManager>, mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
     mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
-    mut visuals_query: Query<(&Position, &mut Visual)>)
+    mut visuals_query: Query<(&Position, &mut Visual)>, text_query: Query<&TextBox>)
 {
     let local = &mut *local;
 
@@ -112,8 +114,15 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     // Draw visuals
     draw_visuals(local, &sim_time, &models, &mut visuals_query);
 
-    // Render pre-scene effects
+    // Render post-scene effects
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
+
+    // Render text
+    unsafe { gl::Enable(gl::SCISSOR_TEST); }
+    for text_box in text_query.iter() {
+        render_text(local, &player_camera, &fonts, &mut shaders, text_box);
+    }
+    unsafe { gl::Disable(gl::SCISSOR_TEST); }
 
     // Run final composite
     final_composite(local, &window_settings);
@@ -356,7 +365,7 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
 
 /// Render a screen effect
 /// TODO: these aren't that useful for anything but the sky if you can't read the framebuffer :)
-pub fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_manager: &mut ResMut<TextureManager>,
+fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_manager: &mut ResMut<TextureManager>,
     shader_manager: &mut ResMut<ShaderManager>, effect_query: &mut Query<&mut ScreenEffect>)
 {
     unsafe { gl::Disable(gl::DEPTH_TEST); }
@@ -374,7 +383,7 @@ pub fn render_screen_effects(run_time: RunTime, local: &RendererResources, textu
 }
 
 /// Run final compositing and blit operations, including ntsc composite emulation
-pub fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettings>) {
+fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettings>) {
     // Disable depth test for blitting operations
     unsafe {
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
@@ -414,7 +423,7 @@ pub fn final_composite(local: &RendererResources, window_settings: &Res<WindowSe
 }
 
 /// Update an animation
-pub fn update_animation(model: &GltfModel, name: &str, time: f32) {
+fn update_animation(model: &GltfModel, name: &str, time: f32) {
     if let Some(anim) = model.animations().get(name) {
         log::trace!("Playing animation {} at time {}", anim.name(), time);
 
@@ -439,5 +448,162 @@ pub fn update_animation(model: &GltfModel, name: &str, time: f32) {
     }
     else {
         log::error!("No such animation {name}");
+    }
+}
+
+fn render_text(local: &mut RendererResources, camera: &PlayerCamera, fonts: &FontManager, shaders: &mut ShaderManager,
+    text_box: &TextBox)
+{
+    // TODO:
+    //  * Wrap in indivisible blocks and not just on any character
+    //  * Don't put spaces at the start of a line
+    //  * Support drawing text in 3d for signs and such (maybe)
+    let shader = shaders.get(&text_box.shader).unwrap();
+    let texture = fonts.get_texture(&text_box.font_name).unwrap();
+    let char_map = fonts.get_char_map(&text_box.font_name, &text_box.font_variant).unwrap();
+
+    // Calculate clipping bounds
+    let text_box_bounds = match text_box.bounds {
+        Some(bounds) => bounds,
+        None => vec4(0.0, 0.0, camera.render_res.x, camera.render_res.y)
+    };
+    let text_box_origin = vec2(text_box_bounds.x, text_box_bounds.y);
+    let text_box_width = text_box_bounds.z - text_box_bounds.x;
+    let text_box_height = text_box_bounds.w - text_box_bounds.y;
+
+    // Update scissor region
+    unsafe {
+        // Set scissor rect, converting the top-left (0,0) coordinates to bottom-left (0,0)
+        // screen coordinates... sigh at all these different coordinate spaces. We basically just
+        // change it so we're specifying the bottom left corner of the box in that space, instead
+        // of the top left one in our y-down space.
+        let viewport_height = camera.render_res.y;
+        let bottom_left_y = viewport_height - text_box_height - text_box_origin.y;
+        gl::Scissor(text_box_origin.x as i32,
+                    bottom_left_y as i32,
+                    text_box_width as i32,
+                    text_box_height as i32);
+    }
+
+    // Scale the coordinates for the texture into uv space
+    let uv_scale = vec2(1.0 / texture.width() as f32, 1.0 / texture.height() as f32);
+
+    // Scale and position the text from window space into clip space (-1..1)
+    let window_scale = vec2(2.0 / camera.render_res.x as f32, -2.0 / camera.render_res.y as f32);
+    let window_bias = vec2(-1.0, 1.0);
+
+    // The origin and spacing of the text
+    let origin = text_box_origin;
+    let spacing = text_box.spacing.unwrap_or(vec2(0.0, 0.0));
+
+    // Build vertex buffer
+    local.text_mesh.clear_vertex_buffer();
+
+    let mut offset = origin;
+    let mut triangles = 0;
+
+    // We use the last character height as a linebreak height, it's a bit weird tbh, we should
+    // probably calculate the size of the box needed to render each line instead and use that.
+    let mut line_height = None;
+
+    for character in text_box.text.trim().chars() {
+        // If this is a line break character, break to the next line
+        if character == '\n' {
+            offset.x = origin.x;
+            offset.y += line_height.unwrap_or(0.0) + spacing.y;
+            continue;
+        }
+
+        // Get character map entry for the next character
+        let entry = char_map.get_entry(character)
+            .expect(&format!("No character map entry for character {character}"));
+
+        // Get the dimensions of the glyph
+        let dimensions = vec2(entry.width as f32, entry.height as f32);
+        line_height = Some(dimensions.y);
+
+        // If the glyph doesn't fit on this line, add a line break
+        if offset.x + dimensions.x > text_box_width {
+            offset.x = origin.x;
+            offset.y += line_height.unwrap_or(0.0) + spacing.y;
+        }
+
+        // Calculate window-space coordinates (with 0,0 at the top left) of this textbox
+        let top_left = offset;
+        let bottom_right = top_left + dimensions;
+
+        // Move offset for the next glyph to after the current glyph
+        offset.x += dimensions.x + spacing.x;
+
+        // Calculate texture coordinates in image space
+        let image_top_left = vec2(entry.source_x as f32, entry.source_y as f32);
+        let image_bottom_right = image_top_left + dimensions;
+
+        // Convert window coordinates to clip space
+        let top_left = vec2(top_left.x as f32 * window_scale.x + window_bias.x,
+                            top_left.y as f32 * window_scale.y + window_bias.y);
+        let bottom_right = vec2(bottom_right.x as f32 * window_scale.x + window_bias.x,
+                                bottom_right.y as f32 * window_scale.y + window_bias.y);
+
+        // Convert image coordinates to uvs
+        let uv_top_left = vec2(image_top_left.x as f32 * uv_scale.x,
+                               image_top_left.y as f32 * uv_scale.y);
+        let uv_bottom_right = vec2(image_bottom_right.x as f32 * uv_scale.x,
+                                   image_bottom_right.y as f32 * uv_scale.y);
+
+        // Push two triangles into vertex buffer
+        local.text_mesh.push_vec3(vec3(top_left.x, top_left.y, 0.0));
+        local.text_mesh.push_vec2(vec2(uv_top_left.x, uv_top_left.y));
+
+        local.text_mesh.push_vec3(vec3(bottom_right.x, top_left.y, 0.0));
+        local.text_mesh.push_vec2(vec2(uv_bottom_right.x, uv_top_left.y));
+
+        local.text_mesh.push_vec3(vec3(bottom_right.x, bottom_right.y, 1.0));
+        local.text_mesh.push_vec2(vec2(uv_bottom_right.x, uv_bottom_right.y));
+
+        local.text_mesh.push_vec3(vec3(top_left.x, top_left.y, 0.0));
+        local.text_mesh.push_vec2(vec2( uv_top_left.x, uv_top_left.y));
+
+        local.text_mesh.push_vec3(vec3(bottom_right.x, bottom_right.y, 0.0));
+        local.text_mesh.push_vec2(vec2(uv_bottom_right.x, uv_bottom_right.y));
+
+        local.text_mesh.push_vec3(vec3(top_left.x, bottom_right.y, 1.0));
+        local.text_mesh.push_vec2(vec2(uv_top_left.x, uv_bottom_right.y));
+
+        triangles += 2;
+    }
+
+    // Draw buffer
+    if triangles > 0 {
+        unsafe { gl::Disable(gl::SCISSOR_TEST); }
+        texture.bind(bindings::TextureSlot::BaseColor);
+        shader.use_program();
+        local.text_mesh.draw_arrays(gl::TRIANGLES, 0, triangles*3);
+    }
+}
+
+/// The diagnostics system
+fn update_diagnostics(diagnostics: Res<Diagnostics>, mut query: Query<(&DiagnosticsTextBox, &mut TextBox)>) {
+    for (_, mut text_box) in query.iter_mut() {
+        text_box.text = format!("Update time: {}\nRender time: {}",
+            format_duration(&diagnostics.update_time),
+            format_duration(&diagnostics.render_time));
+    }
+}
+
+/// Format a Duration without using non-ascii characters (e.g. micro)
+fn format_duration(duration: &Duration) -> String {
+    let nanos = duration.as_nanos();
+
+    if nanos < 1000 {
+        format!("{nanos}ns")
+    }
+    else if nanos < 1000000 {
+        let micros = nanos as f64 / 1000.0;
+        format!("{micros}us")
+    }
+    else {
+        let millis = nanos as f64 / 1000000.0;
+        format!("{millis}ms")
     }
 }

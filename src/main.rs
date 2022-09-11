@@ -1,14 +1,14 @@
 pub mod sim;
 pub mod resources;
 
-use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, Rotation3};
+use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, Rotation3, vec4};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
-use dreamfield_renderer::components::{PlayerCamera, Visual, Position, ScreenEffect, RunTime, Animation};
+use dreamfield_renderer::components::{PlayerCamera, Visual, Position, ScreenEffect, RunTime, Animation, TextBox, DiagnosticsTextBox};
 use dreamfield_system::{GameHost, WindowSettings};
-use dreamfield_system::resources::{InputState, SimTime};
+use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
 
 use sim::{PlayerMovement, TestSphere, PlayerMovementMode, Ball};
 use sim::level_collision::LevelCollision;
@@ -30,6 +30,7 @@ fn init_sim(world: &mut World) -> Schedule {
     // Sim resources
     world.insert_resource(InputState::new());
     world.insert_resource(SimTime::new(0.0, FIXED_UPDATE_TIME));
+    world.init_resource::<Diagnostics>();
     world.init_resource::<LevelCollision>();
 
     // Create update schedule
@@ -50,6 +51,7 @@ fn init_renderer(world: &mut World) -> Schedule {
     world.insert_resource(resources::create_texture_manager());
     world.insert_resource(resources::create_model_manager());
     world.insert_resource(resources::create_world_chunk_manager());
+    world.insert_resource(resources::create_font_manager());
 
     // Create render schedule
     let mut render_schedule = Schedule::default();
@@ -63,6 +65,12 @@ fn init_renderer(world: &mut World) -> Schedule {
 
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
+    // Diagnostics
+    let stats_bounds = vec4(10.0, 10.0, 310.0, 230.0);
+    world.spawn()
+        .insert(DiagnosticsTextBox)
+        .insert(TextBox::new("text", "medieval", "Vx8", "", None, Some(stats_bounds)));
+
     // Create sky
     world.spawn()
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
@@ -71,6 +79,7 @@ fn init_entities(world: &mut World) {
     world.spawn()
         // Entrance to village
         .insert(create_player_camera())
+        // TODO: add constants for these
         // Entrance to cathedral
         //.insert(PlayerCamera::new(vec3(-99.988, 6.567, 75.533), -0.0367, 0.8334))
         // In corridor, going out
@@ -84,10 +93,10 @@ fn init_entities(world: &mut World) {
         // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
         // duplicated.
         //.insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
-        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
+        //.insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
         // Going outside
         //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
-        //.insert(PlayerMovement::new_pos_look(vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099)));
+        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099)));
 
     // Create fire orb
     world.spawn()
