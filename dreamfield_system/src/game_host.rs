@@ -15,10 +15,12 @@ pub struct WindowSettings {
     pub wireframe_enabled: bool
 }
 
-impl WindowSettings {
-    pub fn with_window_size(window_size: (i32, i32)) -> Self {
+impl Default for WindowSettings {
+    fn default() -> Self {
         Self {
-            window_size,
+            // A meaningless default, it gets set by the game host after creating the window. I put
+            // this pointless default here so that if it ever goes wrong, it's hopefully noticeable.
+            window_size: (500, 500),
             wireframe_enabled: false
         }
     }
@@ -32,10 +34,10 @@ pub struct GameHost {
 }
 
 impl GameHost {
-    pub fn new(window_width: i32, window_height: i32, update_timestep: f64) -> Self {
+    pub fn new(window_size: Option<(i32, i32)>, update_timestep: f64) -> Self {
         // Create window
         let gl_debug_level = gl::DEBUG_SEVERITY_LOW - 500;
-        let window = GlfwWindow::new_with_context(window_width, window_height, "Dreamfield", gl_debug_level);
+        let window = GlfwWindow::new_with_context(window_size, "Dreamfield", gl_debug_level);
 
         Self {
             window,
@@ -44,6 +46,14 @@ impl GameHost {
     }
 
     pub fn run(&mut self, mut world: World, mut update_schedule: Schedule, mut render_schedule: Schedule) {
+        // If the window size was too big for the monitor, the initial size can end up smaller than
+        // we expect, with no FramebufferSize event... To make sure it's right, we query and set it
+        // here.
+        world.resource_scope(|_, mut window_settings: Mut<WindowSettings>| {
+            let (width, height) = self.window.window.get_framebuffer_size();
+            window_settings.window_size = (width, height);
+        });
+
         // Set up fixed timestep
         let mut fixed_timestep = FixedTimestep::new(self.update_timestep, self.window.glfw.get_time());
 

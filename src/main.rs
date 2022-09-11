@@ -13,12 +13,6 @@ use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
 use sim::{PlayerMovement, TestSphere, PlayerMovementMode, Ball};
 use sim::level_collision::LevelCollision;
 
-/// The width of the window
-const WINDOW_WIDTH: i32 = 1024 * 2;
-
-/// The height of the window
-const WINDOW_HEIGHT: i32 = 768 * 2;
-
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
 
@@ -46,7 +40,7 @@ fn init_sim(world: &mut World) -> Schedule {
 /// Initialise renderer, returning the render bevy schedule
 fn init_renderer(world: &mut World) -> Schedule {
     // Renderer resources
-    world.insert_resource(WindowSettings::with_window_size((WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32)));
+    world.insert_resource(WindowSettings::default());
     world.insert_resource(resources::create_shader_manager());
     world.insert_resource(resources::create_texture_manager());
     world.insert_resource(resources::create_model_manager());
@@ -163,7 +157,7 @@ fn main() {
     log::info!("Welcome to Dreamfield!");
 
     // Create game host
-    let mut host = GameHost::new(WINDOW_WIDTH, WINDOW_HEIGHT, FIXED_UPDATE_TIME);
+    let mut host = GameHost::new(None, FIXED_UPDATE_TIME);
 
     // Create bevy world
     let mut world = World::default();

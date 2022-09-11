@@ -13,13 +13,31 @@ pub struct GlfwWindow {
 
 impl GlfwWindow {
     /// Create a new window with an opengl context with the given width and height
-    pub fn new_with_context(width: i32, height: i32, title: &str, debug_log_level: u32) -> GlfwWindow {
+    pub fn new_with_context(size: Option<(i32, i32)>, title: &str, debug_log_level: u32) -> GlfwWindow {
         log::info!("Creating window");
 
         // Initialise glfw
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
         glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+
+        // Get the initial window size
+        let (width, height) = size.unwrap_or_else(|| {
+            // If unspecified, use a percentage of the primary monitor size, or a default value
+            let (mut width, mut height) = (1024, 768);
+            glfw.with_primary_monitor(|_, monitor| {
+                if let Some(monitor) = monitor {
+                    if let Some(video_mode) = monitor.get_video_mode() {
+                        // Set height to 3/4 of monitor height, and width to the corresponding 4:3
+                        // resolution, as widescreen monitors are common and this is more likely to
+                        // result in a sensible default.
+                        height = video_mode.height as i32 * 3 / 4;
+                        width = height * 4 / 3;
+                    }
+                }
+            });
+            (width, height)
+        });
 
         // Create window and gl context
         let (mut window, events) = glfw.create_window(width as u32, height as u32, title, glfw::WindowMode::Windowed)

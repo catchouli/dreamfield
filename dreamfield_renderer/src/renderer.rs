@@ -52,7 +52,7 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     let local = &mut *local;
 
     // Update window size if it's changed
-    if window_settings.is_changed() {
+    if window_settings.is_added() || window_settings.is_changed() {
         let (width, height) = window_settings.window_size;
         local.ubo_global.set_window_aspect(&(width as f32 / height as f32));
     }
