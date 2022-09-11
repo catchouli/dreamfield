@@ -585,9 +585,12 @@ fn render_text(local: &mut RendererResources, camera: &PlayerCamera, fonts: &Fon
 /// The diagnostics system
 fn update_diagnostics(diagnostics: Res<Diagnostics>, mut query: Query<(&DiagnosticsTextBox, &mut TextBox)>) {
     for (_, mut text_box) in query.iter_mut() {
-        text_box.text = format!("Update time: {}\nRender time: {}",
+        text_box.text = format!(
+            "Update time: {}\nRender time: {}\nPlayer pos: {:.1}, {:.1}, {:.1}\nPlayer rot: {:.1}, {:.1}",
             format_duration(&diagnostics.update_time),
-            format_duration(&diagnostics.render_time));
+            format_duration(&diagnostics.render_time),
+            diagnostics.player_pos.x, diagnostics.player_pos.y, diagnostics.player_pos.z,
+            diagnostics.player_pitch_yaw.x, diagnostics.player_pitch_yaw.y);
     }
 }
 

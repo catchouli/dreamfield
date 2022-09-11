@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use cgmath::{Vector3, Vector2, vec3, vec2};
+
 pub use crate::input::{InputState, InputName};
 
 /// The SimTime resource
@@ -21,7 +23,8 @@ impl SimTime {
 pub struct Diagnostics {
     pub update_time: Duration,
     pub render_time: Duration,
-    pub frame_time: Duration,
+    pub player_pos: Vector3<f32>,
+    pub player_pitch_yaw: Vector2<f32>,
 }
 
 impl Default for Diagnostics {
@@ -29,7 +32,8 @@ impl Default for Diagnostics {
         Self {
             update_time: Default::default(),
             render_time: Default::default(),
-            frame_time: Default::default()
+            player_pos: vec3(0.0, 0.0, 0.0),
+            player_pitch_yaw: vec2(0.0, 0.0),
         }
     }
 }

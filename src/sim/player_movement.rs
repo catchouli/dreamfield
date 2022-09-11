@@ -7,7 +7,7 @@ use super::TestSphere;
 use super::intersection::Plane;
 use super::level_collision::{LevelCollision, SpherecastResult};
 use dreamfield_renderer::components::{PlayerCamera, Position};
-use dreamfield_system::resources::{SimTime, InputName, InputState};
+use dreamfield_system::resources::{SimTime, InputName, InputState, Diagnostics};
 
 /// The character height
 const CHAR_HEIGHT: f32 = 1.8;
@@ -122,7 +122,7 @@ impl PlayerMovement {
 /// The player update system
 pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: ResMut<WorldChunkManager>,
     input_state: Res<InputState>, sim_time: Res<SimTime>, mut query: Query<(&mut PlayerCamera, &mut PlayerMovement)>,
-    mut test_sphere: Query<(&TestSphere, &mut Position)>)
+    mut test_sphere: Query<(&TestSphere, &mut Position)>, mut diagnostics: ResMut<Diagnostics>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 
@@ -135,6 +135,10 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: Res
 
         let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
         cam.view = cam_transform.invert().unwrap();
+
+        // Update diagnostics
+        diagnostics.player_pos = player_movement.position;
+        diagnostics.player_pitch_yaw = player_movement.pitch_yaw;
 
         // Debug spherecast
         if input_state.is_held(InputName::Debug) {
