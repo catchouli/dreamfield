@@ -6,8 +6,8 @@ pub const CHUNK_OUTPUT_DIR: &'static str = "target/world_chunks";
 
 /// World models
 const WORLD_MODELS: &'static [WorldModel] = &[
-    include_world_model!("resources/models/demo_scene.glb"),
-    //include_world_model!("resources/models/demo_scene_fail.glb"),
+    include_world_model!("resources/models/village.glb"),
+    include_world_model!("resources/models/dungeon.glb"),
     //include_world_model!("resources/models/scene_a.glb"),
     //include_world_model!("resources/models/scene_b.glb"),
     //include_world_model!("resources/models/scene_c.glb"),
