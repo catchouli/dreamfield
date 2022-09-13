@@ -22,7 +22,6 @@ pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpaw
                 log::warn!("Asked to spawn unknown entity: {:?}", event.entity_info);
             }
         }
-        println!("spawn event: {:?}", event.entity_info);
     }
 }
 

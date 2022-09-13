@@ -3,6 +3,7 @@ pub mod world_chunk;
 pub mod world_texture;
 pub mod aabb;
 pub mod wrapped_vectors;
+pub mod world_collision;
 
 use std::collections::HashMap;
 use speedy::Readable;

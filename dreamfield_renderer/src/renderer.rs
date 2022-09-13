@@ -19,11 +19,7 @@ use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::{SimTime, Diagnostics};
 use dreamfield_system::components::Transform;
 
-pub const RENDER_WIDTH: i32 = 320;
-pub const RENDER_HEIGHT: i32 = 240;
-
-pub const RENDER_ASPECT: f32 = 4.0 / 3.0;
-
+// oops, these should be on the PlayerCamera
 pub const FOV: f32 = 60.0;
 
 pub const NEAR_CLIP: f32 = 0.1;

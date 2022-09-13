@@ -3,6 +3,7 @@ pub mod resources;
 pub mod world;
 pub mod components;
 pub mod systems;
+pub mod math;
 mod fixed_timestep;
 mod glfw_system;
 mod game_host;

@@ -11,7 +11,7 @@ use dreamfield_system::GameHost;
 use dreamfield_system::components::Transform;
 
 use dreamfield_system::systems::entity_spawner::EntitySpawnRadius;
-use sim::{PlayerMovement, TestSphere, PlayerMovementMode, Ball};
+use sim::{PlayerMovement, PlayerMovementMode, Ball, CapsuleA, CapsuleB, CapsuleCollider};
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
@@ -22,16 +22,16 @@ const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 /// The player position entering the village
 const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099));
 
-// Entrance to cathedral
+/// Entrance to cathedral
 const _CATHEDRAL_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-99.988, 6.567, 75.533), vec2(-0.0367, 0.8334));
 
-// In corridor, going out
+/// In corridor, going out
 const _LEAVING_DUNGEON: (Vector3<f32>, Vector2<f32>) = (vec3(-53.925, 5.8, 19.56), vec2(0.097, 1.57));
 
-// Looking at torch
+/// Looking at torch
 const _LOOKING_AT_TORCH: (Vector3<f32>, Vector2<f32>) = (vec3(-33.04357, 4.42999, 15.564), vec2(0.563, 2.499));
 
-// Looking at corridor
+/// Looking at corridor
 const _LOOKING_AT_CORRIDOR: (Vector3<f32>, Vector2<f32>) = (vec3(5.2, 0.8, 12.8), vec2(0.03, 2.0));
 
 /// Initialize bevy world
@@ -47,13 +47,14 @@ fn init_entities(world: &mut World) {
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
     // Create player
-    let (initial_pos, initial_rot) = _VILLAGE_ENTRANCE;
+    let (initial_pos, initial_rot) = _LOOKING_AT_CORRIDOR;
     world.spawn()
         // Entrance to village
-        .insert(EntitySpawnRadius::new(10.0))
         .insert(Transform::new(initial_pos, Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot))
+        .insert(PlayerMovement::collider())
         .insert(create_player_camera())
-        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot));
+        .insert(EntitySpawnRadius::new(10.0));
 
     // Create fire orb
     world.spawn()
@@ -61,11 +62,18 @@ fn init_entities(world: &mut World) {
         .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
-    // Test sphere
+    // Test capsule A
     world.spawn()
-        .insert(TestSphere {})
-        .insert(Transform::new(vec3(-9.0, 0.5, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new("white_sphere", false));
+        .insert(CapsuleA)
+        .insert(CapsuleCollider::new(vec3(0.0, 0.5, 0.0), vec3(0.0, 1.5, 0.0), 0.5))
+        .insert(Transform::new(vec3(-126.0, 5.3, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Visual::new("capsule", false));
+
+    // Test capsule B
+    world.spawn()
+        .insert(CapsuleB)
+        .insert(Transform::new(vec3(-124.8, 5.3, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Visual::new("capsule", false));
 
     //world.spawn()
     //    .insert(Transform::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))

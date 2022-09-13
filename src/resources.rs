@@ -1,14 +1,16 @@
+use include_dir::{include_dir, Dir};
+
 use bevy_ecs::prelude::Events;
 use bevy_ecs::world::World;
+
+use dreamfield_macros::*;
 use dreamfield_renderer::resources::{ShaderManager, TextureManager, ModelManager, FontManager};
 use dreamfield_renderer::gl_backend::TextureParams;
-use dreamfield_macros::*;
+use dreamfield_system::WindowSettings;
+use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
 use dreamfield_system::systems::entity_spawner::EntitySpawnEvent;
 use dreamfield_system::world::WorldChunkManager;
-use include_dir::{include_dir, Dir};
-use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
-use dreamfield_system::WindowSettings;
-use crate::sim::level_collision::LevelCollision;
+use dreamfield_system::world::world_collision::WorldCollision;
 
 /// The world chunks
 const WORLD_CHUNKS: Dir<'_> = include_dir!("target/world_chunks");
@@ -47,6 +49,7 @@ fn create_model_manager() -> ModelManager {
         ("samy", include_bytes!("../resources/models/samy_diamond.glb")),
         ("elf", include_bytes!("../resources/models/elf.glb")),
         ("minecart", include_bytes!("../resources/models/minecart.glb")),
+        ("capsule", include_bytes!("../resources/models/capsule.glb")),
     ])
 }
 
@@ -76,5 +79,5 @@ pub fn add_resources(world: &mut World) {
     world.insert_resource(create_font_manager());
 
     // Our own resources
-    world.init_resource::<LevelCollision>();
+    world.init_resource::<WorldCollision>();
 }

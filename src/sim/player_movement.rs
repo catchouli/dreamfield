@@ -3,23 +3,21 @@ use std::f32::consts::PI;
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise};
-use dreamfield_system::world::WorldChunkManager;
 
-use super::intersection::Plane;
-use super::level_collision::{LevelCollision, SpherecastResult};
 use dreamfield_renderer::components::PlayerCamera;
 use dreamfield_system::components::Transform;
+use dreamfield_system::math::intersection::{Plane, Capsule};
 use dreamfield_system::resources::{SimTime, InputName, InputState, Diagnostics};
+use dreamfield_system::world::WorldChunkManager;
+use dreamfield_system::world::world_collision::{WorldCollision, SpherecastResult};
 
-/// The character height
+use super::CapsuleCollider;
+
+/// The character's height
 const CHAR_HEIGHT: f32 = 1.8;
 
 /// The character's collider radius
-const COLLIDER_RADIUS: Vector3<f32> = vec3(0.5, CHAR_HEIGHT * 0.5, 0.5);
-
-/// The character's collider change of basis matrix (to convert world coordinates to e-space, where
-/// the collider is a unit sphere)
-const COLLIDER_CBM: Vector3<f32> = vec3(1.0 / COLLIDER_RADIUS.x, 1.0 / COLLIDER_RADIUS.y, 1.0 / COLLIDER_RADIUS.z);
+const CHAR_RADIUS: f32 = 0.5;
 
 /// A tiny value which stops us from coming too close to walls
 const MIN_DISTANCE_FROM_WALLS: f32 = 0.01;
@@ -123,20 +121,28 @@ impl PlayerMovement {
     pub fn right(&self) -> Vector3<f32> {
         self.orientation() * WORLD_RIGHT
     }
+
+    pub fn collider() -> CapsuleCollider {
+        CapsuleCollider::new(
+            vec3(0.0, CHAR_RADIUS, 0.0),
+            vec3(0.0, CHAR_HEIGHT - CHAR_RADIUS, 0.0),
+            CHAR_RADIUS
+        )
+    }
 }
 
 /// The player update system
-pub fn player_update(mut level_collision: ResMut<LevelCollision>,
+pub fn player_update(mut collision: ResMut<WorldCollision>,
                      mut world: ResMut<WorldChunkManager>,
                      mut diagnostics: ResMut<Diagnostics>,
                      input_state: Res<InputState>, sim_time: Res<SimTime>,
-                     mut query: Query<(&mut Transform, &mut PlayerCamera, &mut PlayerMovement)>)
+                     mut query: Query<(&mut Transform, &mut PlayerCamera, &mut PlayerMovement, &CapsuleCollider)>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 
-    for (mut player_transform, mut cam, mut player_movement) in query.iter_mut() {
+    for (mut player_transform, mut cam, mut player_movement, collider) in query.iter_mut() {
         // Now move the player
-        player_move(level_collision.as_mut(), world.as_mut(), &mut player_transform, &mut player_movement,
+        player_move(collision.as_mut(), world.as_mut(), &mut player_transform, &mut player_movement, collider,
             &input_state, time_delta);
 
         // Update camera
@@ -152,8 +158,8 @@ pub fn player_update(mut level_collision: ResMut<LevelCollision>,
 }
 
 /// The player movement
-fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player_transform: &mut Transform,
-    player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32)
+fn player_move(collision: &mut WorldCollision, world: &mut WorldChunkManager, player_transform: &mut Transform,
+    player_movement: &mut PlayerMovement, collider: &CapsuleCollider, input_state: &InputState, time_delta: f32)
 {
     // Update view direction
     update_view_angles(player_movement, input_state, time_delta);
@@ -165,13 +171,19 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
         return;
     }
 
+    // Convert capsule to e-space
+    let capsule_e_space = Capsule::new(
+        collider.capsule.a.mul_element_wise(collider.cbm),
+        collider.capsule.b.mul_element_wise(collider.cbm),
+        1.0);
+
     // Find ground plane, converting to ellipsoid space first
     {
-        let position_e_space = player_transform.pos.mul_element_wise(COLLIDER_CBM);
-        player_movement.ground_plane = sweep_unit(level, world, position_e_space, vec3(0.0, -0.02, 0.0))
-            .map(|hit| {
-                let hit_point_world = hit.point().div_element_wise(COLLIDER_CBM);
-                let hit_normal_world = hit.normal().div_element_wise(COLLIDER_CBM).normalize();
+        let position_e_space = player_transform.pos.mul_element_wise(collider.cbm);
+        player_movement.ground_plane = sweep_unit(collision, world, &capsule_e_space, &collider.cbm, position_e_space,
+            vec3(0.0, -0.02, 0.0)).map(|hit| {
+                let hit_point_world = hit.point().div_element_wise(collider.cbm);
+                let hit_normal_world = hit.normal().div_element_wise(collider.cbm).normalize();
                 if hit.toi() == 0.0 {
                     println!("Found intersection at 0.0 when checking for ground plane - stuck?");
                     player_transform.pos += hit_normal_world * 0.1;
@@ -240,18 +252,18 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
 
     // Convert position and velocity to e-space for unit sphere sweep
     let mut position_es = player_transform.pos
-        .mul_element_wise(COLLIDER_CBM);
+        .mul_element_wise(collider.cbm);
     let velocity_es = player_movement.velocity
-        .mul_element_wise(COLLIDER_CBM);
+        .mul_element_wise(collider.cbm);
 
     // Update lateral movement
     let movement_xz_es = time_delta * vec3(velocity_es.x, 0.0, velocity_es.z);
-    position_es = recursive_slide(level, world, position_es, movement_xz_es, 0);
+    position_es = recursive_slide(collision, world, &capsule_e_space, &collider.cbm, position_es, movement_xz_es, 0);
 
     // Add gravity
     if player_movement.velocity.y != 0.0 {
         let movement_y_es = time_delta * vec3(0.0, velocity_es.y, 0.0);
-        position_es = recursive_slide(level, world, position_es, movement_y_es, 0);
+        position_es = recursive_slide(collision, world, &capsule_e_space, &collider.cbm, position_es, movement_y_es, 0);
     }
 
     // TODO: might want to reimplement the 'bump' behavior for if we get stuck, now that we've
@@ -262,20 +274,21 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
 
     // Convert player position back to R3 (world space)
     player_transform.pos = position_es
-        .div_element_wise(COLLIDER_CBM);
+        .div_element_wise(collider.cbm);
 }
 
 /// Sweep a unit sphere through the world from the start with a given velocity. Start and velocity
 /// must be converted to e-space first by multiplying by COLLIDER_CBM, and then the results must
 /// eventually be converted back to world space by doing the opposite.
-fn sweep_unit(level: &mut LevelCollision, world: &mut WorldChunkManager, start: Vector3<f32>, velocity: Vector3<f32>)
-    -> Option<SpherecastResult>
+fn sweep_unit(collision: &mut WorldCollision, world: &mut WorldChunkManager, capsule: &Capsule, cbm: &Vector3<f32>,
+    start: Vector3<f32>, velocity: Vector3<f32>) -> Option<SpherecastResult>
 {
     // Add 1 radius to the starting y coordinate so the base of the sphere is at the player's feet
-    let start = start + vec3(0.0, 1.0, 0.0);
+    let a = start + capsule.a;
+    let b = start + capsule.b;
 
     // Sweep the scene
-    let result = level.sweep_unit_sphere(world, start, velocity, COLLIDER_CBM);
+    let result = collision.sweep_unit_capsule(world, a, b, velocity, *cbm);
 
     // Subtract radius back from intersection point if there was a hit
     result.map(|result| {
@@ -287,8 +300,8 @@ fn sweep_unit(level: &mut LevelCollision, world: &mut WorldChunkManager, start: 
 }
 
 /// Move through the world sliding on surfaces we collide with
-fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, position: Vector3<f32>,
-    velocity: Vector3<f32>, depth: i32) -> Vector3<f32>
+fn recursive_slide(collision: &mut WorldCollision, world: &mut WorldChunkManager, capsule: &Capsule,
+    cbm: &Vector3<f32>, position: Vector3<f32>, velocity: Vector3<f32>, depth: i32) -> Vector3<f32>
 {
     const MAX_RECURSION_DEPTH: i32 = 5;
 
@@ -304,7 +317,7 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
     }
 
     // Sphere sweep and find next intersection point
-    let hit = sweep_unit(level, world, position, velocity);
+    let hit = sweep_unit(collision, world, capsule, cbm, position, velocity);
     if hit.is_none() {
         return position + velocity;
     }
@@ -343,7 +356,7 @@ fn recursive_slide(level: &mut LevelCollision, world: &mut WorldChunkManager, po
         return new_position;
     }
 
-    recursive_slide(level, world, new_position, new_velocity_vector, depth + 1)
+    recursive_slide(collision, world, capsule, cbm, new_position, new_velocity_vector, depth + 1)
 }
 
 /// Update the view direction
