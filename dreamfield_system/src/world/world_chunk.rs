@@ -1,6 +1,6 @@
-use cgmath::{Vector3, Vector2};
+use cgmath::{Vector3, Vector2, Matrix4};
 use speedy::{Readable, Writable};
-use super::{aabb::Aabb, wrapped_vectors::{WrappedVector4, WrappedVector3}};
+use super::{aabb::Aabb, wrapped_vectors::{WrappedVector4, WrappedVector3, WrappedMatrix4}};
 
 /// World chunk size
 pub const CHUNK_SIZE: f32 = 16.0;
@@ -15,12 +15,16 @@ pub const INDEX_STRIDE: usize = 3;
 /// Type for chunk indexes
 pub type ChunkIndex = (i32, i32);
 
+/// Type for entity IDs
+pub type EntityId = i32;
+
 /// A single world chunk
-#[derive(Readable, Writable)]
+#[derive(Readable, Writable, Debug)]
 pub struct WorldChunk {
     aabb: Aabb,
     meshes: Vec<WorldChunkMesh>,
-    instances: Vec<WorldChunkInstance>
+    instances: Vec<WorldChunkInstance>,
+    entities: Vec<WorldChunkEntity>,
 }
 
 impl WorldChunk {
@@ -29,7 +33,8 @@ impl WorldChunk {
         Self {
             aabb: Aabb::new(),
             meshes: Vec::new(),
-            instances: Vec::new()
+            instances: Vec::new(),
+            entities: Vec::new(),
         }
     }
 
@@ -48,6 +53,11 @@ impl WorldChunk {
         &self.instances
     }
 
+    /// Get the chunk's entities
+    pub fn entities(&self) -> &[WorldChunkEntity] {
+        &self.entities
+    }
+
     /// Add a mesh to a world chunk
     pub fn add_mesh(&mut self, mesh: WorldChunkMesh) {
         self.aabb.expand_with_aabb(mesh.aabb());
@@ -60,6 +70,11 @@ impl WorldChunk {
             self.aabb.expand_with_point(point)
         }
         self.instances.push(instance);
+    }
+
+    /// Add an entity to a world chunk
+    pub fn add_entity(&mut self, entity: WorldChunkEntity) {
+        self.entities.push(entity);
     }
 
     /// Get the chunk filename for a given chunk index
@@ -95,7 +110,7 @@ impl WorldChunk {
 }
 
 /// A mesh within a world chunk
-#[derive(Clone, Readable, Writable)]
+#[derive(Clone, Readable, Writable, Debug)]
 pub struct WorldChunkMesh {
     aabb: Aabb,
     index: i32,
@@ -145,7 +160,7 @@ impl WorldChunkMesh {
 }
 
 /// A material within a world chunk
-#[derive(Clone, Readable, Writable)]
+#[derive(Clone, Readable, Writable, Debug)]
 pub struct WorldChunkMaterial {
     base_color: WrappedVector4,
     base_color_tex: Option<i32>
@@ -168,8 +183,8 @@ impl WorldChunkMaterial {
     }
 }
 
-// A mesh instanced in the world at various points
-#[derive(Clone, Readable, Writable)]
+/// A mesh instanced in the world at various points
+#[derive(Clone, Readable, Writable, Debug)]
 pub struct WorldChunkInstance {
     mesh_name: String,
     points: Vec<WrappedVector3>
@@ -189,5 +204,38 @@ impl WorldChunkInstance {
 
     pub fn points(&self) -> &Vec<WrappedVector3> {
         &self.points
+    }
+}
+
+/// An entity to be spawned in if the player is near this chunk
+#[derive(Clone, Readable, Writable, Debug)]
+pub struct WorldChunkEntity {
+    /// The unique ID for this entity that allows us to track if we've already spawned it
+    entity_id: EntityId,
+    /// The object ID to spawn (passed to a closure from the game itself in order to spawn them)
+    object_id: String,
+    /// The world transform of the entity
+    world_transform: WrappedMatrix4,
+}
+
+impl WorldChunkEntity {
+    pub fn new(entity_id: EntityId, object_id: String, world_transform: Matrix4<f32>) -> Self {
+        Self {
+            entity_id,
+            object_id,
+            world_transform: WrappedMatrix4(world_transform),
+        }
+    }
+
+    pub fn entity_id(&self) -> EntityId {
+        self.entity_id
+    }
+
+    pub fn object_id(&self) -> &str {
+        &self.object_id
+    }
+
+    pub fn world_transform(&self) -> &Matrix4<f32> {
+        self.world_transform.as_mat()
     }
 }

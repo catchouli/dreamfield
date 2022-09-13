@@ -1,5 +1,5 @@
 use super::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex, CHUNK_SIZE, VERTEX_STRIDE, INDEX_STRIDE,
-    WorldChunkMaterial, WorldChunkInstance};
+    WorldChunkMaterial, WorldChunkInstance, WorldChunkEntity};
 use super::aabb::Aabb;
 use super::world_texture::{WorldTexture, TextureIndex};
 use super::wrapped_vectors::{WrappedVector3, WrappedVector4};
@@ -39,7 +39,10 @@ pub struct WorldNodeExtras {
     pub node_type: Option<String>,
 
     #[serde(default)]
-    pub instance_mesh: Option<String>
+    pub instance_mesh: Option<String>,
+
+    #[serde(default)]
+    pub object_id: Option<String>,
 }
 
 
@@ -65,7 +68,8 @@ pub struct WorldBuilder {
     models: &'static [WorldModel],
     chunks: HashMap<ChunkIndex, WorldChunk>,
     textures: Vec<WorldTexture>,
-    texture_hashes: HashMap<u64, usize>
+    texture_hashes: HashMap<u64, usize>,
+    entity_count: i32,
 }
 
 impl WorldBuilder {
@@ -76,7 +80,8 @@ impl WorldBuilder {
             models,
             chunks: HashMap::new(),
             textures: Vec::new(),
-            texture_hashes: HashMap::new()
+            texture_hashes: HashMap::new(),
+            entity_count: 0
         }
     }
 
@@ -147,6 +152,15 @@ impl WorldBuilder {
                                 node.name().unwrap_or("no-name")));
 
                         self.add_instances(&prim, &world_transform, instance_mesh, &buffers);
+                    }
+                    else if node_type == "entity" {
+                        let object_id = node_extras.as_ref()
+                            .map(|e| e.object_id.clone())
+                            .flatten()
+                            .expect(&format!("Node {} with node_type = entity must have object_id",
+                                node.name().unwrap_or("no-name")));
+
+                        self.add_entity(&prim, &world_transform, object_id, &buffers);
                     }
                 }
                 else {
@@ -351,6 +365,23 @@ impl WorldBuilder {
             self.get_chunk(*chunk_index)
                 .add_instances(WorldChunkInstance::new(mesh.clone(), points.to_vec()));
         }
+    }
+
+    /// Add an entity
+    fn add_entity(&mut self, _prim: &gltf::Primitive, world_transform: &Matrix4<f32>, object_id: String,
+        _buffers: &[buffer::Data])
+    {
+        let entity_id = self.entity_count;
+        self.entity_count += 1;
+
+        // Add this entity to exactly the chunk it's supposed to be in based on its transform
+        let chunk = {
+            let entity_pos = world_transform.w.truncate();
+            let chunk_index = WorldChunk::point_to_chunk_index(&entity_pos);
+            self.get_chunk(chunk_index)
+        };
+
+        chunk.add_entity(WorldChunkEntity::new(entity_id, object_id, *world_transform));
     }
 
     /// Build the vertices for a single mesh from a gltf::Primitive

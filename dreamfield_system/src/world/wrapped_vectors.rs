@@ -1,8 +1,8 @@
-use cgmath::{Vector3, vec3, Vector4, vec4};
+use cgmath::{Vector3, vec3, Vector4, vec4, Matrix4};
 use speedy::{Readable, Writable, Context};
 
 /// A wrapper for Vector3<f32> that's serializable
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WrappedVector3(pub Vector3<f32>);
 
 impl WrappedVector3 {
@@ -33,7 +33,7 @@ impl<'a, C: Context> Readable<'a, C> for WrappedVector3 {
 }
 
 /// A wrapper for Vector4<f32> that's serializable
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WrappedVector4(pub Vector4<f32>);
 
 impl WrappedVector4 {
@@ -65,3 +65,36 @@ impl<'a, C: Context> Readable<'a, C> for WrappedVector4 {
     }
 }
 
+
+/// A wrapped for Matrix4<f32> that's serializable
+#[derive(Clone, Debug)]
+pub struct WrappedMatrix4(pub Matrix4<f32>);
+
+impl WrappedMatrix4 {
+    pub fn as_mat(&self) -> &Matrix4<f32> {
+        match self {
+            WrappedMatrix4(v) => &v
+        }
+    }
+}
+
+impl<'a, C: Context> Writable<C> for WrappedMatrix4 {
+    fn write_to< T: ?Sized + speedy::Writer< C > >( &self, writer: &mut T ) -> Result<(), C::Error > {
+        let m = self.as_mat();
+        Writable::write_to(&WrappedVector4(m.x), writer)?;
+        Writable::write_to(&WrappedVector4(m.y), writer)?;
+        Writable::write_to(&WrappedVector4(m.z), writer)?;
+        Writable::write_to(&WrappedVector4(m.w), writer)?;
+        Ok(())
+    }
+}
+
+impl<'a, C: Context> Readable<'a, C> for WrappedMatrix4 {
+    fn read_from< R: speedy::Reader< 'a, C > >( reader: &mut R ) -> Result< Self, <C as Context>::Error > {
+        let x = *WrappedVector4::read_from(reader)?.as_vec();
+        let y = *WrappedVector4::read_from(reader)?.as_vec();
+        let z = *WrappedVector4::read_from(reader)?.as_vec();
+        let w = *WrappedVector4::read_from(reader)?.as_vec();
+        Ok(WrappedMatrix4(Matrix4::from_cols(x, y, z, w)))
+    }
+}

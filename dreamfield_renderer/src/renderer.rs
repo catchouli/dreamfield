@@ -10,13 +10,14 @@ use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
 use crate::resources::{ModelManager, TextureManager, ShaderManager, FontManager};
-use crate::components::{PlayerCamera, Position, Visual, ScreenEffect, RunTime, TextBox, DiagnosticsTextBox};
+use crate::components::{PlayerCamera, Visual, ScreenEffect, RunTime, TextBox, DiagnosticsTextBox};
 use dreamfield_system::WindowSettings;
 use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex};
 use dreamfield_system::world::world_texture::WorldTexture;
 use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::{SimTime, Diagnostics};
+use dreamfield_system::components::Transform;
 
 pub const RENDER_WIDTH: i32 = 320;
 pub const RENDER_HEIGHT: i32 = 240;
@@ -47,7 +48,7 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
     fonts: Res<FontManager>, mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
     mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
-    mut visuals_query: Query<(&Position, &mut Visual)>, text_query: Query<&TextBox>)
+    mut visuals_query: Query<(&Transform, &mut Visual)>, text_query: Query<&TextBox>)
 {
     let local = &mut *local;
 
@@ -316,7 +317,7 @@ fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) 
 
 /// Draw the visuals
 fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: &Res<ModelManager>,
-    visuals_query: &mut Query<(&Position, &mut Visual)>)
+    visuals_query: &mut Query<(&Transform, &mut Visual)>)
 {
     unsafe { gl::Enable(gl::DEPTH_TEST); }
 

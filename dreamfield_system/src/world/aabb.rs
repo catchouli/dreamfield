@@ -3,7 +3,7 @@ use speedy::{Readable, Writable};
 use super::wrapped_vectors::WrappedVector3;
 
 /// Axis aligned bounding box
-#[derive(Clone, Readable, Writable)]
+#[derive(Clone, Readable, Writable, Debug)]
 pub struct Aabb {
     min_max: Option<(WrappedVector3, WrappedVector3)>,
 }

@@ -1,19 +1,25 @@
+use bevy_ecs::prelude::Events;
+use bevy_ecs::world::World;
 use dreamfield_renderer::resources::{ShaderManager, TextureManager, ModelManager, FontManager};
 use dreamfield_renderer::gl_backend::TextureParams;
 use dreamfield_macros::*;
+use dreamfield_system::systems::entity_spawner::EntitySpawnEvent;
 use dreamfield_system::world::WorldChunkManager;
 use include_dir::{include_dir, Dir};
+use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
+use dreamfield_system::WindowSettings;
+use crate::sim::level_collision::LevelCollision;
 
 /// The world chunks
-pub const WORLD_CHUNKS: Dir<'_> = include_dir!("target/world_chunks");
+const WORLD_CHUNKS: Dir<'_> = include_dir!("target/world_chunks");
 
 /// Create the world chunk manager
-pub fn create_world_chunk_manager() -> WorldChunkManager {
+fn create_world_chunk_manager() -> WorldChunkManager {
     WorldChunkManager::new(&WORLD_CHUNKS)
 }
 
 /// Create the shader manager
-pub fn create_shader_manager() -> ShaderManager {
+fn create_shader_manager() -> ShaderManager {
     ShaderManager::new(vec![
         ("sky", preprocess_shader_vf!(include_bytes!("../resources/shaders/sky.glsl"))),
         ("ps1_no_tess", preprocess_shader_vf!(include_bytes!("../resources/shaders/ps1.glsl"))),
@@ -26,28 +32,49 @@ pub fn create_shader_manager() -> ShaderManager {
 }
 
 /// Create the texture manager
-pub fn create_texture_manager() -> TextureManager {
+fn create_texture_manager() -> TextureManager {
     TextureManager::new_with_textures(vec![
         ("sky", (include_bytes!("../resources/textures/skydark_small.png"), TextureParams::repeat_nearest(), true, None)),
     ])
 }
 
 /// Create the model manager
-pub fn create_model_manager() -> ModelManager {
+fn create_model_manager() -> ModelManager {
     ModelManager::new_with_models(vec![
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
         ("tree", include_bytes!("../resources/models/tree.glb")),
         ("white_sphere", include_bytes!("../resources/models/white_sphere.glb")),
         ("samy", include_bytes!("../resources/models/samy_diamond.glb")),
         ("elf", include_bytes!("../resources/models/elf.glb")),
+        ("minecart", include_bytes!("../resources/models/minecart.glb")),
     ])
 }
 
 /// Create the font manager
-pub fn create_font_manager() -> FontManager {
+fn create_font_manager() -> FontManager {
     const MEDIEVAL_FONT_TEX: &'static [u8] = include_bytes!("../resources/fonts/0xDB_medievalish_chonker_8x8_1bpp_bmp_font_packed.png");
     const MEDIEVAL_FONT_MAP: &'static [u8] = include_bytes!("../resources/fonts/0xDB_medievalish_chonker_8x8_1bpp_bmp_font_packed.csv");
     FontManager::new(vec![
         ("medieval", MEDIEVAL_FONT_TEX, MEDIEVAL_FONT_MAP)
     ])
+}
+
+/// Initialise resources
+pub fn add_resources(world: &mut World) {
+    // System resources
+    world.insert_resource(WindowSettings::default());
+    world.insert_resource(InputState::new());
+    world.insert_resource(SimTime::new(0.0, super::FIXED_UPDATE_TIME));
+    world.insert_resource(Events::<EntitySpawnEvent>::default());
+    world.init_resource::<Diagnostics>();
+
+    // Resource managers for our game
+    world.insert_resource(create_shader_manager());
+    world.insert_resource(create_texture_manager());
+    world.insert_resource(create_model_manager());
+    world.insert_resource(create_world_chunk_manager());
+    world.insert_resource(create_font_manager());
+
+    // Our own resources
+    world.init_resource::<LevelCollision>();
 }

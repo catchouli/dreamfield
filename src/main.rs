@@ -1,17 +1,17 @@
 pub mod sim;
 pub mod resources;
 
-use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, Rotation3, vec4};
+use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, vec4, Vector2};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
 use dreamfield_renderer::renderer;
-use dreamfield_renderer::components::{PlayerCamera, Visual, Position, ScreenEffect, RunTime, Animation, TextBox, DiagnosticsTextBox};
-use dreamfield_system::{GameHost, WindowSettings};
-use dreamfield_system::resources::{InputState, SimTime, Diagnostics};
+use dreamfield_renderer::components::{PlayerCamera, Visual, ScreenEffect, RunTime, Animation, TextBox, DiagnosticsTextBox};
+use dreamfield_system::GameHost;
+use dreamfield_system::components::Transform;
 
+use dreamfield_system::systems::entity_spawner::EntitySpawnRadius;
 use sim::{PlayerMovement, TestSphere, PlayerMovementMode, Ball};
-use sim::level_collision::LevelCollision;
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
@@ -19,43 +19,20 @@ const FIXED_UPDATE: i32 = 15;
 /// The fixed update target time
 const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 
-/// Initialise sim, returning the update bevy schedule
-fn init_sim(world: &mut World) -> Schedule {
-    // Sim resources
-    world.insert_resource(InputState::new());
-    world.insert_resource(SimTime::new(0.0, FIXED_UPDATE_TIME));
-    world.init_resource::<Diagnostics>();
-    world.init_resource::<LevelCollision>();
+/// The player position entering the village
+const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099));
 
-    // Create update schedule
-    let mut update_schedule = Schedule::default();
+// Entrance to cathedral
+const _CATHEDRAL_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-99.988, 6.567, 75.533), vec2(-0.0367, 0.8334));
 
-    update_schedule.add_stage("sim", SystemStage::parallel()
-        .with_system_set(sim::systems())
-    );
+// In corridor, going out
+const _LEAVING_DUNGEON: (Vector3<f32>, Vector2<f32>) = (vec3(-53.925, 5.8, 19.56), vec2(0.097, 1.57));
 
-    update_schedule
-}
+// Looking at torch
+const _LOOKING_AT_TORCH: (Vector3<f32>, Vector2<f32>) = (vec3(-33.04357, 4.42999, 15.564), vec2(0.563, 2.499));
 
-/// Initialise renderer, returning the render bevy schedule
-fn init_renderer(world: &mut World) -> Schedule {
-    // Renderer resources
-    world.insert_resource(WindowSettings::default());
-    world.insert_resource(resources::create_shader_manager());
-    world.insert_resource(resources::create_texture_manager());
-    world.insert_resource(resources::create_model_manager());
-    world.insert_resource(resources::create_world_chunk_manager());
-    world.insert_resource(resources::create_font_manager());
-
-    // Create render schedule
-    let mut render_schedule = Schedule::default();
-
-    render_schedule.add_stage("render", SystemStage::single_threaded()
-        .with_system_set(renderer::systems())
-    );
-
-    render_schedule
-}
+// Looking at corridor
+const _LOOKING_AT_CORRIDOR: (Vector3<f32>, Vector2<f32>) = (vec3(5.2, 0.8, 12.8), vec2(0.03, 2.0));
 
 /// Initialize bevy world
 fn init_entities(world: &mut World) {
@@ -70,53 +47,34 @@ fn init_entities(world: &mut World) {
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
     // Create player
+    let (initial_pos, initial_rot) = _VILLAGE_ENTRANCE;
     world.spawn()
         // Entrance to village
+        .insert(EntitySpawnRadius::new(10.0))
+        .insert(Transform::new(initial_pos, Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(create_player_camera())
-        // TODO: add constants for these
-        // Entrance to cathedral
-        //.insert(PlayerCamera::new(vec3(-99.988, 6.567, 75.533), -0.0367, 0.8334))
-        // In corridor, going out
-        //.insert(PlayerCamera::new(vec3(-45.99, 5.75, 17.37), 0.163, 1.7323))
-        // Looking at torch
-        //.insert(PlayerCamera::new(vec3(-33.04357, 4.42999, 15.564), 0.563, 2.499))
-        // Looking at corridor
-        //.insert(PlayerCamera::new(vec3(5.2, 0.8, 12.8), 0.03, 2.0))
-        // Default dungeon pos
-        // TODO: split the orientation out into PlayerMovement, and then make this be initialized
-        // by that. Add a PlayerCamera::from_player_movement() or something so the logic isn't
-        // duplicated.
-        //.insert(PlayerCamera::new(vec3(0.0, 0.5 + 1.8 - 0.1, 10.0), -0.17, 0.0))
-        //.insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(0.0, 0.5, 10.0), vec2(-0.17, 0.0)));
-        // Going outside
-        //.insert(PlayerCamera::new(vec3(-53.925, 5.8, 19.56), 0.097, 1.57))
-        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099)));
+        .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot));
 
     // Create fire orb
     world.spawn()
         .insert(Ball::default())
-        .insert(Position::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
     // Test sphere
     world.spawn()
         .insert(TestSphere {})
-        .insert(Position::new(vec3(-9.0, 0.5, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Transform::new(vec3(-9.0, 0.5, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new("white_sphere", false));
 
-    // Elf
-    world.spawn()
-        .insert(Position::new(vec3(-111.0, 5.2, 65.72), Quaternion::from_angle_y(Deg(231.0))))
-        .insert(Visual::new_with_anim("elf", false, Animation::Loop("Idle".to_string())));
-
     //world.spawn()
-    //    .insert(Position::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
     //world.spawn()
-    //    .insert(Position::new(vec3(0.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(0.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
     //world.spawn()
-    //    .insert(Position::new(vec3(-8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(-8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
 }
 
@@ -162,11 +120,23 @@ fn main() {
     // Create bevy world
     let mut world = World::default();
 
-    // Initialise renderer
-    let render_schedule = init_renderer(&mut world);
+    // Initialise resources
+    resources::add_resources(&mut world);
 
-    // Initialise sim
-    let update_schedule = init_sim(&mut world);
+    // Create update schedule
+    let mut update_schedule = Schedule::default();
+
+    update_schedule.add_stage("sim", SystemStage::parallel()
+        .with_system_set(dreamfield_system::systems())
+        .with_system_set(sim::systems())
+    );
+
+    // Create render schedule
+    let mut render_schedule = Schedule::default();
+
+    render_schedule.add_stage("render", SystemStage::single_threaded()
+        .with_system_set(renderer::systems())
+    );
 
     // Initialise entities
     init_entities(&mut world);

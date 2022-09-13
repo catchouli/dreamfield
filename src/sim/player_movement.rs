@@ -5,10 +5,10 @@ use bevy_ecs::system::{Res, ResMut, Query};
 use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise};
 use dreamfield_system::world::WorldChunkManager;
 
-use super::TestSphere;
 use super::intersection::Plane;
 use super::level_collision::{LevelCollision, SpherecastResult};
-use dreamfield_renderer::components::{PlayerCamera, Position};
+use dreamfield_renderer::components::PlayerCamera;
+use dreamfield_system::components::Transform;
 use dreamfield_system::resources::{SimTime, InputName, InputState, Diagnostics};
 
 /// The character height
@@ -83,7 +83,6 @@ const PITCH_MAX: f32 = PI * 0.4;
 #[derive(Component)]
 pub struct PlayerMovement {
     pub movement_mode: PlayerMovementMode,
-    pub position: Vector3<f32>,
     pub velocity: Vector3<f32>,
     pub pitch_yaw: Vector2<f32>,
     pub ground_plane: Option<Plane>,
@@ -99,10 +98,9 @@ pub enum PlayerMovementMode {
 }
 
 impl PlayerMovement {
-    pub fn new_pos_look(movement_mode: PlayerMovementMode, position: Vector3<f32>, pitch_yaw: Vector2<f32>) -> Self {
+    pub fn new_pos_look(movement_mode: PlayerMovementMode, pitch_yaw: Vector2<f32>) -> Self {
         PlayerMovement {
             movement_mode,
-            position,
             pitch_yaw,
             velocity: Vector3::zero(),
             ground_plane: None,
@@ -128,69 +126,55 @@ impl PlayerMovement {
 }
 
 /// The player update system
-pub fn player_update(mut level_collision: ResMut<LevelCollision>, mut world: ResMut<WorldChunkManager>,
-    input_state: Res<InputState>, sim_time: Res<SimTime>, mut query: Query<(&mut PlayerCamera, &mut PlayerMovement)>,
-    mut test_sphere: Query<(&TestSphere, &mut Position)>, mut diagnostics: ResMut<Diagnostics>)
+pub fn player_update(mut level_collision: ResMut<LevelCollision>,
+                     mut world: ResMut<WorldChunkManager>,
+                     mut diagnostics: ResMut<Diagnostics>,
+                     input_state: Res<InputState>, sim_time: Res<SimTime>,
+                     mut query: Query<(&mut Transform, &mut PlayerCamera, &mut PlayerMovement)>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 
-    for (mut cam, mut player_movement) in query.iter_mut() {
+    for (mut player_transform, mut cam, mut player_movement) in query.iter_mut() {
         // Now move the player
-        player_move(level_collision.as_mut(), world.as_mut(), &mut player_movement, &input_state, time_delta);
+        player_move(level_collision.as_mut(), world.as_mut(), &mut player_transform, &mut player_movement,
+            &input_state, time_delta);
 
         // Update camera
-        let cam_pos = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
+        let cam_pos = player_transform.pos + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
 
         let cam_transform = Matrix4::from_translation(cam_pos) * Matrix4::from(player_movement.orientation());
         cam.view = cam_transform.invert().unwrap();
 
         // Update diagnostics
-        diagnostics.player_pos = player_movement.position;
+        diagnostics.player_pos = player_transform.pos;
         diagnostics.player_pitch_yaw = player_movement.pitch_yaw;
-
-        // Debug spherecast
-        if input_state.is_held(InputName::Debug) {
-            let (_, mut pos) = test_sphere.single_mut();
-
-            let radius = 0.5;
-
-            let start = player_movement.position + vec3(0.0, CHAR_EYE_LEVEL, 0.0);
-            let velocity = 15.0 * player_movement.forward();
-
-            let res = level_collision.sweep_sphere(world.as_mut(), start, velocity, radius);
-            if let Some(res) = res {
-                pos.pos = start + velocity * res.toi();
-            }
-            else {
-                pos.pos = vec3(9.0, 0.0, -9.0);
-            }
-        }
     }
 }
 
-// TODO: make sweep work for single point, so we can use it to check if we're stuck and escape
-fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player_movement: &mut PlayerMovement,
-    input_state: &InputState, time_delta: f32)
+/// The player movement
+fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player_transform: &mut Transform,
+    player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32)
 {
     // Update view direction
     update_view_angles(player_movement, input_state, time_delta);
+    player_transform.rot = player_movement.orientation();
 
     // Noclip movement
     if player_movement.movement_mode == PlayerMovementMode::Noclip {
-        player_move_noclip(player_movement, input_state, time_delta);
+        player_move_noclip(player_transform, player_movement, input_state, time_delta);
         return;
     }
 
     // Find ground plane, converting to ellipsoid space first
     {
-        let position_e_space = player_movement.position.mul_element_wise(COLLIDER_CBM);
+        let position_e_space = player_transform.pos.mul_element_wise(COLLIDER_CBM);
         player_movement.ground_plane = sweep_unit(level, world, position_e_space, vec3(0.0, -0.02, 0.0))
             .map(|hit| {
                 let hit_point_world = hit.point().div_element_wise(COLLIDER_CBM);
                 let hit_normal_world = hit.normal().div_element_wise(COLLIDER_CBM).normalize();
                 if hit.toi() == 0.0 {
                     println!("Found intersection at 0.0 when checking for ground plane - stuck?");
-                    player_movement.position += hit_normal_world * 0.1;
+                    player_transform.pos += hit_normal_world * 0.1;
                 }
                 Plane::new_from_point_and_normal(hit_point_world, hit_normal_world)
             });
@@ -255,7 +239,7 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
     }
 
     // Convert position and velocity to e-space for unit sphere sweep
-    let mut position_es = player_movement.position
+    let mut position_es = player_transform.pos
         .mul_element_wise(COLLIDER_CBM);
     let velocity_es = player_movement.velocity
         .mul_element_wise(COLLIDER_CBM);
@@ -277,7 +261,7 @@ fn player_move(level: &mut LevelCollision, world: &mut WorldChunkManager, player
     //}
 
     // Convert player position back to R3 (world space)
-    player_movement.position = position_es
+    player_transform.pos = position_es
         .div_element_wise(COLLIDER_CBM);
 }
 
@@ -384,7 +368,9 @@ fn get_movement_vector(player_movement: &PlayerMovement, input_state: &InputStat
 }
 
 /// The simplest movement mode: noclip
-fn player_move_noclip(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
+fn player_move_noclip(player_transform: &mut Transform, player_movement: &mut PlayerMovement, input_state: &InputState,
+    time_delta: f32)
+{
     let (forward_input, right_input) = input_state.get_movement_input();
 
     let speed = match input_state.is_held(InputName::Run) {
@@ -397,5 +383,5 @@ fn player_move_noclip(player_movement: &mut PlayerMovement, input_state: &InputS
         right_input * speed * player_movement.right();
 
     // Update position
-    player_movement.position += player_movement.velocity * time_delta;
+    player_transform.pos += player_movement.velocity * time_delta;
 }
