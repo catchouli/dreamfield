@@ -12,7 +12,8 @@ use bevy_ecs::prelude::*;
 /// The window settings resource
 pub struct WindowSettings {
     pub window_size: (i32, i32),
-    pub wireframe_enabled: bool
+    pub wireframe_enabled: bool,
+    pub collider_debug: bool,
 }
 
 impl Default for WindowSettings {
@@ -21,7 +22,8 @@ impl Default for WindowSettings {
             // A meaningless default, it gets set by the game host after creating the window. I put
             // this pointless default here so that if it ever goes wrong, it's hopefully noticeable.
             window_size: (500, 500),
-            wireframe_enabled: false
+            wireframe_enabled: false,
+            collider_debug: false,
         }
     }
 }
@@ -146,6 +148,9 @@ impl GameHost {
                     window.set_mouse_captured(false);
                     input_state.cursor_captured = false;
                 }
+            }
+            glfw::WindowEvent::Key(Key::F1, _, Action::Press, _) => {
+                renderer_settings.collider_debug = !renderer_settings.collider_debug;
             }
             glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
                 renderer_settings.wireframe_enabled = !renderer_settings.wireframe_enabled;

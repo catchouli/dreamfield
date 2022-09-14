@@ -52,24 +52,6 @@ impl Sphere {
     }
 }
 
-/// A capsule primitive defined by the extents of the line segment and the radius of the sphere at
-/// each extent
-pub struct Capsule {
-    pub a: Vector3<f32>,
-    pub b: Vector3<f32>,
-    pub radius: f32,
-}
-
-impl Capsule {
-    pub fn new(a: Vector3<f32>, b: Vector3<f32>, radius: f32) -> Self {
-        Self {
-            a,
-            b,
-            radius,
-        }
-    }
-}
-
 /// A triangle primitive
 #[derive(Debug)]
 pub struct Triangle {
@@ -271,36 +253,11 @@ pub fn toi_unit_sphere_triangle(center: Vector3<f32>, velocity: Vector3<f32>, tr
     })
 }
 
-/// TOI between a unit capsule and a triangle. As a shortcut, we just test the two spheres, which
-/// isn't ideal.
-pub fn toi_unit_capsule_triangle(center_a: Vector3<f32>, center_b: Vector3<f32>, velocity: Vector3<f32>,
-    triangle: &Triangle) -> Option<(f32, Vector3<f32>, Vector3<f32>)>
-{
-    /// The number of points to sweep down... 2 means just the cap spheres, any higher sapces extra
-    /// points between the two caps
-    const POINTS: i32 = 50;
-
-    // Test the spheres at the caps
-    let mut nearest_hit = None;
-
-    let diff = center_b - center_a;
-    for i in 0..POINTS {
-        let dist = i as f32 / (POINTS - 1) as f32;
-        let point = center_a + diff * dist;
-
-        if let Some(hit@(toi, _, _)) = toi_unit_sphere_triangle(point, velocity, triangle) {
-            if let Some((old_toi, _, _)) = nearest_hit {
-                if toi < old_toi {
-                    nearest_hit = Some(hit);
-                }
-            }
-            else {
-                nearest_hit = Some(hit);
-            }
-        }
-    }
-
-    nearest_hit
+pub fn toi_unit_sphere_point(center: Vector3<f32>, velocity: Vector3<f32>, point: Vector3<f32>) -> Option<f32> {
+    let a = velocity.magnitude2();
+    let b = 2.0 * velocity.dot(center - point);
+    let c = (point - center).magnitude2() - 1.0;
+    lowest_root(a, b, c, 1000.0)
 }
 
 // Solve a quadratic equation and find the lowest non-zero root

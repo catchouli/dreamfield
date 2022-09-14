@@ -1,6 +1,18 @@
 use bevy_ecs::prelude::Component;
 use cgmath::{Vector3, Quaternion, vec3};
 
+/// A component for representing an entities name
+#[derive(Component)]
+pub struct EntityName {
+    pub name: String
+}
+
+impl EntityName {
+    pub fn new(name: &str) -> Self {
+        Self { name: name.to_string() }
+    }
+}
+
 /// A component for representing object transforms
 #[derive(Component)]
 pub struct Transform {
