@@ -1,7 +1,7 @@
 use bevy_ecs::{prelude::EventReader, system::Commands};
-use cgmath::{Matrix4, Quaternion, Matrix3, Vector3};
+use cgmath::{Matrix4, Quaternion, Matrix3, Vector3, vec3};
 use dreamfield_renderer::components::{Visual, Animation};
-use dreamfield_system::{systems::entity_spawner::EntitySpawnEvent, components::Transform};
+use dreamfield_system::{systems::entity_spawner::EntitySpawnEvent, components::{Transform, EntityName}, intersection::{Collider, Shape}};
 
 /// The entity spawner
 pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpawnEvent>) {
@@ -11,10 +11,14 @@ pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpaw
             "Elf" => {
                 commands.spawn()
                     .insert(Transform::new(pos, rot))
+                    .insert(EntityName::new("Elf"))
+                    .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 1.0, 0.0), vec3(0.25, 1.0, 0.25))))
                     .insert(Visual::new_with_anim("elf", false, Animation::Loop("Idle".to_string())));
             },
             "Minecart" => {
                 commands.spawn()
+                    .insert(EntityName::new("Minecart"))
+                    .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 1.0, 0.0), vec3(0.75, 1.0, 0.75))))
                     .insert(Transform::new(pos, rot))
                     .insert(Visual::new("minecart", false));
             },

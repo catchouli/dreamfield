@@ -6,8 +6,6 @@ use cgmath::{Vector3, vec3, ElementWise, InnerSpace};
 
 use crate::intersection::{self, Triangle};
 
-use super::EntityLocation;
-
 /// A struct for storing spherecast hits
 pub struct SpherecastResult {
     /// The time of impact from 0..1 along the velocity
@@ -136,7 +134,8 @@ impl WorldCollision {
                             
                         }
 
-                        let result = Self::sweep_unit_sphere_entity(start, velocity, cbm, entity_location);
+                        let result = Self::sweep_unit_sphere_entity(start, velocity, cbm, &entity_location.pos,
+                            &entity_location.shape);
                         if let Some((toi, _, _)) = result {
                             if let Some((old_toi, _, _)) = closest_intersection {
                                 if toi < old_toi {
@@ -145,6 +144,27 @@ impl WorldCollision {
                             }
                             else {
                                 closest_intersection = result;
+                            }
+                        }
+                    }
+
+                    // Intersect instances in the chunk
+                    if let Some(chunk) = world.get_or_load_chunk((x, z)) {
+                        let shape = Shape::BoundingSpheroid(vec3(0.0, 1.0, 0.0), vec3(1.0, 2.0, 1.0));
+                        for instance in chunk.instances().iter() {
+                            for point in instance.points().iter() {
+                                let result = Self::sweep_unit_sphere_entity(start, velocity, cbm, point.as_vec(),
+                                    &shape);
+                                if let Some((toi, _, _)) = result {
+                                    if let Some((old_toi, _, _)) = closest_intersection {
+                                        if toi < old_toi {
+                                            closest_intersection = result;
+                                        }
+                                    }
+                                    else {
+                                        closest_intersection = result;
+                                    }
+                                }
                             }
                         }
                     }
@@ -157,13 +177,13 @@ impl WorldCollision {
     }
 
     /// Test whether a unit sphere intersects an entity
-    fn sweep_unit_sphere_entity(start: Vector3<f32>, velocity: Vector3<f32>, cbm: Vector3<f32>, entity_location: &EntityLocation)
+    fn sweep_unit_sphere_entity(start: Vector3<f32>, velocity: Vector3<f32>, cbm: Vector3<f32>, pos: &Vector3<f32>, shape: &Shape)
         -> Option<(f32, Vector3<f32>, Vector3<f32>)>
     {
         // TODO: take rotation into account
-        let (other_pos, other_radius) = match entity_location.shape {
-            Shape::BoundingSpheroid(offset, center) => (entity_location.pos + offset, center),
-            _ => panic!("sweep_unit_sphere_entity: Shape not implemented {:?}", entity_location.shape)
+        let (other_pos, other_radius) = match shape {
+            Shape::BoundingSpheroid(offset, center) => (pos + offset, center),
+            _ => panic!("sweep_unit_sphere_entity: Shape not implemented {:?}", shape)
         };
 
         // Convert coordinate spaces to the space where the spheroid with combined radius = (radius1 + radius2)

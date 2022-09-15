@@ -3,9 +3,10 @@ mod renderer_resources;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bevy_ecs::schedule::SystemSet;
-use bevy_ecs::system::{Local, Res, Query, ResMut};
+use bevy_ecs::query::Without;
+use bevy_ecs::system::{Local, Res, Query, ResMut, ParamSet};
 use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4, vec3};
+use dreamfield_system::intersection::{Collider, Shape};
 use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
@@ -32,19 +33,14 @@ pub const FOG_END: f32 = FAR_CLIP - 5.0;
 pub const FOV_RADIANS: f32 = FOV * std::f32::consts::PI / 180.0;
 pub const HALF_FOV_RADIANS: f32 = FOV_RADIANS / 2.0;
 
-/// The render systems
-pub fn systems() -> SystemSet {
-    SystemSet::new()
-        .with_system(update_diagnostics)
-        .with_system(renderer_system)
-}
-
 /// The renderer system
-fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
+pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
     fonts: Res<FontManager>, mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
-    mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>,
-    mut visuals_query: Query<(&Transform, &mut Visual)>, text_query: Query<&TextBox>)
+    mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>, text_query: Query<&TextBox>,
+    mut object_paramset: ParamSet<(
+        Query<(&Transform, &mut Visual)>,
+        Query<(&Transform, &Collider), Without<PlayerCamera>>)>)
 {
     let local = &mut *local;
 
@@ -109,7 +105,17 @@ fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<Win
     draw_world(local, &mut world, &models, &player_camera);
 
     // Draw visuals
-    draw_visuals(local, &sim_time, &models, &mut visuals_query);
+    {
+        let mut visuals_query = object_paramset.p0();
+        draw_visuals(local, &sim_time, &models, &mut visuals_query);
+    }
+
+    // Draw colliders if enabled
+    if window_settings.collider_debug
+    {
+        let colliders_query = object_paramset.p1();
+        draw_colliders(local, &models, &colliders_query);
+    }
 
     // Render post-scene effects
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
@@ -360,6 +366,41 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
     }
 }
 
+/// Draw the colliders for collider debug mode
+fn draw_colliders(local: &mut RendererResources, models: &Res<ModelManager>,
+    colliders_query: &Query<(&Transform, &Collider), Without<PlayerCamera>>)
+{
+    unsafe { gl::Enable(gl::DEPTH_TEST); }
+    local.ps1_no_tess_shader.use_program();
+
+    local.ubo_material.set_has_base_color_texture(&false);
+    local.ubo_material.set_base_color(&vec4(1.0, 1.0, 1.0, 1.0));
+    local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
+
+    for (transform, collider) in colliders_query.iter() {
+        // Get sphere model, loading it if it isn't already loaded
+        let sphere_model = local.models
+            .entry("white_sphere".to_string())
+            .or_insert_with(|| {
+                let data = models.get("white_sphere").unwrap();
+                Arc::new(GltfModel::from_buf(data).unwrap())
+            });
+
+        match collider.shape {
+            Shape::BoundingSpheroid(offset, radius) => {
+                let pos = transform.pos + offset;
+                let transform = {
+                    Matrix4::from_translation(pos) *
+                    Matrix4::from(transform.rot) *
+                    Matrix4::from_nonuniform_scale(2.0 * radius.x, 2.0 * radius.y, 2.0 * radius.z)
+                };
+                sphere_model.render(&transform, &mut local.ubo_global, &mut local.ubo_joints, false);
+            }
+            _ => panic!("draw_colliders: unimplemented collider type for {:?}", collider.shape)
+        }
+    }
+}
+
 /// Render a screen effect
 /// TODO: these aren't that useful for anything but the sky if you can't read the framebuffer :)
 fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_manager: &mut ResMut<TextureManager>,
@@ -580,7 +621,7 @@ fn render_text(local: &mut RendererResources, camera: &PlayerCamera, fonts: &Fon
 }
 
 /// The diagnostics system
-fn update_diagnostics(diagnostics: Res<Diagnostics>, mut query: Query<(&DiagnosticsTextBox, &mut TextBox)>) {
+pub fn update_diagnostics(diagnostics: Res<Diagnostics>, mut query: Query<(&DiagnosticsTextBox, &mut TextBox)>) {
     for (_, mut text_box) in query.iter_mut() {
         text_box.text = format!(
             "Update time: {}\nRender time: {}\nPlayer pos: {:.1}, {:.1}, {:.1}\nPlayer rot: {:.1}, {:.1}",

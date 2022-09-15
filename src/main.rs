@@ -5,13 +5,20 @@ use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareM
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
-use dreamfield_renderer::renderer;
 use dreamfield_renderer::components::{PlayerCamera, Visual, ScreenEffect, RunTime, Animation, TextBox, DiagnosticsTextBox};
 use dreamfield_system::GameHost;
-use dreamfield_system::components::Transform;
+use dreamfield_system::components::{Transform, EntityName};
 
+use dreamfield_system::intersection::{Collider, Shape};
 use dreamfield_system::systems::entity_spawner::EntitySpawnRadius;
-use sim::{PlayerMovement, PlayerMovementMode, Ball, CapsuleA, CapsuleB, CapsuleCollider};
+use sim::{PlayerMovement, PlayerMovementMode, Ball};
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum AppState {
+    MainMenu,
+    InGame,
+    Paused
+}
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
@@ -47,8 +54,9 @@ fn init_entities(world: &mut World) {
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
     // Create player
-    let (initial_pos, initial_rot) = _LOOKING_AT_CORRIDOR;
+    let (initial_pos, initial_rot) = _VILLAGE_ENTRANCE;
     world.spawn()
+        .insert(EntityName::new("Player"))
         // Entrance to village
         .insert(Transform::new(initial_pos, Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot))
@@ -62,19 +70,14 @@ fn init_entities(world: &mut World) {
         .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
         .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
-    // Test capsule A
-    world.spawn()
-        .insert(CapsuleA)
-        .insert(CapsuleCollider::new(vec3(0.0, 0.5, 0.0), vec3(0.0, 1.5, 0.0), 0.5))
-        .insert(Transform::new(vec3(-126.0, 5.3, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new("capsule", false));
+    //// Elf egg
+    //world.spawn()
+    //    .insert(EntityName::new("Elf egg 1"))
+    //    .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 0.8, 0.0), vec3(0.25, 0.8, 0.25))))
+    //    .insert(Transform::new(vec3(-127.8, 6.0, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Visual::new("elf_egg", false));
 
-    // Test capsule B
-    world.spawn()
-        .insert(CapsuleB)
-        .insert(Transform::new(vec3(-124.8, 5.3, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
-        .insert(Visual::new("capsule", false));
-
+    //// Samy
     //world.spawn()
     //    .insert(Transform::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
@@ -143,7 +146,7 @@ fn main() {
     let mut render_schedule = Schedule::default();
 
     render_schedule.add_stage("render", SystemStage::single_threaded()
-        .with_system_set(renderer::systems())
+        .with_system_set(dreamfield_renderer::systems())
     );
 
     // Initialise entities
