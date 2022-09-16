@@ -1,6 +1,7 @@
 pub mod player_movement;
 pub mod ball;
 mod entity_spawner;
+mod minecart;
 
 use bevy_ecs::schedule::SystemSet;
 
@@ -15,6 +16,7 @@ pub fn systems() -> SystemSet {
         .with_system(player_movement::player_update)
         .with_system(ball::ball_update)
         .with_system(entity_spawner::entity_spawner)
+        .with_system(minecart::update_minecart)
 }
 
 // Test code for testing collisions, I'll leave it here for now until I'm sure I'm done...

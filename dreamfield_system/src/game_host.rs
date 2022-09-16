@@ -189,6 +189,7 @@ impl GameHost {
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
             Key::LeftShift => Some(InputName::Run),
+            Key::E => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
             Key::U => Some(InputName::Debug),
             _ => None
@@ -211,6 +212,7 @@ impl GameHost {
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
             Key::LeftShift => Some(InputName::Run),
+            Key::F => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
             _ => None
         }

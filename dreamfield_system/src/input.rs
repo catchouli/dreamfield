@@ -19,6 +19,7 @@ pub enum InputName {
     CamLookRight,
     Run,
     Jump,
+    Use,
     Debug,
     Last
 }

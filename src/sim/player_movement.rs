@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::Entity;
 use bevy_ecs::system::{Res, ResMut, Query};
-use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise};
+use cgmath::{Vector3, vec3, Vector2, Zero, Quaternion, Rad, Rotation3, Matrix4, SquareMatrix, InnerSpace, vec2, ElementWise, Matrix3};
 
 use dreamfield_renderer::components::PlayerCamera;
 use dreamfield_system::components::Transform;
@@ -79,6 +79,7 @@ const PITCH_MAX: f32 = PI * 0.4;
 /// The PlayerMovement component
 #[derive(Component)]
 pub struct PlayerMovement {
+    pub enabled: bool,
     pub movement_mode: PlayerMovementMode,
     pub velocity: Vector3<f32>,
     pub pitch_yaw: Vector2<f32>,
@@ -97,6 +98,7 @@ pub enum PlayerMovementMode {
 impl PlayerMovement {
     pub fn new_pos_look(movement_mode: PlayerMovementMode, pitch_yaw: Vector2<f32>) -> Self {
         PlayerMovement {
+            enabled: true,
             movement_mode,
             pitch_yaw,
             velocity: Vector3::zero(),
@@ -160,16 +162,20 @@ fn player_move(collision: &mut WorldCollision, world: &mut WorldChunkManager, pl
     player_movement: &mut PlayerMovement, collider: &Collider, input_state: &InputState, ignore_entity: Entity,
     time_delta: f32)
 {
+    // Update view direction
+    update_view_angles(player_movement, input_state, time_delta);
+    player_transform.rot = Matrix3::from(player_movement.orientation());
+
+    if !player_movement.enabled {
+        return;
+    }
+
     // Get bounding spheroid
     let (collider_offset, collider_radius) = match collider.shape {
         Shape::BoundingSpheroid(offset, radius) => (offset, radius),
         _ => panic!("Player collider must be a BoundingSpheroid")
     };
     let collider_cbm = vec3(1.0 / collider_radius.x, 1.0 / collider_radius.y, 1.0 / collider_radius.z);
-
-    // Update view direction
-    update_view_angles(player_movement, input_state, time_delta);
-    player_transform.rot = player_movement.orientation();
 
     // Noclip movement
     if player_movement.movement_mode == PlayerMovementMode::Noclip {

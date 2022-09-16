@@ -1,7 +1,7 @@
 pub mod sim;
 pub mod resources;
 
-use cgmath::{vec3, Quaternion, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, vec4, Vector2};
+use cgmath::{vec3, vec2, Vector3, perspective, Deg, Matrix4, SquareMatrix, vec4, Vector2, Matrix3};
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::World;
 
@@ -9,16 +9,15 @@ use dreamfield_renderer::components::{PlayerCamera, Visual, ScreenEffect, RunTim
 use dreamfield_system::GameHost;
 use dreamfield_system::components::{Transform, EntityName};
 
-use dreamfield_system::intersection::{Collider, Shape};
 use dreamfield_system::systems::entity_spawner::EntitySpawnRadius;
 use sim::{PlayerMovement, PlayerMovementMode, Ball};
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-enum AppState {
-    MainMenu,
-    InGame,
-    Paused
-}
+//#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+//enum AppState {
+//    MainMenu,
+//    InGame,
+//    Paused
+//}
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;
@@ -27,7 +26,7 @@ const FIXED_UPDATE: i32 = 15;
 const FIXED_UPDATE_TIME: f64 = 1.0 / (FIXED_UPDATE as f64);
 
 /// The player position entering the village
-const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, 0.099));
+const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, -0.5));
 
 /// Entrance to cathedral
 const _CATHEDRAL_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-99.988, 6.567, 75.533), vec2(-0.0367, 0.8334));
@@ -58,7 +57,7 @@ fn init_entities(world: &mut World) {
     world.spawn()
         .insert(EntityName::new("Player"))
         // Entrance to village
-        .insert(Transform::new(initial_pos, Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Transform::new(initial_pos, Matrix3::identity()))
         .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot))
         .insert(PlayerMovement::collider())
         .insert(create_player_camera())
@@ -67,25 +66,25 @@ fn init_entities(world: &mut World) {
     // Create fire orb
     world.spawn()
         .insert(Ball::default())
-        .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+        .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Matrix3::identity()))
         .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
 
     //// Elf egg
     //world.spawn()
     //    .insert(EntityName::new("Elf egg 1"))
     //    .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 0.8, 0.0), vec3(0.25, 0.8, 0.25))))
-    //    .insert(Transform::new(vec3(-127.8, 6.0, 110.6), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(-127.8, 6.0, 110.6), Matrix3::identity()))
     //    .insert(Visual::new("elf_egg", false));
 
     //// Samy
     //world.spawn()
-    //    .insert(Transform::new(vec3(8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(8.0, 2.5, -2.85), Matrix3::identity()))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
     //world.spawn()
-    //    .insert(Transform::new(vec3(0.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(0.0, 2.5, -2.85), Matrix3::identity()))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
     //world.spawn()
-    //    .insert(Transform::new(vec3(-8.0, 2.5, -2.85), Quaternion::new(1.0, 0.0, 0.0, 0.0)))
+    //    .insert(Transform::new(vec3(-8.0, 2.5, -2.85), Matrix3::identity()))
     //    .insert(Visual::new_with_anim("samy", false, Animation::Loop("Samy".to_string())));
 }
 

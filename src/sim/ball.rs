@@ -1,7 +1,7 @@
 use bevy_ecs::component::Component;
 use bevy_ecs::system::{Res, Query};
 
-use cgmath::{Quaternion, Rotation3, Rad};
+use cgmath::{Rad, Matrix3};
 use dreamfield_system::components::Transform;
 use dreamfield_system::resources::SimTime;
 
@@ -22,6 +22,6 @@ pub fn ball_update(sim_time: Res<SimTime>, mut query: Query<(&mut Ball, &mut Tra
     for (_, mut pos) in query.iter_mut() {
         let ball_height = sim_time.sim_time.sin() as f32 + 2.0;
         pos.pos.y = ball_height;
-        pos.rot = Quaternion::from_angle_y(Rad(sim_time.sim_time as f32));
+        pos.rot = Matrix3::from_angle_y(Rad(sim_time.sim_time as f32));
     }
 }

@@ -52,10 +52,10 @@ impl Default for WorldCollision {
 impl WorldCollision {
     /// Sweep a sphere out from start to end, returning an intersection result along with a time of impact
     pub fn sweep_sphere(&mut self, world: &mut WorldChunkManager, start: Vector3<f32>, velocity: Vector3<f32>,
-        radius: f32, ignore_entity: Option<Entity>) -> Option<SpherecastResult>
+        radius: Vector3<f32>, ignore_entity: Option<Entity>) -> Option<SpherecastResult>
     {
         // Apply change of basis from R3 to ellipsoid space
-        let cbm = vec3(1.0 / radius, 1.0 / radius, 1.0 / radius);
+        let cbm = vec3(1.0 / radius.x, 1.0 / radius.y, 1.0 / radius.z);
 
         let start = start.mul_element_wise(cbm);
         let velocity = velocity.mul_element_wise(cbm);

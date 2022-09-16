@@ -216,14 +216,22 @@ pub struct WorldChunkEntity {
     object_id: String,
     /// The world transform of the entity
     world_transform: WrappedMatrix4,
+    /// The mesh positions for the entity from the gltf node, might be useful for some stuff
+    mesh: Option<Vec<WrappedVector3>>,
+    /// The gltf extras for this entity
+    extras: Option<String>,
 }
 
 impl WorldChunkEntity {
-    pub fn new(entity_id: EntityId, object_id: String, world_transform: Matrix4<f32>) -> Self {
+    pub fn new(entity_id: EntityId, object_id: String, world_transform: Matrix4<f32>,
+        mesh: Option<Vec<WrappedVector3>>, extras: Option<String>) -> Self
+    {
         Self {
             entity_id,
             object_id,
             world_transform: WrappedMatrix4(world_transform),
+            mesh,
+            extras,
         }
     }
 
@@ -237,5 +245,13 @@ impl WorldChunkEntity {
 
     pub fn world_transform(&self) -> &Matrix4<f32> {
         self.world_transform.as_mat()
+    }
+
+    pub fn mesh(&self) -> Option<&Vec<WrappedVector3>> {
+        self.mesh.as_ref()
+    }
+
+    pub fn extras(&self) -> Option<&String> {
+        self.extras.as_ref()
     }
 }

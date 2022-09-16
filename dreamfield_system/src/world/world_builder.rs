@@ -10,6 +10,7 @@ use gltf::image::Format;
 use gltf::{import_slice, buffer, image, Semantic, Node};
 use cgmath::{Matrix4, SquareMatrix, Vector3, vec4, vec3, vec2, InnerSpace};
 use byteorder::{ReadBytesExt, LittleEndian};
+use serde_json::value::RawValue;
 use speedy::Writable;
 use crate::build_log;
 use serde::{Deserialize, Serialize};
@@ -105,7 +106,7 @@ impl WorldBuilder {
             for scene in doc.scenes() {
                 for n in scene.nodes() {
                     self.walk_nodes(&Matrix4::identity(), &n, &buffer_data, &image_data, &mut world_mesh_count,
-                        &mut model_textures, &None);
+                        &mut model_textures, None);
                 }
             }
         }
@@ -128,24 +129,25 @@ impl WorldBuilder {
     /// Walk model hierarchy, adding geometry to chunks
     fn walk_nodes(&mut self, parent_world_transform: &Matrix4<f32>, node: &Node, buffers: &[buffer::Data],
         image_data: &[image::Data], world_mesh_count: &mut i32, model_textures: &mut HashMap<usize, i32>,
-        parent_node_extras: &Option<WorldNodeExtras>)
+        parent_node_extras: Option<&Box<RawValue>>)
     {
         let local_transform = cgmath::Matrix4::from(node.transform().matrix());
         let world_transform = parent_world_transform * local_transform;
 
         // Pass down extras until they're replaced so they inherit.. This allows us to read a
         // blender node's custom properties when we're on the mesh node.
-        let node_extras = node.extras().as_ref().map(|extras| {
+        let node_extras = node.extras().as_ref().or(parent_node_extras);
+        let node_extras_parsed: Option<WorldNodeExtras> = node_extras.as_ref().map(|extras| {
             serde_json::from_str(extras.get()).unwrap()
-        }).or(parent_node_extras.as_ref().map(|extras| extras.clone()));
+        });
 
         if let Some(mesh) = node.mesh() {
             for prim in mesh.primitives() {
                 // Either load the primitive as point instances, or as a regular mesh
-                let node_type = node_extras.as_ref().map(|e| e.node_type.clone()).flatten();
+                let node_type = node_extras_parsed.as_ref().map(|e| e.node_type.clone()).flatten();
                 if let Some(node_type) = node_type.as_ref() {
                     if node_type == "instances" {
-                        let instance_mesh = node_extras.as_ref()
+                        let instance_mesh = node_extras_parsed.as_ref()
                             .map(|e| e.instance_mesh.clone())
                             .flatten()
                             .expect(&format!("Node {} with node_type = instances must have instance_mesh",
@@ -154,13 +156,13 @@ impl WorldBuilder {
                         self.add_instances(&prim, &world_transform, instance_mesh, &buffers);
                     }
                     else if node_type == "entity" {
-                        let object_id = node_extras.as_ref()
+                        let object_id = node_extras_parsed.as_ref()
                             .map(|e| e.object_id.clone())
                             .flatten()
                             .expect(&format!("Node {} with node_type = entity must have object_id",
                                 node.name().unwrap_or("no-name")));
 
-                        self.add_entity(&prim, &world_transform, object_id, &buffers);
+                        self.add_entity(&prim, &world_transform, object_id, &buffers, node_extras);
                     }
                 }
                 else {
@@ -172,7 +174,7 @@ impl WorldBuilder {
 
         for child in node.children() {
             self.walk_nodes(&world_transform, &child, &buffers, &image_data, world_mesh_count, model_textures,
-                &node_extras);
+                node_extras);
         }
     }
 
@@ -368,8 +370,8 @@ impl WorldBuilder {
     }
 
     /// Add an entity
-    fn add_entity(&mut self, _prim: &gltf::Primitive, world_transform: &Matrix4<f32>, object_id: String,
-        _buffers: &[buffer::Data])
+    fn add_entity(&mut self, prim: &gltf::Primitive, world_transform: &Matrix4<f32>, object_id: String,
+        buffers: &[buffer::Data], raw_extras: Option<&Box<RawValue>>)
     {
         let entity_id = self.entity_count;
         self.entity_count += 1;
@@ -381,7 +383,42 @@ impl WorldBuilder {
             self.get_chunk(chunk_index)
         };
 
-        chunk.add_entity(WorldChunkEntity::new(entity_id, object_id, *world_transform));
+        // Might as well add some of the mesh data (the positions at least)... might be useful! I'm
+        // not including any indexes for now since isolated points and edges are probably more
+        // useful anyway.
+        let points = prim.attributes()
+            .find(|attrib| attrib.0 == Semantic::Positions)
+            .map(|(_, accessor)| {
+                let buffer_view  = accessor.view().unwrap();
+                let buffer_index = buffer_view.buffer().index();
+
+                let buffer = &buffers[buffer_index];
+
+                let attrib_stride = buffer_view.stride().unwrap_or(0) as i32;
+                if attrib_stride != 0 {
+                    panic!("unhandled");
+                }
+
+                // Assuming that it's always gl::FLOAT but I might be wrong
+                let data_size_type = std::mem::size_of::<f32>();
+
+                let offset = buffer_view.offset();
+                let length_bytes = buffer_view.length();
+                let length_elements = length_bytes / data_size_type;
+
+                let mut vertices = vec![0.0; length_elements];
+                let mut slice = &buffer[offset..offset+length_bytes];
+                slice.read_f32_into::<LittleEndian>(&mut vertices).expect("Failed!");
+
+                vertices
+            })
+            .map(|points| {
+                points.chunks_exact(3)
+                .map(|v| WrappedVector3((world_transform * vec4(v[0], v[1], v[2], 1.0)).truncate()))
+                .collect()
+            });
+
+        chunk.add_entity(WorldChunkEntity::new(entity_id, object_id, *world_transform, points, raw_extras.map(|e| e.get().to_string())));
     }
 
     /// Build the vertices for a single mesh from a gltf::Primitive
