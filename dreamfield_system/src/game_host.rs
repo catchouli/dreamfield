@@ -87,6 +87,7 @@ impl GameHost {
                 // Update sim time
                 world.resource_scope(|_, mut sim_time: Mut<SimTime>| {
                     sim_time.sim_time = fixed_timestep.sim_time();
+                    sim_time.sim_time_delta = self.update_timestep;
                 });
 
                 // Simulate game state
