@@ -110,3 +110,9 @@ impl InputState {
         (forward_cam_movement, right_cam_movement)
     }
 }
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self::new()
+    }
+}

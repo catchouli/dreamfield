@@ -19,5 +19,7 @@ const WORLD_MODELS: &'static [WorldModel] = &[
 /// TODO: output files to update on when changed
 fn main() {
     build_log!("Building world models");
+    // A hack because otherwise it tries to delete it later and fails
+    std::fs::create_dir_all(CHUNK_OUTPUT_DIR).unwrap();
     WorldBuilder::new(CHUNK_OUTPUT_DIR, WORLD_MODELS).build_world_models();
 }

@@ -130,8 +130,14 @@ fn main() {
     // Create bevy world
     let mut world = World::default();
 
-    // Initialise resources
-    resources::add_resources(&mut world);
+    // Initialise system and renderer
+    dreamfield_system::init(&mut world);
+    dreamfield_renderer::init(&mut world,
+        resources::create_model_manager(),
+        resources::create_shader_manager(),
+        resources::create_texture_manager(),
+        resources::create_font_manager(),
+        resources::create_world_chunk_manager());
 
     // Create update schedule
     let mut update_schedule = Schedule::default();

@@ -4,7 +4,20 @@ pub mod resources;
 pub mod renderer;
 pub mod components;
 
-use bevy_ecs::schedule::SystemSet;
+use bevy_ecs::{schedule::SystemSet, world::World};
+use dreamfield_system::world::WorldChunkManager;
+use resources::{ModelManager, ShaderManager, TextureManager, FontManager};
+
+/// Initialise resources etc
+pub fn init(world: &mut World, models: ModelManager, shaders: ShaderManager, textures: TextureManager,
+    fonts: FontManager, chunks: WorldChunkManager)
+{
+    world.insert_resource(models);
+    world.insert_resource(shaders);
+    world.insert_resource(textures);
+    world.insert_resource(fonts);
+    world.insert_resource(chunks);
+}
 
 /// The render systems
 pub fn systems() -> SystemSet {
