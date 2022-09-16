@@ -20,19 +20,6 @@ use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::{SimTime, Diagnostics};
 use dreamfield_system::components::Transform;
 
-// oops, these should be on the PlayerCamera
-pub const FOV: f32 = 60.0;
-
-pub const NEAR_CLIP: f32 = 0.1;
-pub const FAR_CLIP: f32 = 35.0;
-
-// Calculated values
-pub const FOG_START: f32 = FAR_CLIP - 10.0;
-pub const FOG_END: f32 = FAR_CLIP - 5.0;
-
-pub const FOV_RADIANS: f32 = FOV * std::f32::consts::PI / 180.0;
-pub const HALF_FOV_RADIANS: f32 = FOV_RADIANS / 2.0;
-
 /// The renderer system
 pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
@@ -162,13 +149,14 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     //
     // To figure out the corner points, we then first figure out what far point is, and then rotate
     // the forward vector by 90 degrees to get right_xz:
-    let far_point = pos_xz + forward_xz * FAR_CLIP;
+    let far_clip = camera.fog_range.y;
+    let far_point = pos_xz + forward_xz * far_clip;
     let right_xz = vec2(-forward_xz.y, forward_xz.x);
 
     // We then calculate the "half width" of the far clip plane using trigonometry, which is the
     // distance between far_point and the corner point.
     // This can't be a const right now but it could be if f32::tan was...
-    let far_clip_half_width: f32 = FAR_CLIP * f32::tan(HALF_FOV_RADIANS);
+    let far_clip_half_width: f32 = far_clip;
 
     // And then we multiply this by the right vector and add it to get the corner point, and then
     // do the opposite to get the other corner point.
