@@ -1,5 +1,6 @@
+use dreamfield_renderer::components::{ScreenEffect, RunTime};
 use bevy_ecs::prelude::*;
-use cgmath::{vec2, Vector2, perspective, Deg, Matrix4, vec3, SquareMatrix, Quaternion, Rad, vec4, Rotation3};
+use cgmath::{vec2, Vector2, perspective, Deg, Matrix4, vec3, SquareMatrix, Quaternion, Rad, Rotation3};
 use dreamfield_renderer::components::{PlayerCamera, TextBox};
 use dreamfield_system::resources::{InputState, InputName};
 use crate::app_state::AppState;
@@ -45,16 +46,21 @@ fn enter_main_menu(mut commands: Commands) {
             fog_color: vec3(0.0, 0.0, 0.0),
             fog_range: vec2(1000.0, 1000.0),
             render_world: true,
+            simulate_composite: false,
         });
+
+    // Create sky pre-scene effect
+    commands.spawn()
+        .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
     // Create text
     commands.spawn()
         .insert(MainMenuEntity)
-        .insert(TextBox::new("text", "medieval", "Vx8", "Dreamfield", None, Some(vec4(100.0, 10.0, 200.0, 200.0))));
+        .insert(TextBox::new("text", "medieval_4x", "Vx32", "Dreamfield", None, vec2(250.0, 240.0), None));
 
     commands.spawn()
         .insert(MainMenuEntity)
-        .insert(TextBox::new("text", "medieval", "Vx8", "Press jump to start", None, Some(vec4(10.0, 50.0, 100.0, 100.0))));
+        .insert(TextBox::new("text", "medieval_2x", "Vx16", "Press jump to start", None, vec2(250.0, 280.0), None));
 }
 
 /// Remove main menu entities when we leave the main menu

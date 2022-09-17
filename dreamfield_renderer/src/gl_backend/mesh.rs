@@ -54,7 +54,7 @@ impl Mesh {
             gl::BufferData(gl::ARRAY_BUFFER,
                            (vertex_buffer.len() * std::mem::size_of::<f32>()) as GLsizeiptr,
                            &vertex_buffer[0] as *const f32 as *const GLvoid,
-                           gl::DYNAMIC_DRAW);
+                           gl::STATIC_DRAW);
         }
     }
 

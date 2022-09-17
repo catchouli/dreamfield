@@ -54,6 +54,7 @@ fn enter_splash_screen(mut commands: Commands) {
             fog_color: vec3(0.0, 0.0, 0.0),
             fog_range: vec2(1000.0, 1000.0),
             render_world: false,
+            simulate_composite: false,
         });
 
     // Samy

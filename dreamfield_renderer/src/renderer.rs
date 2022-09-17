@@ -140,7 +140,7 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
     unsafe { gl::Disable(gl::SCISSOR_TEST); }
 
     // Run final composite
-    final_composite(local, &window_settings);
+    final_composite(local, &window_settings, player_camera);
 }
 
 /// Draw the world
@@ -438,7 +438,7 @@ fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_m
 }
 
 /// Run final compositing and blit operations, including ntsc composite emulation
-fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettings>) {
+fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettings>, player_camera: &PlayerCamera) {
     // Disable depth test for blitting operations
     unsafe {
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
@@ -448,30 +448,32 @@ fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettin
     let yiq_framebuffer = local.yiq_framebuffer.as_ref().unwrap();
     let framebuffer = local.framebuffer.as_ref().unwrap();
 
-    // Composite simulation: convert rgb to yiq color space
-    // No SRGB conversion, since we're outputting colors in the YIQ color space. Additionally
-    // we're writing to an f32 framebuffer already anyway to avoid precision issues.
-    unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB) };
-    yiq_framebuffer.bind_draw();
-    framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
-    local.composite_yiq_shader.use_program();
-    local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+    if player_camera.simulate_composite {
+        // Composite simulation: convert rgb to yiq color space
+        // No SRGB conversion, since we're outputting colors in the YIQ color space. Additionally
+        // we're writing to an f32 framebuffer already anyway to avoid precision issues.
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB) };
+        yiq_framebuffer.bind_draw();
+        framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+        local.composite_yiq_shader.use_program();
+        local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
 
-    // Composite simulation: resolve back to regular framebuffer
-    // This time we're outputting back to our srgb framebuffer so we enable sRGB again.
-    // Annoyingly the YIQ conversion already outputs sRGB colors, so we have to convert them
-    // back to linear in the shader, just for them to be converted back into sRGB. Oh well.
-    unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
-    framebuffer.bind_draw();
-    yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
-    unsafe { gl::GenerateMipmap(gl::TEXTURE_2D) };
-    local.composite_resolve_shader.use_program();
-    local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
-    framebuffer.unbind();
+        // Composite simulation: resolve back to regular framebuffer
+        // This time we're outputting back to our srgb framebuffer so we enable sRGB again.
+        // Annoyingly the YIQ conversion already outputs sRGB colors, so we have to convert them
+        // back to linear in the shader, just for them to be converted back into sRGB. Oh well.
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); }
+        framebuffer.bind_draw();
+        yiq_framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
+        unsafe { gl::GenerateMipmap(gl::TEXTURE_2D) };
+        local.composite_resolve_shader.use_program();
+        local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+    }
 
     // Render framebuffer to screen
     let (window_width, window_height) = window_settings.window_size;
     unsafe { gl::Viewport(0, 0, window_width, window_height) };
+    framebuffer.unbind();
     framebuffer.bind_color_tex(bindings::TextureSlot::BaseColor);
     local.blit_shader.use_program();
     local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
@@ -523,11 +525,18 @@ fn render_text(local: &mut RendererResources, camera: &PlayerCamera, fonts: &Fon
     let char_map = fonts.get_char_map(&text_box.font_name, &text_box.font_variant).unwrap();
 
     // Calculate clipping bounds
-    let text_box_bounds = match text_box.bounds {
-        Some(bounds) => bounds,
-        None => vec4(0.0, 0.0, camera.render_res.x, camera.render_res.y)
+    let text_box_origin = text_box.position;
+    let text_box_size = match text_box.size {
+        Some(size) => size,
+        None => camera.render_res - text_box_origin,
     };
-    let text_box_origin = vec2(text_box_bounds.x, text_box_bounds.y);
+    let text_box_bounds = vec4(
+        text_box_origin.x,
+        text_box_origin.y,
+        text_box_origin.x + text_box_size.x,
+        text_box_origin.y + text_box_size.y,
+    );
+
     let text_box_width = text_box_bounds.z - text_box_bounds.x;
     let text_box_height = text_box_bounds.w - text_box_bounds.y;
 
@@ -583,7 +592,7 @@ fn render_text(local: &mut RendererResources, camera: &PlayerCamera, fonts: &Fon
         line_height = Some(dimensions.y);
 
         // If the glyph doesn't fit on this line, add a line break
-        if offset.x + dimensions.x > text_box_width {
+        if offset.x + dimensions.x > origin.x + text_box_width {
             offset.x = origin.x;
             offset.y += line_height.unwrap_or(0.0) + spacing.y;
         }

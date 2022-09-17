@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use cgmath::vec4;
+use cgmath::vec2;
 use dreamfield_renderer::components::TextBox;
 use dreamfield_system::resources::{InputState, InputName};
 use crate::app_state::AppState;
@@ -27,7 +27,7 @@ fn enter_pause_menu(mut commands: Commands) {
     // Create text
     commands.spawn()
         .insert(PauseMenuEntity)
-        .insert(TextBox::new("text", "medieval", "Vx8", "Paused", None, Some(vec4(10.0, 60.0, 200.0, 200.0))));
+        .insert(TextBox::new("text", "medieval", "Vx8", "Paused", None, vec2(10.0, 60.0), None));
 }
 
 /// Create entities when leaving the pause menu

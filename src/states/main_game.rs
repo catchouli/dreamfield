@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, vec4, Vector3, Vector2};
+use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, Vector3, Vector2};
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime};
 use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius, resources::{InputState, InputName}};
 use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball}};
@@ -36,12 +36,11 @@ fn enter_main_game(mut commands: Commands) {
     log::info!("Entering main game");
 
     // Diagnostics
-    let stats_bounds = vec4(10.0, 10.0, 310.0, 230.0);
     commands.spawn()
         .insert(DiagnosticsTextBox)
-        .insert(TextBox::new("text", "medieval", "Vx8", "", None, Some(stats_bounds)));
+        .insert(TextBox::new("text", "medieval", "Vx8", "", None, vec2(10.0, 10.0), None));
 
-    // Create sky
+    // Create sky pre-scene effect
     commands.spawn()
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
@@ -101,6 +100,7 @@ fn create_player_camera() -> PlayerCamera {
         fog_color: FOG_COLOR,
         fog_range: vec2(FOG_START, FOG_END),
         render_world: true,
+        simulate_composite: true,
     }
 }
 

@@ -135,9 +135,6 @@ impl GameHost {
             glfw::WindowEvent::FramebufferSize(width, height) => {
                 renderer_settings.window_size = (width, height);
             }
-            glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                window.window.set_should_close(true)
-            }
             glfw::WindowEvent::MouseButton(_, Action::Press, _) => {
                 if !window.is_mouse_captured() {
                     window.set_mouse_captured(true);
@@ -161,6 +158,12 @@ impl GameHost {
                 log::info!("Colemak mode {}", if *colemak_mode { "enabled" } else { "disabled "});
             }
             glfw::WindowEvent::Key(key, _, Action::Press, _) => {
+                // In debug mode only, let escape exit instantly
+                #[cfg(debug_assertions)]
+                if key == Key::Escape {
+                    window.window.set_should_close(true);
+                }
+
                 if let Some(input) = input_map_func(key) {
                     input_state.inputs[input as usize] = true;
                 }
@@ -192,7 +195,7 @@ impl GameHost {
             //Key::LeftShift => Some(InputName::Run),
             Key::E => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
-            Key::P => Some(InputName::Pause),
+            Key::Escape => Some(InputName::Pause),
             Key::U => Some(InputName::Debug),
             _ => None
         }
@@ -216,7 +219,7 @@ impl GameHost {
             //Key::LeftShift => Some(InputName::Run),
             Key::F => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
-            Key::Semicolon => Some(InputName::Pause),
+            Key::Escape => Some(InputName::Pause),
             _ => None
         }
     }

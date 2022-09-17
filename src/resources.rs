@@ -48,9 +48,9 @@ pub fn create_model_manager() -> ModelManager {
 
 /// Create the font manager
 pub fn create_font_manager() -> FontManager {
-    const MEDIEVAL_FONT_TEX: &'static [u8] = include_bytes!("../resources/fonts/0xDB_medievalish_chonker_8x8_1bpp_bmp_font_packed.png");
-    const MEDIEVAL_FONT_MAP: &'static [u8] = include_bytes!("../resources/fonts/0xDB_medievalish_chonker_8x8_1bpp_bmp_font_packed.csv");
     FontManager::new(vec![
-        ("medieval", MEDIEVAL_FONT_TEX, MEDIEVAL_FONT_MAP)
+        ("medieval", include_bytes!("../resources/fonts/medieval.png"), include_bytes!("../resources/fonts/medieval.csv")),
+        ("medieval_2x", include_bytes!("../resources/fonts/medieval_2x.png"), include_bytes!("../resources/fonts/medieval_2x.csv")),
+        ("medieval_4x", include_bytes!("../resources/fonts/medieval_4x.png"), include_bytes!("../resources/fonts/medieval_4x.csv")),
     ])
 }

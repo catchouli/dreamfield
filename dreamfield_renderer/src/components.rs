@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use cgmath::{Vector3, Matrix4, Vector2, Vector4};
+use cgmath::{Vector3, Matrix4, Vector2};
 pub use crate::camera::{Camera, FpsCamera};
 use crate::{gl_backend::{GltfModel, Texture, ShaderProgram}, resources::{ShaderManager, TextureManager}};
 
@@ -131,6 +131,8 @@ pub struct PlayerCamera {
     pub fog_color: Vector3<f32>,
     pub fog_range: Vector2<f32>,
 
+    pub simulate_composite: bool,
+
     // TODO: this could probably be done better if drawing the world was controlled by a seprate
     // component/system so that it didn't just assume it should draw it if there's a camera
     pub render_world: bool,
@@ -209,13 +211,14 @@ pub struct TextBox {
     pub text: String,
     /// The x and y spacing between glyphs, in pixels
     pub spacing: Option<Vector2<f32>>,
-    /// The window-space bounds of the textbox, text is wrapped and clipped to this region
-    pub bounds: Option<Vector4<f32>>,
+    pub position: Vector2<f32>,
+    /// The window-space size of the textbox, text is wrapped and clipped to this region
+    pub size: Option<Vector2<f32>>,
 }
 
 impl TextBox {
     pub fn new(shader: &str, font_name: &str, font_variant: &str, text: &str, spacing: Option<Vector2<f32>>,
-        bounds: Option<Vector4<f32>>) -> Self
+        position: Vector2<f32>, size: Option<Vector2<f32>>) -> Self
     {
         Self {
             shader: shader.to_string(),
@@ -223,7 +226,8 @@ impl TextBox {
             font_variant: font_variant.to_string(),
             text: text.to_string(),
             spacing,
-            bounds,
+            position,
+            size,
         }
     }
 }
