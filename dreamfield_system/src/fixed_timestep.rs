@@ -12,7 +12,9 @@ impl FixedTimestep {
             fixed_timestep,
             actual_time,
             sim_time: 0.0,
-            accumulator: 0.0
+            // Set to fixed_timestep because we want it to run at once initially instead of having
+            // to wait for one timestep.
+            accumulator: fixed_timestep,
         }
     }
 

@@ -184,7 +184,7 @@ void main() {
     // Calculate foggedness of fragment
     float fog_factor = fog_dist.y > 0.0 && fog_dist.y > fog_dist.x ?
         clamp((frag_dist - fog_dist.x)/(fog_dist.y - fog_dist.x), 0.0, 1.0)
-        : 1.0;
+        : 0.0;
 
     // Multiply the light by the albedo and get the fragment's color and value
     vec3 pre_dither_color = light * albedo;

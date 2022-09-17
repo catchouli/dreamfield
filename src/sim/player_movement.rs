@@ -25,7 +25,7 @@ const MIN_DISTANCE_FROM_WALLS: f32 = 0.01;
 const MIN_WALK_NORMAL: f32 = 0.9;
 
 /// The camera look speed
-const CAM_LOOK_SPEED: f32 = 0.5;
+const CAM_LOOK_SPEED: f32 = 1.0;
 
 /// The camera fast look speed
 const CAM_LOOK_SPEED_FAST: f32 = 1.5;
@@ -56,7 +56,7 @@ const AIR_ACCELERATE: f32 = 20.0;
 const GROUND_FRICTION: f32 = 20.0;
 
 /// Maximum walking speed on the ground
-const GROUND_MAX_SPEED: f32 = 3.0;
+const GROUND_MAX_SPEED: f32 = 4.5;
 
 /// Amount the running speed increases the speed and acceleration
 const RUNNING_MULTIPLIER: f32 = 2.0;

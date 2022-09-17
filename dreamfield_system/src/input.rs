@@ -21,6 +21,7 @@ pub enum InputName {
     Jump,
     Use,
     Debug,
+    Pause,
     Last
 }
 
@@ -56,6 +57,11 @@ impl InputState {
     /// Get whether the input has just been pressed
     pub fn is_just_pressed(&self, name: InputName) -> bool {
         self.inputs[name as usize] && !self.last_inputs[name as usize]
+    }
+
+    /// Clear whether just pressed or released
+    pub fn clear_just_pressed(&mut self, name: InputName) {
+        self.last_inputs[name as usize] = self.inputs[name as usize];
     }
 
     // Get the look input as a normalized float from 1 to -1. The first element is the left/right

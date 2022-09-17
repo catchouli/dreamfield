@@ -38,9 +38,32 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
     }
 
     // Get player camera
-    let player_camera = player_query.get_single().expect("Expected one player camera");
+    let player_camera;
+    if let Ok(cam) = player_query.get_single() {
+        player_camera = cam;
+    }
+    else {
+        log::warn!("No player camera");
+        return;
+    }
 
     // Create framebuffers if they don't exist
+    let requested_size = (player_camera.render_res.x as i32, player_camera.render_res.y as i32);
+    if let Some(size) = local.framebuffer_size {
+        if size != requested_size {
+            log::info!("Resizing framebuffer size to {requested_size:?}");
+            local.framebuffer_size = Some(requested_size);
+            local.framebuffer = None;
+            local.yiq_framebuffer = None;
+        }
+    }
+    else {
+        log::info!("Setting initial framebuffer size to {requested_size:?}");
+        local.framebuffer_size = Some(requested_size);
+        local.framebuffer = None;
+        local.yiq_framebuffer = None;
+    }
+
     if local.framebuffer.is_none() {
         local.framebuffer = Some(Framebuffer::new(player_camera.render_res.x as i32, player_camera.render_res.y as i32,
             gl::SRGB8, TextureParams::new(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE, gl::NEAREST, gl::NEAREST)));
@@ -64,7 +87,7 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
     local.ubo_global.set_sim_time(&(sim_time.sim_time as f32));
     local.ubo_global.set_mat_proj(&player_camera.proj);
     local.ubo_global.set_mat_view_derive(&player_camera.view);
-    local.ubo_global.upload_changed();
+    local.ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
 
     // Bind framebuffer and clear
     unsafe { gl::Viewport(0, 0, player_camera.render_res.x as i32, player_camera.render_res.y as i32) };
@@ -80,8 +103,8 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
 
     // Clear screen
     unsafe {
-        gl::ClearColor(0.05, 0.05, 0.05, 1.0);
-        gl::ClearColor(1.0, 0.0, 1.0, 1.0);
+        let col = player_camera.clear_color;
+        gl::ClearColor(col.x, col.y, col.z, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
@@ -89,7 +112,9 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
     render_screen_effects(RunTime::PreScene, local, &mut textures, &mut shaders, &mut effect_query);
 
     // Draw world
-    draw_world(local, &mut world, &models, &player_camera);
+    if player_camera.render_world {
+        draw_world(local, &mut world, &models, &player_camera);
+    }
 
     // Draw visuals
     {
@@ -136,8 +161,12 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
 
     // Work out what chunks can be seen by creating a triangle between the camera position and the
     // corners of the far clip plane, in 2D, and then walk all the chunks between them and draw them
-    let pos_xz = vec2(pos.x, pos.z);
     let forward_xz = vec2(forward.x, forward.z).normalize();
+    // TODO: this doesn't take into account that you might be looking down and seeing behind you a
+    // little bit, as a bodge we move the position back a couple units before looking as this is
+    // only a problem if you're looking down and there's the edge of a chunk just behind you. This,
+    // along with the fact the test is in 2d, do mean that we overdraw a bit though.
+    let pos_xz = vec2(pos.x, pos.z) - forward_xz * 2.0;
 
     // The view of the world grid (in 2d) forms a triangle between the corners of the far clip
     // plane and the camera position. To draw the chunks within the camera view, we want to figure
@@ -149,14 +178,14 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     //
     // To figure out the corner points, we then first figure out what far point is, and then rotate
     // the forward vector by 90 degrees to get right_xz:
-    let far_clip = camera.fog_range.y;
-    let far_point = pos_xz + forward_xz * far_clip;
+    let far_clip = camera.clip_range.y;
+    let far_point = pos_xz + forward_xz * camera.fog_range.y;
     let right_xz = vec2(-forward_xz.y, forward_xz.x);
 
     // We then calculate the "half width" of the far clip plane using trigonometry, which is the
     // distance between far_point and the corner point.
     // This can't be a const right now but it could be if f32::tan was...
-    let far_clip_half_width: f32 = far_clip;
+    let far_clip_half_width: f32 = far_clip * f32::tan(0.5 * camera.render_fov_rad);
 
     // And then we multiply this by the right vector and add it to get the corner point, and then
     // do the opposite to get the other corner point.

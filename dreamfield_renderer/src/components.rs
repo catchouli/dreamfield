@@ -121,13 +121,19 @@ impl Visual {
 pub struct PlayerCamera {
     pub proj: Matrix4<f32>,
     pub view: Matrix4<f32>,
+    pub clear_color: Vector3<f32>,
 
     pub render_res: Vector2<f32>,
     pub render_aspect: f32,
     pub render_fov_rad: f32,
+    pub clip_range: Vector2<f32>,
 
     pub fog_color: Vector3<f32>,
-    pub fog_range: Vector2<f32>
+    pub fog_range: Vector2<f32>,
+
+    // TODO: this could probably be done better if drawing the world was controlled by a seprate
+    // component/system so that it didn't just assume it should draw it if there's a camera
+    pub render_world: bool,
 }
 
 /// A component for representing a pre- or post-processing effect, such as a skysphere
