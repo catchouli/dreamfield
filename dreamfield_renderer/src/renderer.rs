@@ -366,7 +366,7 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
         if anim_changed {
             if let Some(anim_state) = &visual.internal_anim_state {
                 let anim_time = anim_state.anim_time;
-                update_animation(&model, &anim_state.cur_anim.name(), anim_time);
+                update_animation(&model, &anim_state.cur_anim.name(), anim_time, anim_state.should_loop());
             }
         }
 
@@ -478,13 +478,18 @@ fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettin
 }
 
 /// Update an animation
-fn update_animation(model: &GltfModel, name: &str, time: f32) {
+fn update_animation(model: &GltfModel, name: &str, time: f32, should_loop: bool) {
     if let Some(anim) = model.animations().get(name) {
         log::trace!("Playing animation {} at time {}", anim.name(), time);
 
+        let time = match should_loop {
+            true => time % anim.length(),
+            false => time,
+        };
+
         for channel in anim.channels().iter() {
             if let Some(node) = &channel.target() {
-                match channel.sample(time % anim.length()) {
+                match channel.sample(time) {
                     GltfAnimationKeyframe::Translation(_, p) => {
                         node.lock().unwrap().set_translation(p);
                     },
