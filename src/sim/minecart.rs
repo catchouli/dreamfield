@@ -92,8 +92,8 @@ pub fn update_minecart(sim_time: Res<SimTime>,
         let forward_dir = transform.rot * vec3(0.0, 0.0, -1.0);
         let to_player = player_pos - transform.pos;
         let dist_to_player = f32::max(0.1, to_player.magnitude());
-        if dist_to_player < 2.0 && !player_in_minecart {
-            minecart.velocity += 2.5 * -forward_dir.dot(2.0 * to_player / dist_to_player);
+        if dist_to_player < 1.5 && !player_in_minecart {
+            minecart.velocity += 2.5 * -forward_dir.dot(to_player / dist_to_player);
         }
 
         let speed_loss_per_second = if player_in_minecart {
