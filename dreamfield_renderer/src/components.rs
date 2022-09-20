@@ -9,9 +9,11 @@ use crate::{gl_backend::{GltfModel, Texture, ShaderProgram}, resources::{ShaderM
 #[derive(Component)]
 pub struct Visual {
     pub model_name: String,
+    pub shader_name: String,
     pub tessellate: bool,
     pub cur_anim: Option<Animation>,
     pub internal_model: Option<Arc<GltfModel>>,
+    pub internal_shader: Option<Arc<ShaderProgram>>,
     pub internal_anim_state: Option<AnimationState>
 }
 
@@ -51,23 +53,15 @@ impl AnimationState {
 }
 
 impl Visual {
-    pub fn new(model_name: &str, tessellate: bool) -> Self {
+    pub fn new(model_name: &str, shader_name: &str, tessellate: bool, anim: Option<Animation>) -> Self {
         Self {
             model_name: model_name.to_string(),
+            shader_name: shader_name.to_string(),
             tessellate,
-            cur_anim: None,
+            cur_anim: anim,
             internal_model: None,
-            internal_anim_state: None
-        }
-    }
-
-    pub fn new_with_anim(model_name: &str, tessellate: bool, anim: Animation) -> Self {
-        Self {
-            model_name: model_name.to_string(),
-            tessellate,
-            cur_anim: Some(anim),
-            internal_model: None,
-            internal_anim_state: None
+            internal_anim_state: None,
+            internal_shader: None,
         }
     }
 

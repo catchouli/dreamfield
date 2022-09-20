@@ -59,7 +59,7 @@ fn enter_main_game(mut commands: Commands) {
     commands.spawn()
         .insert(Ball::default())
         .insert(Transform::new(vec3(-9.0, 0.0, 9.0), Matrix3::identity()))
-        .insert(Visual::new_with_anim("fire_orb", false, Animation::Loop("Orb".to_string())));
+        .insert(Visual::new("fire_orb", "ps1", false, Some(Animation::Loop("Orb".to_string()))));
 }
 
 /// Update the main game

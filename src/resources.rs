@@ -17,7 +17,7 @@ pub fn create_world_chunk_manager() -> WorldChunkManager {
 pub fn create_shader_manager() -> ShaderManager {
     ShaderManager::new(vec![
         ("sky", preprocess_shader_vf!(include_bytes!("../resources/shaders/sky.glsl"))),
-        ("ps1_no_tess", preprocess_shader_vf!(include_bytes!("../resources/shaders/ps1.glsl"))),
+        ("ps1", preprocess_shader_vf!(include_bytes!("../resources/shaders/ps1.glsl"))),
         ("ps1_tess", preprocess_shader_vtf!(include_bytes!("../resources/shaders/ps1.glsl"))),
         ("composite_yiq", preprocess_shader_vf!(include_bytes!("../resources/shaders/composite_yiq.glsl"))),
         ("composite_resolve", preprocess_shader_vf!(include_bytes!("../resources/shaders/composite_resolve.glsl"))),
@@ -36,10 +36,11 @@ pub fn create_texture_manager() -> TextureManager {
 /// Create the model manager
 pub fn create_model_manager() -> ModelManager {
     ModelManager::new_with_models(vec![
+        ("samy", include_bytes!("../resources/models/samy_diamond.glb")),
+        ("catstation", include_bytes!("../resources/models/catstation_billboard.glb")),
         ("fire_orb", include_bytes!("../resources/models/fire_orb.glb")),
         ("tree", include_bytes!("../resources/models/tree.glb")),
         ("white_sphere", include_bytes!("../resources/models/white_sphere.glb")),
-        ("samy", include_bytes!("../resources/models/samy_diamond.glb")),
         ("elf", include_bytes!("../resources/models/elf.glb")),
         ("minecart", include_bytes!("../resources/models/minecart.glb")),
         ("capsule", include_bytes!("../resources/models/capsule.glb")),

@@ -15,13 +15,13 @@ pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpaw
                     .insert(Transform::new(pos, rot))
                     .insert(EntityName::new("Elf"))
                     .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 1.0, 0.0), vec3(0.25, 1.0, 0.25))))
-                    .insert(Visual::new_with_anim("elf", false, Animation::Loop("Idle".to_string())));
+                    .insert(Visual::new("elf", "ps1", false, Some(Animation::Loop("Idle".to_string()))));
             },
             "Minecart" => {
                 let mut entity = commands.spawn();
                 entity.insert(EntityName::new("Minecart"))
                       .insert(Transform::new(pos, rot))
-                      .insert(Visual::new("minecart", false));
+                      .insert(Visual::new("minecart", "ps1", false, None));
 
                 if let Some(points) = event.entity_info.mesh() {
                     let track_points = points.iter().map(|p| p.as_vec().clone()).collect();

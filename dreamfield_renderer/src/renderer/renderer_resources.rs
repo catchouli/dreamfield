@@ -15,7 +15,6 @@ pub struct RendererResources {
     pub framebuffer: Option<Framebuffer>,
     pub yiq_framebuffer: Option<Framebuffer>,
     pub ps1_tess_shader: Arc<ShaderProgram>,
-    pub ps1_no_tess_shader: Arc<ShaderProgram>,
     pub composite_yiq_shader: Arc<ShaderProgram>,
     pub composite_resolve_shader: Arc<ShaderProgram>,
     pub blit_shader: Arc<ShaderProgram>,
@@ -61,7 +60,6 @@ impl FromWorld for RendererResources {
         // of hardcoded here, and the composite/resolve were converted to screen-space effects
         let mut shaders = world.get_resource_mut::<ShaderManager>().expect("Failed to get shader manager");
         let ps1_tess_shader = shaders.get("ps1_tess").unwrap().clone();
-        let ps1_no_tess_shader = shaders.get("ps1_no_tess").unwrap().clone();
         let composite_yiq_shader = shaders.get("composite_yiq").unwrap().clone();
         let composite_resolve_shader = shaders.get("composite_resolve").unwrap().clone();
         let blit_shader = shaders.get("blit").unwrap().clone();
@@ -75,7 +73,6 @@ impl FromWorld for RendererResources {
             framebuffer: None,
             yiq_framebuffer: None,
             ps1_tess_shader,
-            ps1_no_tess_shader,
             composite_yiq_shader,
             composite_resolve_shader,
             blit_shader,

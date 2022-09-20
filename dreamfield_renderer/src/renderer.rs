@@ -119,7 +119,7 @@ pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res
     // Draw visuals
     {
         let mut visuals_query = object_paramset.p0();
-        draw_visuals(local, &sim_time, &models, &mut visuals_query);
+        draw_visuals(local, sim_time.as_ref(), models.as_ref(), shaders.as_mut(), &mut visuals_query);
     }
 
     // Draw colliders if enabled
@@ -335,14 +335,15 @@ fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) 
 }
 
 /// Draw the visuals
-fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: &Res<ModelManager>,
-    visuals_query: &mut Query<(&Transform, &mut Visual)>)
+fn draw_visuals(local: &mut RendererResources, sim_time: &SimTime, models: &ModelManager,
+    shaders: &mut ShaderManager, visuals_query: &mut Query<(&Transform, &mut Visual)>)
 {
     unsafe { gl::Enable(gl::DEPTH_TEST); }
 
     let ubo_global = &mut local.ubo_global;
     let ubo_joints = &mut local.ubo_joints;
     for (pos, mut visual) in visuals_query.iter_mut() {
+        let visual = &mut *visual;
         let anim_changed = visual.animate(sim_time.sim_time as f32);
 
         // Get model, loading it if it isn't already loaded
@@ -359,8 +360,18 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
 
                 visual.internal_model = Some(model.clone());
             }
-            visual.internal_model.as_ref().unwrap()
+            visual.internal_model.as_ref().expect(&format!("Failed to load model {}", visual.model_name))
         };
+
+        // Get shader, loading it if it isn't already loaded
+        let shader = {
+            // Initialise shader if it's not already
+            if visual.internal_shader.is_none() {
+                visual.internal_shader = shaders.get(visual.shader_name.as_str()).map(|arc| arc.clone()).ok();
+            }
+            visual.internal_shader.as_ref().expect(&format!("Failed to load shader {}", visual.shader_name))
+        };
+        shader.use_program();
 
         // Animate model if an animation is playing
         if anim_changed {
@@ -369,13 +380,6 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &Res<SimTime>, models: 
                 update_animation(&model, &anim_state.cur_anim.name(), anim_time, anim_state.should_loop());
             }
         }
-
-        // Bind shader
-        let shader = match visual.tessellate {
-            true => &local.ps1_tess_shader,
-            false => &local.ps1_no_tess_shader
-        };
-        shader.use_program();
 
         // Draw model
         let transform = Matrix4::from_translation(pos.pos) * Matrix4::from(pos.rot);
@@ -388,7 +392,7 @@ fn draw_colliders(local: &mut RendererResources, models: &Res<ModelManager>,
     colliders_query: &Query<(&Transform, &Collider), Without<PlayerCamera>>)
 {
     unsafe { gl::Enable(gl::DEPTH_TEST); }
-    local.ps1_no_tess_shader.use_program();
+    local.ps1_tess_shader.use_program();
 
     local.ubo_material.set_has_base_color_texture(&false);
     local.ubo_material.set_base_color(&vec4(1.0, 1.0, 1.0, 1.0));
@@ -411,7 +415,7 @@ fn draw_colliders(local: &mut RendererResources, models: &Res<ModelManager>,
                     Matrix4::from(transform.rot) *
                     Matrix4::from_nonuniform_scale(2.0 * radius.x, 2.0 * radius.y, 2.0 * radius.z)
                 };
-                sphere_model.render(&transform, &mut local.ubo_global, &mut local.ubo_joints, false);
+                sphere_model.render(&transform, &mut local.ubo_global, &mut local.ubo_joints, true);
             }
             _ => panic!("draw_colliders: unimplemented collider type for {:?}", collider.shape)
         }

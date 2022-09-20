@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use cgmath::{vec2, Vector2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix};
+use cgmath::*;
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, TextBox};
 use dreamfield_system::components::Transform;
 use std::time::{Instant, Duration};
@@ -27,8 +27,8 @@ struct SplashScreenEntity;
 /// The stages of the splash screen
 const SPLASH_SCREEN_STAGES: [(Duration, SplashScreenState); 3] = [
     (Duration::from_millis(1500), SplashScreenState::NoSignal),
-    (Duration::from_millis(3500), SplashScreenState::Samy),
-    (Duration::from_millis(3000), SplashScreenState::CatStation)
+    (Duration::from_millis(2500), SplashScreenState::Samy),
+    (Duration::from_millis(2500), SplashScreenState::CatStation),
 ];
 
 /// Add splash screen systems to stage
@@ -57,7 +57,7 @@ fn enter_splash_screen(mut commands: Commands) {
     // Create camera
     const RENDER_RES: Vector2<f32> = vec2(1280.0, 960.0);
     const RENDER_ASPECT: f32 = RENDER_RES.x / RENDER_RES.y;
-    const CLIP_RANGE: Vector2<f32> = vec2(0.1, 35.0);
+    const CLIP_RANGE: Vector2<f32> = vec2(0.1, 1000.0);
     const FOV: f32 = 60.0;
 
     commands.spawn()
@@ -128,20 +128,21 @@ fn splash_screen_system(mut splash_screen: ResMut<SplashScreenResource>, mut app
                 SplashScreenState::NoSignal => {
                     splash_screen.current_state_entities.push(commands.spawn()
                         .insert(SplashScreenEntity)
-                        .insert(TextBox::new("text", "medieval_4x", "Vx32", "No Signal", None, vec2(10.0, 10.0), None))
+                        .insert(TextBox::new("text", "medieval_4x", "Vx32", "No Signal", None, vec2(900.0, 900.0), None))
                         .id());
                 },
                 SplashScreenState::Samy => {
                     splash_screen.current_state_entities.push(commands.spawn()
                         .insert(SplashScreenEntity)
                         .insert(Transform::new(vec3(0.0, 0.0, -5.0), Matrix3::identity()))
-                        .insert(Visual::new_with_anim("samy", false, Animation::Once("Samy".to_string())))
+                        .insert(Visual::new("samy", "ps1", false, Some(Animation::Once("Samy".to_string()))))
                         .id());
                 },
                 SplashScreenState::CatStation => {
                     splash_screen.current_state_entities.push(commands.spawn()
                         .insert(SplashScreenEntity)
-                        .insert(TextBox::new("text", "medieval_4x", "Vx32", "CatStation", None, vec2(10.0, 10.0), None))
+                        .insert(Transform::new(vec3(0.0, 0.0, -5.0), Matrix3::identity()))
+                        .insert(Visual::new("catstation", "ps1", false, None))
                         .id());
                 },
             }
