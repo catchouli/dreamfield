@@ -28,7 +28,7 @@ fn create_update_schedule(world: &mut World) -> Schedule {
         .with_system_set(State::<AppState>::get_driver());
 
     states::splash_screen::init_splash_screen(&mut update_stage);
-    states::main_menu::init_main_menu(&mut update_stage);
+    states::title_screen::init_title_screen(&mut update_stage);
     states::main_game::init_main_game(&mut update_stage);
     states::pause_menu::init_pause_menu(&mut update_stage);
 

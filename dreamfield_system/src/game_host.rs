@@ -147,11 +147,11 @@ impl GameHost {
                     input_state.cursor_captured = false;
                 }
             }
-            glfw::WindowEvent::Key(Key::F1, _, Action::Press, _) => {
-                renderer_settings.collider_debug = !renderer_settings.collider_debug;
-            }
             glfw::WindowEvent::Key(Key::F2, _, Action::Press, _) => {
                 renderer_settings.wireframe_enabled = !renderer_settings.wireframe_enabled;
+            }
+            glfw::WindowEvent::Key(Key::F3, _, Action::Press, _) => {
+                renderer_settings.collider_debug = !renderer_settings.collider_debug;
             }
             glfw::WindowEvent::Key(Key::F9, _, Action::Press, _) => {
                 *colemak_mode = !(*colemak_mode);
@@ -197,6 +197,7 @@ impl GameHost {
             Key::Space => Some(InputName::Jump),
             Key::Escape => Some(InputName::Pause),
             Key::U => Some(InputName::Debug),
+            Key::F1 => Some(InputName::EnableDiagnostics),
             _ => None
         }
     }
@@ -220,6 +221,7 @@ impl GameHost {
             Key::F => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
             Key::Escape => Some(InputName::Pause),
+            Key::F1 => Some(InputName::EnableDiagnostics),
             _ => None
         }
     }

@@ -22,6 +22,7 @@ pub enum InputName {
     Use,
     Debug,
     Pause,
+    EnableDiagnostics,
     Last
 }
 

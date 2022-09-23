@@ -151,7 +151,7 @@ fn splash_screen_system(mut splash_screen: ResMut<SplashScreenResource>, mut app
     else {
         // If we got to the end of our list of stages, continue to the main menu
         log::info!("Splash screen done after {elapsed:?}");
-        app_state.set(AppState::MainMenu).unwrap();
+        app_state.set(AppState::TitleScreen).unwrap();
     }
 }
 

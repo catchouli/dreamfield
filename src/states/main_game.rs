@@ -19,26 +19,31 @@ const _LOOKING_AT_TORCH: (Vector3<f32>, Vector2<f32>) = (vec3(-33.04357, 4.42999
 /// Looking at corridor
 const _LOOKING_AT_CORRIDOR: (Vector3<f32>, Vector2<f32>) = (vec3(5.2, 0.8, 12.8), vec2(0.03, 2.0));
 
+/// Main game resource
+pub struct MainGameResource {
+    diagnostics_entity: Option<Entity>,
+}
+
 /// Initialise main game state
 pub fn init_main_game(stage: &mut SystemStage) {
-    stage.add_system_set(SystemSet::on_enter(AppState::InGame)
+    stage.add_system_set(SystemSet::on_enter(AppState::MainGame)
         .with_system(enter_main_game));
-    stage.add_system_set(SystemSet::on_update(AppState::InGame)
+    stage.add_system_set(SystemSet::on_update(AppState::MainGame)
         .with_system(update_main_game));
     stage.add_system_set(dreamfield_system::systems()
-        .with_run_criteria(State::<AppState>::on_update(AppState::InGame)));
+        .with_run_criteria(State::<AppState>::on_update(AppState::MainGame)));
     stage.add_system_set(crate::sim::systems()
-        .with_run_criteria(State::<AppState>::on_update(AppState::InGame)));
+        .with_run_criteria(State::<AppState>::on_update(AppState::MainGame)));
 }
 
 /// Create main game entities when entering the main game state
 fn enter_main_game(mut commands: Commands) {
     log::info!("Entering main game");
 
-    // Diagnostics
-    commands.spawn()
-        .insert(DiagnosticsTextBox)
-        .insert(TextBox::new("text", "medieval", "Vx8", "", None, vec2(10.0, 10.0), None));
+    // Add resource
+    commands.insert_resource(MainGameResource {
+        diagnostics_entity: None,
+    });
 
     // Create sky pre-scene effect
     commands.spawn()
@@ -63,10 +68,32 @@ fn enter_main_game(mut commands: Commands) {
 }
 
 /// Update the main game
-fn update_main_game(mut input: ResMut<InputState>, mut app_state: ResMut<State<AppState>>) {
+fn update_main_game(
+    mut local: ResMut<MainGameResource>,
+    mut input: ResMut<InputState>,
+    mut app_state: ResMut<State<AppState>>,
+    mut commands: Commands)
+{
+    // Pause when pause is pressed
     if input.is_just_pressed(InputName::Pause) {
+        // Clear the input, because otherwise the pause system will run during the same update, and
+        // might switch back to this state.
         input.clear_just_pressed(InputName::Pause);
         app_state.push(AppState::Paused).unwrap();
+    }
+
+    // Enable or disable diagnostics
+    if input.is_just_pressed(InputName::EnableDiagnostics) {
+        if let Some(entity_id) = local.diagnostics_entity.take() {
+            commands.entity(entity_id).despawn();
+        }
+        else {
+            local.diagnostics_entity = Some(commands
+                .spawn()
+                .insert(DiagnosticsTextBox)
+                .insert(TextBox::new("text", "medieval", "Vx8", "", None, vec2(10.0, 10.0), None))
+                .id());
+        }
     }
 }
 

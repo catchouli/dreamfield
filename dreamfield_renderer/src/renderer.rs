@@ -18,15 +18,23 @@ use dreamfield_system::world::world_chunk::{WorldChunk, WorldChunkMesh, ChunkInd
 use dreamfield_system::world::world_texture::WorldTexture;
 use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::{SimTime, Diagnostics};
-use dreamfield_system::components::Transform;
+use dreamfield_system::components::{Transform, Disabled};
 
 /// The renderer system
-pub fn renderer_system(mut local: Local<RendererResources>, window_settings: Res<WindowSettings>,
-    sim_time: Res<SimTime>, models: Res<ModelManager>, mut textures: ResMut<TextureManager>,
-    fonts: Res<FontManager>, mut world: ResMut<WorldChunkManager>, mut shaders: ResMut<ShaderManager>,
-    mut effect_query: Query<&mut ScreenEffect>, player_query: Query<&PlayerCamera>, text_query: Query<&TextBox>,
+pub fn renderer_system(
+    mut local: Local<RendererResources>,
+    mut textures: ResMut<TextureManager>,
+    mut world: ResMut<WorldChunkManager>,
+    mut shaders: ResMut<ShaderManager>,
+    window_settings: Res<WindowSettings>,
+    sim_time: Res<SimTime>,
+    models: Res<ModelManager>,
+    fonts: Res<FontManager>,
+    player_query: Query<&PlayerCamera>,
+    text_query: Query<&TextBox, Without<Disabled>>,
+    mut effect_query: Query<&mut ScreenEffect>,
     mut object_paramset: ParamSet<(
-        Query<(&Transform, &mut Visual)>,
+        Query<(&Transform, &mut Visual), Without<Disabled>>,
         Query<(&Transform, &Collider), Without<PlayerCamera>>)>)
 {
     let local = &mut *local;
@@ -336,7 +344,7 @@ fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) 
 
 /// Draw the visuals
 fn draw_visuals(local: &mut RendererResources, sim_time: &SimTime, models: &ModelManager,
-    shaders: &mut ShaderManager, visuals_query: &mut Query<(&Transform, &mut Visual)>)
+    shaders: &mut ShaderManager, visuals_query: &mut Query<(&Transform, &mut Visual), Without<Disabled>>)
 {
     unsafe { gl::Enable(gl::DEPTH_TEST); }
 

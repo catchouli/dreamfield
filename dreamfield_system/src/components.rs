@@ -37,3 +37,7 @@ impl Default for Transform {
         }
     }
 }
+
+/// A component for disabling entities
+#[derive(Component)]
+pub struct Disabled;
