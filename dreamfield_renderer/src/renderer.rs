@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use bevy_ecs::query::Without;
 use bevy_ecs::system::{Local, Res, Query, ResMut, ParamSet};
-use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4, vec3};
+use cgmath::{SquareMatrix, Matrix4, vec2, InnerSpace, vec4, vec3, Deg};
 use dreamfield_system::intersection::{Collider, Shape};
 use renderer_resources::RendererResources;
 use crate::gl_backend::*;
@@ -19,6 +19,9 @@ use dreamfield_system::world::world_texture::WorldTexture;
 use dreamfield_system::world::wrapped_vectors::WrappedVector3;
 use dreamfield_system::resources::{SimTime, Diagnostics};
 use dreamfield_system::components::{Transform, Disabled};
+
+/// The maximum number of times to recurse into portals and mirrors
+const MAX_SCENE_RECURSION: usize = 1;
 
 /// The renderer system
 pub fn renderer_system(
@@ -117,18 +120,17 @@ pub fn renderer_system(
     }
 
     // Render pre-scene effects
+    unsafe { gl::Disable(gl::DEPTH_TEST); }
     render_screen_effects(RunTime::PreScene, local, &mut textures, &mut shaders, &mut effect_query);
 
-    // Draw world
-    if player_camera.render_world {
-        draw_world(local, &mut world, &models, &player_camera);
+    // Draw scene
+    unsafe {
+        gl::Enable(gl::DEPTH_TEST);
+        gl::Enable(gl::CULL_FACE);
+        gl::CullFace(gl::BACK);
     }
-
-    // Draw visuals
-    {
-        let mut visuals_query = object_paramset.p0();
-        draw_visuals(local, sim_time.as_ref(), models.as_ref(), shaders.as_mut(), &mut visuals_query);
-    }
+    draw_scene(local, sim_time.as_ref(), player_camera, player_camera.view.clone(), world.as_mut(), models.as_ref(),
+        shaders.as_mut(), &mut object_paramset.p0(), &mut Vec::new(), 0);
 
     // Draw colliders if enabled
     if window_settings.collider_debug
@@ -138,6 +140,10 @@ pub fn renderer_system(
     }
 
     // Render post-scene effects
+    unsafe {
+        gl::Disable(gl::DEPTH_TEST);
+        gl::Disable(gl::CULL_FACE);
+    }
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
 
     // Render text
@@ -151,19 +157,102 @@ pub fn renderer_system(
     final_composite(local, &window_settings, player_camera);
 }
 
+/// Draw the scene (world + visuals). May be reentrant due to drawing of portals, in which case,
+/// the depth is incremented each time, up to MAX_SCENE_RECURSION.
+fn draw_scene(local: &mut RendererResources,
+              sim_time: &SimTime,
+              player_camera: &PlayerCamera,
+              view_mat: Matrix4<f32>,
+              world: &mut WorldChunkManager,
+              models: &ModelManager,
+              shaders: &mut ShaderManager,
+              visuals_query: &mut Query<(&Transform, &mut Visual), Without<Disabled>>,
+              portals_to_draw: &mut Vec<(Matrix4<f32>, Matrix4<f32>, i32, i32)>,
+              depth: usize)
+{
+    // Draw world
+    if player_camera.render_world {
+        draw_world(local, player_camera, view_mat, world, models, portals_to_draw);
+    }
+
+    // Draw visuals
+    draw_visuals(local, sim_time, models, shaders, visuals_query);
+
+    // Draw portals recursively up to MAX_SCENE_RECURSION
+    if depth < MAX_SCENE_RECURSION {
+        let last_portals_to_draw = std::mem::take(portals_to_draw);
+        for (world_transform, relative_transform, index, elements) in last_portals_to_draw.iter() {
+            local.ubo_global.set_mat_view_derive(&player_camera.view);
+            local.ubo_global.upload_changed();
+
+            log::info!("Rendering portal {index}");
+            let portal_mesh = local.portal_meshes.get(index).unwrap();
+
+            // Draw the portal into the stencil buffer
+            unsafe {
+                gl::StencilMask(0xFF);
+                gl::Clear(gl::STENCIL_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                gl::Enable(gl::STENCIL_TEST);
+
+                gl::StencilOp(gl::KEEP, gl::KEEP, gl::REPLACE);
+                gl::StencilFunc(gl::ALWAYS, 0xFF, 0xFF);
+
+                //gl::ColorMask(0, 0, 0, 0);
+                //gl::DepthMask(0);
+            }
+            
+            local.ubo_global.set_mat_model(world_transform);
+            local.ubo_global.upload_changed();
+
+            portal_mesh.draw_indexed(gl::TRIANGLES, *elements);
+
+            // Re-render the scene where the stencil wrote to
+            unsafe {
+                gl::Disable(gl::STENCIL_TEST);
+                gl::Clear(gl::DEPTH_BUFFER_BIT);
+                gl::Enable(gl::STENCIL_TEST);
+
+                gl::StencilMask(0);
+                gl::StencilOp(gl::KEEP, gl::KEEP, gl::KEEP);
+                gl::StencilFunc(gl::EQUAL, 0xFF, 0xFF);
+
+                gl::ColorMask(0xFF, 0xFF, 0xFF, 0xFF);
+                gl::DepthMask(0xFF);
+
+                //let blansform = relative_transform * Matrix4::from_angle_y(Deg(180.0));
+                let translation = relative_transform.w.truncate();
+                let relative_transform = Matrix4::from_translation(vec3(0.0, 0.0, -22.0));
+                //let relative_transform = relative_transform.invert().unwrap();
+                let portal_view_mat = relative_transform * view_mat;
+                let cam_transform = view_mat.invert().unwrap();
+                let new_cam_transform = relative_transform * cam_transform;
+                let portal_view_mat = new_cam_transform.invert().unwrap();
+                //let portal_view_mat = Matrix4::identity();
+                local.ubo_global.set_mat_view_derive(&portal_view_mat);
+                local.ubo_global.upload_changed();
+                draw_scene(local, sim_time, player_camera, portal_view_mat, world, models, shaders, visuals_query, portals_to_draw, depth + 1);
+                gl::Disable(gl::STENCIL_TEST);
+            }
+        }
+    }
+}
+
 /// Draw the world
-fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkManager>, models: &Res<ModelManager>,
-    camera: &PlayerCamera)
+fn draw_world(local: &mut RendererResources,
+              player_camera: &PlayerCamera,
+              view_mat: Matrix4<f32>,
+              world: &mut WorldChunkManager,
+              models: &ModelManager,
+              portals_to_draw: &mut Vec<(Matrix4<f32>, Matrix4<f32>, i32, i32)>)
 {
     local.ubo_global.bind(bindings::UniformBlockBinding::GlobalParams);
     local.ubo_joints.bind(bindings::UniformBlockBinding::JointParams);
     local.ubo_material.bind(bindings::UniformBlockBinding::MaterialParams);
 
-    unsafe { gl::Enable(gl::DEPTH_TEST); }
     local.ps1_tess_shader.use_program();
 
     // Get camera pos
-    let cam_transform = camera.view.invert().unwrap();
+    let cam_transform = view_mat.invert().unwrap();
     let pos = cam_transform.w.truncate();
     let forward = cam_transform * vec4(0.0, 0.0, -1.0, 0.0);
 
@@ -186,14 +275,14 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
     //
     // To figure out the corner points, we then first figure out what far point is, and then rotate
     // the forward vector by 90 degrees to get right_xz:
-    let far_clip = camera.clip_range.y;
-    let far_point = pos_xz + forward_xz * camera.fog_range.y;
+    let far_clip = player_camera.clip_range.y;
+    let far_point = pos_xz + forward_xz * player_camera.fog_range.y;
     let right_xz = vec2(-forward_xz.y, forward_xz.x);
 
     // We then calculate the "half width" of the far clip plane using trigonometry, which is the
     // distance between far_point and the corner point.
     // This can't be a const right now but it could be if f32::tan was...
-    let far_clip_half_width: f32 = far_clip * f32::tan(0.5 * camera.render_fov_rad);
+    let far_clip_half_width: f32 = far_clip * f32::tan(0.5 * player_camera.render_fov_rad);
 
     // And then we multiply this by the right vector and add it to get the corner point, and then
     // do the opposite to get the other corner point.
@@ -218,14 +307,17 @@ fn draw_world(local: &mut RendererResources, mut world: &mut ResMut<WorldChunkMa
 
     for chunk_x in view_min_chunk_x..=view_max_chunk_x {
         for chunk_z in view_min_chunk_z..=view_max_chunk_z {
-            draw_world_chunk(local, &mut world, &models, (chunk_x, chunk_z));
+            draw_world_chunk(local, world, models, (chunk_x, chunk_z), portals_to_draw);
         }
     }
 }
 
 /// Draw a WorldChunk
-fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunkManager>, models: &Res<ModelManager>,
-    chunk_index: ChunkIndex)
+fn draw_world_chunk(local: &mut RendererResources,
+                    world: &mut WorldChunkManager,
+                    models: &ModelManager,
+                    chunk_index: ChunkIndex,
+                    portals_to_draw: &mut Vec<(Matrix4<f32>, Matrix4<f32>, i32, i32)>)
 {
     let mut textures_to_load = Vec::new();
 
@@ -244,6 +336,28 @@ fn draw_world_chunk(local: &mut RendererResources, world: &mut ResMut<WorldChunk
                 let transform = Matrix4::from_translation(*point);
                 model.render(&transform, &mut local.ubo_global, &mut local.ubo_joints, true);
             }
+        }
+
+        // Add portals to draw list
+        for portal in chunk.portals().iter() {
+            // Create portal mesh if it isn't already
+            local.portal_meshes
+                .entry(portal.index())
+                .or_insert_with(|| {
+                    let buffer_layout = vec![
+                        VertexAttrib {
+                            index: AttribBinding::Positions as u32,
+                            attrib_type: gl::FLOAT,
+                            size: 3
+                        },
+                    ];
+                    let indices: Vec<u32> = portal.indices().iter().map(|idx| *idx as u32).collect();
+                    Mesh::new_indexed(portal.vertices(), &indices, &buffer_layout)
+                });
+
+            // Add portal to list
+            let elements = portal.indices().len() as i32;
+            portals_to_draw.push((*portal.world_transform(), *portal.relative_transform(), portal.index(), elements));
         }
 
         // Draw meshes in chunk
@@ -346,8 +460,6 @@ fn get_gl_texture<'a>(local: &'a mut RendererResources, texture: &WorldTexture) 
 fn draw_visuals(local: &mut RendererResources, sim_time: &SimTime, models: &ModelManager,
     shaders: &mut ShaderManager, visuals_query: &mut Query<(&Transform, &mut Visual), Without<Disabled>>)
 {
-    unsafe { gl::Enable(gl::DEPTH_TEST); }
-
     let ubo_global = &mut local.ubo_global;
     let ubo_joints = &mut local.ubo_joints;
     for (pos, mut visual) in visuals_query.iter_mut() {
@@ -399,7 +511,6 @@ fn draw_visuals(local: &mut RendererResources, sim_time: &SimTime, models: &Mode
 fn draw_colliders(local: &mut RendererResources, models: &Res<ModelManager>,
     colliders_query: &Query<(&Transform, &Collider), Without<PlayerCamera>>)
 {
-    unsafe { gl::Enable(gl::DEPTH_TEST); }
     local.ps1_tess_shader.use_program();
 
     local.ubo_material.set_has_base_color_texture(&false);
@@ -435,7 +546,6 @@ fn draw_colliders(local: &mut RendererResources, models: &Res<ModelManager>,
 fn render_screen_effects(run_time: RunTime, local: &RendererResources, texture_manager: &mut ResMut<TextureManager>,
     shader_manager: &mut ResMut<ShaderManager>, effect_query: &mut Query<&mut ScreenEffect>)
 {
-    unsafe { gl::Disable(gl::DEPTH_TEST); }
     for mut effect in effect_query.iter_mut() {
         if effect.run_time == run_time {
             if let Some(texture) = effect.get_texture(texture_manager.as_mut()) {
@@ -454,7 +564,6 @@ fn final_composite(local: &RendererResources, window_settings: &Res<WindowSettin
     // Disable depth test for blitting operations
     unsafe {
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
-        gl::Disable(gl::DEPTH_TEST);
     }
 
     let yiq_framebuffer = local.yiq_framebuffer.as_ref().unwrap();

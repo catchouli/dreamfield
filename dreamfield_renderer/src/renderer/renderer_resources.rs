@@ -22,6 +22,7 @@ pub struct RendererResources {
     pub world_meshes: HashMap<i32, Mesh>,
     pub world_textures: HashMap<i32, Texture>,
     pub text_mesh: EditableMesh,
+    pub portal_meshes: HashMap<i32, Mesh>,
 }
 
 impl FromWorld for RendererResources {
@@ -79,7 +80,8 @@ impl FromWorld for RendererResources {
             models: HashMap::new(),
             world_meshes: HashMap::new(),
             world_textures: HashMap::new(),
-            text_mesh
+            text_mesh,
+            portal_meshes: HashMap::new(),
         }
     }
 }

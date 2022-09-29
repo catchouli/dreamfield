@@ -9,7 +9,7 @@ use dreamfield_system::GameHost;
 use app_state::AppState;
 
 /// The initial app state
-const INITIAL_STATE: AppState = AppState::SplashScreen;
+const INITIAL_STATE: AppState = AppState::MainGame;
 
 /// The fixed update frequency
 const FIXED_UPDATE: i32 = 15;

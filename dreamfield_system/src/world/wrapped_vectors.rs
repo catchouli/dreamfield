@@ -32,6 +32,12 @@ impl<'a, C: Context> Readable<'a, C> for WrappedVector3 {
     }
 }
 
+impl From<Vector3<f32>> for WrappedVector3 {
+    fn from(v: Vector3<f32>) -> Self {
+        WrappedVector3(v)
+    }
+}
+
 /// A wrapper for Vector4<f32> that's serializable
 #[derive(Clone, Debug)]
 pub struct WrappedVector4(pub Vector4<f32>);
@@ -66,6 +72,12 @@ impl<'a, C: Context> Readable<'a, C> for WrappedVector4 {
 }
 
 
+impl From<Vector4<f32>> for WrappedVector4 {
+    fn from(v: Vector4<f32>) -> Self {
+        WrappedVector4(v)
+    }
+}
+
 /// A wrapped for Matrix4<f32> that's serializable
 #[derive(Clone, Debug)]
 pub struct WrappedMatrix4(pub Matrix4<f32>);
@@ -96,5 +108,11 @@ impl<'a, C: Context> Readable<'a, C> for WrappedMatrix4 {
         let z = *WrappedVector4::read_from(reader)?.as_vec();
         let w = *WrappedVector4::read_from(reader)?.as_vec();
         Ok(WrappedMatrix4(Matrix4::from_cols(x, y, z, w)))
+    }
+}
+
+impl From<Matrix4<f32>> for WrappedMatrix4 {
+    fn from(m: Matrix4<f32>) -> Self {
+        WrappedMatrix4(m)
     }
 }

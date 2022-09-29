@@ -25,6 +25,7 @@ pub struct WorldChunk {
     meshes: Vec<WorldChunkMesh>,
     instances: Vec<WorldChunkInstance>,
     entities: Vec<WorldChunkEntity>,
+    portals: Vec<WorldChunkPortal>,
 }
 
 impl WorldChunk {
@@ -35,6 +36,7 @@ impl WorldChunk {
             meshes: Vec::new(),
             instances: Vec::new(),
             entities: Vec::new(),
+            portals: Vec::new(),
         }
     }
 
@@ -58,6 +60,11 @@ impl WorldChunk {
         &self.entities
     }
 
+    /// Get the chunk's portals
+    pub fn portals(&self) -> &[WorldChunkPortal] {
+        &self.portals
+    }
+
     /// Add a mesh to a world chunk
     pub fn add_mesh(&mut self, mesh: WorldChunkMesh) {
         self.aabb.expand_with_aabb(mesh.aabb());
@@ -75,6 +82,11 @@ impl WorldChunk {
     /// Add an entity to a world chunk
     pub fn add_entity(&mut self, entity: WorldChunkEntity) {
         self.entities.push(entity);
+    }
+
+    /// Add a portal to a world chunk
+    pub fn add_portal(&mut self, portal: WorldChunkPortal) {
+        self.portals.push(portal);
     }
 
     /// Get the chunk filename for a given chunk index
@@ -253,5 +265,51 @@ impl WorldChunkEntity {
 
     pub fn extras(&self) -> Option<&String> {
         self.extras.as_ref()
+    }
+}
+
+/// A portal in the world
+#[derive(Clone, Readable, Writable, Debug)]
+pub struct WorldChunkPortal {
+    /// The world transform of the portal
+    world_transform: WrappedMatrix4,
+    /// The relative transform the portal points to
+    relative_transform: WrappedMatrix4,
+    vertices: Vec<f32>,
+    indices: Vec<u16>,
+    portal_index: i32,
+}
+
+impl WorldChunkPortal {
+    pub fn new(world_transform: WrappedMatrix4, relative_transform: WrappedMatrix4, vertices: Vec<f32>,
+        indices: Vec<u16>, portal_index: i32) -> Self
+    {
+        Self {
+            world_transform,
+            relative_transform,
+            vertices,
+            indices,
+            portal_index
+        }
+    }
+
+    pub fn world_transform(&self) -> &Matrix4<f32> {
+        self.world_transform.as_mat()
+    }
+
+    pub fn relative_transform(&self) -> &Matrix4<f32> {
+        self.relative_transform.as_mat()
+    }
+
+    pub fn index(&self) -> i32 {
+        self.portal_index
+    }
+
+    pub fn vertices(&self) -> &[f32] {
+        &self.vertices
+    }
+
+    pub fn indices(&self) -> &[u16] {
+        &self.indices
     }
 }

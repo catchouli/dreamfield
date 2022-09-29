@@ -13,6 +13,7 @@ use byteorder::{ReadBytesExt, LittleEndian};
 use serde_json::value::RawValue;
 use speedy::Writable;
 use crate::build_log;
+use crate::world::world_chunk::WorldChunkPortal;
 use serde::{Deserialize, Serialize};
 
 /// Include a world model at compile time, for use in build.rs to specify what models to build into
@@ -36,14 +37,24 @@ macro_rules! build_log {
 /// The mesh extras we support
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct WorldNodeExtras {
+    /// Node type, one of: instances, entity, portal
     #[serde(default)]
     pub node_type: Option<String>,
 
+    /// Mesh to render for node_type "instances"
     #[serde(default)]
     pub instance_mesh: Option<String>,
 
+    /// Entity to spawn for node_type "entity"
     #[serde(default)]
     pub object_id: Option<String>,
+
+    /// Portal type for note_type "portal", either "to_child" or "to_parent" (for specifying the
+    /// relative transform). For example, for bidirectional portals, one should be the parent of
+    /// the other, and the parent should specify "to_child", while the child should specify
+    /// "to_parent".
+    #[serde(default)]
+    pub portal_type: Option<String>,
 }
 
 
@@ -163,6 +174,29 @@ impl WorldBuilder {
                                 node.name().unwrap_or("no-name")));
 
                         self.add_entity(&prim, &world_transform, object_id, &buffers, node_extras);
+                    }
+                    else if node_type == "portal" {
+                        let portal_type = node_extras_parsed.as_ref()
+                            .map(|e| e.portal_type.clone())
+                            .flatten()
+                            .expect(&format!("Node {} with node_type = portal must have portal_type",
+                                node.name().unwrap_or("no-name")));
+
+                        let relative_transform = match portal_type.as_str() {
+                            "to_parent" => local_transform.invert().unwrap(),
+                            "to_child" => {
+                                let mat: Matrix4<f32> = node.children()
+                                    .next()
+                                    .expect("Portal with mode to_child has no children")
+                                    .transform()
+                                    .matrix()
+                                    .into();
+                                mat.invert().unwrap()
+                            },
+                            _ => panic!("Invalid portal type {}", portal_type)
+                        };
+
+                        self.add_portal(node, &prim, world_transform, relative_transform, &buffers, world_mesh_count);
                     }
                 }
                 else {
@@ -419,6 +453,94 @@ impl WorldBuilder {
             });
 
         chunk.add_entity(WorldChunkEntity::new(entity_id, object_id, *world_transform, points, raw_extras.map(|e| e.get().to_string())));
+    }
+
+    /// Add a gltf primitive to the world as a WorldChunkPortal
+    fn add_portal(&mut self, node: &gltf::Node, prim: &gltf::Primitive, world_transform: Matrix4<f32>,
+        relative_transform: Matrix4<f32>, buffers: &[buffer::Data], world_mesh_count: &mut i32)
+    {
+        // Read indices for mesh
+        let indices = prim.indices().map(|accessor| {
+            let buffer_view = accessor.view().unwrap();
+            let buffer_index = buffer_view.buffer().index();
+
+            let buffer = &buffers[buffer_index];
+
+            if accessor.data_type() != gltf::accessor::DataType::U16 {
+                panic!("not u16 mesh indices: {:?}", accessor.data_type());
+            }
+            let data_type_size = std::mem::size_of::<u16>();
+
+            let offset = buffer_view.offset();
+            let length_bytes = buffer_view.length();
+            let length_elements = length_bytes / data_type_size;
+
+            let mut indices = vec![0; length_elements];
+            let mut slice = &buffer[offset..offset+length_bytes];
+            slice.read_u16_into::<LittleEndian>(&mut indices).expect("Failed!");
+
+            indices
+        });
+
+        // Read position attribute for mesh
+        let vertices = prim.attributes()
+            .find(|attrib| attrib.0 == Semantic::Positions)
+            .map(|(_, accessor)| {
+                let buffer_view  = accessor.view().unwrap();
+                let buffer_index = buffer_view.buffer().index();
+
+                let buffer = &buffers[buffer_index];
+
+                let attrib_stride = buffer_view.stride().unwrap_or(0) as i32;
+                if attrib_stride != 0 {
+                    panic!("unhandled");
+                }
+
+                // Assuming that it's always gl::FLOAT but I might be wrong
+                let data_size_type = std::mem::size_of::<f32>();
+
+                let offset = buffer_view.offset();
+                let length_bytes = buffer_view.length();
+                let length_elements = length_bytes / data_size_type;
+
+                let mut vertices = vec![0.0; length_elements];
+                let mut slice = &buffer[offset..offset+length_bytes];
+                slice.read_f32_into::<LittleEndian>(&mut vertices).expect("Failed!");
+
+                vertices
+        })
+        .expect("Portal must have vertices");
+
+        // Enforce that we now have indices and vertices, if we want to support non-indexed
+        // meshes (which are uncommon and blender's gltf exporter doesn't output them),
+        // we'll have to change this
+        let indices = indices.expect(&format!("Mesh {} must have indices", node.name().unwrap_or("no-name")));
+        assert!(indices.len() % 3 == 0);
+        assert!(vertices.len() % 3 == 0);
+
+        // Calculate mesh aabb
+        let mut aabb = Aabb::new();
+        for v in vertices.chunks_exact(3) {
+            aabb.expand_with_point(&vec3(v[0], v[1], v[2]));
+        }
+
+        // Build portal
+        let portal = WorldChunkPortal::new(world_transform.into(), relative_transform.into(), vertices, indices, *world_mesh_count);
+        *world_mesh_count += 1;
+
+        // Add the mesh to each chunk that the mesh overlaps
+        if let Some((min, max)) = aabb.min_max().map(|(a, b)| (a.clone(), b.clone())) {
+            // Get the min and max
+            let (chunk_x_min, chunk_z_min) = WorldChunk::point_to_chunk_index(&min);
+            let (chunk_x_max, chunk_z_max) = WorldChunk::point_to_chunk_index(&max);
+
+            for x in chunk_x_min..=chunk_x_max {
+                for z in chunk_z_min..=chunk_z_max {
+                    self.get_chunk((x, z))
+                        .add_portal(portal.clone());
+                }
+            }
+        }
     }
 
     /// Build the vertices for a single mesh from a gltf::Primitive

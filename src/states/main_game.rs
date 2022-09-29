@@ -50,7 +50,7 @@ fn enter_main_game(mut commands: Commands) {
         .insert(ScreenEffect::new(RunTime::PreScene, "sky", Some("sky")));
 
     // Create player
-    let (initial_pos, initial_rot) = _VILLAGE_ENTRANCE;
+    let (initial_pos, initial_rot) = _LOOKING_AT_CORRIDOR;
     commands.spawn()
         .insert(EntityName::new("Player"))
         // Entrance to village

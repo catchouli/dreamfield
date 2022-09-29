@@ -48,9 +48,9 @@ impl Framebuffer {
         unsafe {
             gl::GenRenderbuffers(1, &mut depth_buffer);
             gl::BindRenderbuffer(gl::RENDERBUFFER, depth_buffer);
-            gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT24, width, height);
+            gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH24_STENCIL8, width, height);
 
-            gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer);
+            gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_STENCIL_ATTACHMENT, gl::RENDERBUFFER, depth_buffer);
         }
 
         // Check if the current configuration is supported
