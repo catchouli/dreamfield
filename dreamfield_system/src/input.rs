@@ -32,7 +32,8 @@ pub struct InputState {
     pub inputs: [bool; InputName::Last as usize],
     pub last_inputs: [bool; InputName::Last as usize],
     pub cursor_captured: bool,
-    pub mouse_diff: (f64, f64)
+    pub mouse_diff: (f64, f64),
+    pub mouse_scroll: f64,
 }
 
 impl InputState {
@@ -41,7 +42,8 @@ impl InputState {
             inputs: [false; InputName::Last as usize],
             last_inputs: [false; InputName::Last as usize],
             cursor_captured: false,
-            mouse_diff: (0.0, 0.0)
+            mouse_diff: (0.0, 0.0),
+            mouse_scroll: 0.0,
         }
     }
 

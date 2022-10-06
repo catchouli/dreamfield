@@ -47,6 +47,7 @@ impl GlfwWindow {
         window.set_framebuffer_size_polling(true);
         window.set_mouse_button_polling(true);
         window.set_focus_polling(true);
+        window.set_scroll_polling(true);
         window.make_current();
 
         // Load all gl functions

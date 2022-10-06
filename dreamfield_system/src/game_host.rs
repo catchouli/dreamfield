@@ -68,13 +68,14 @@ impl GameHost {
         // Start main loop
         while !self.window.window.should_close() {
             // Handle events
-            for event in self.window.poll_events() {
-                world.resource_scope(|world, mut input_state| {
-                    world.resource_scope(|_, mut render_settings| {
+            world.resource_scope(|world, mut input_state: Mut<InputState>| {
+                world.resource_scope(|_, mut render_settings| {
+                    input_state.mouse_scroll = 0.0;
+                    for event in self.window.poll_events() {
                         Self::handle_window_event(&mut self.window, event, &mut input_state, &mut render_settings, &mut colemak_mode);
-                    });
+                    }
                 });
-            }
+            });
 
             // Handle mouse movement
             world.resource_scope(|_, mut input_state| {
@@ -173,6 +174,9 @@ impl GameHost {
                     input_state.inputs[input as usize] = false;
                 }
             }
+            glfw::WindowEvent::Scroll(_, vert) => {
+                input_state.mouse_scroll = vert;
+            }
             _ => {}
         }
     }
@@ -192,7 +196,7 @@ impl GameHost {
             Key::Left => Some(InputName::CamLookLeft),
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
-            //Key::LeftShift => Some(InputName::Run),
+            Key::LeftShift => Some(InputName::Run),
             Key::E => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
             Key::Escape => Some(InputName::Pause),
@@ -217,7 +221,7 @@ impl GameHost {
             Key::Left => Some(InputName::CamLookLeft),
             Key::Down => Some(InputName::CamLookDown),
             Key::Right => Some(InputName::CamLookRight),
-            //Key::LeftShift => Some(InputName::Run),
+            Key::LeftShift => Some(InputName::Run),
             Key::F => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
             Key::Escape => Some(InputName::Pause),
@@ -231,6 +235,7 @@ impl GameHost {
                              input_state: &mut InputState) -> (f64, f64)
     {
         let (mouse_x, mouse_y) = window.window.get_cursor_pos();
+        
         let (mouse_dx, mouse_dy) = (mouse_x - old_mouse_x, mouse_y - old_mouse_y);
 
         input_state.mouse_diff = (mouse_dx, mouse_dy);
