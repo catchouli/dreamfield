@@ -16,13 +16,13 @@ std140 = { git = "https://github.com/catchouli/std140.rs" }
 byteorder = "1.4.3"
 bevy_ecs = "0.8.1"
 gltf = { version = "1.0", features = ["extras", "names"] }
-dreamfield_system = { path = "dreamfield_system" }
-dreamfield_renderer = { path = "dreamfield_renderer" }
-dreamfield_macros = { path = "dreamfield_macros" }
-dreamfield_traits = { path = "dreamfield_traits" }
+dreamfield_system = { path = "dreamfield_engine/dreamfield_system" }
+dreamfield_renderer = { path = "dreamfield_engine/dreamfield_renderer" }
+dreamfield_macros = { path = "dreamfield_engine/dreamfield_macros" }
+dreamfield_traits = { path = "dreamfield_engine/dreamfield_traits" }
 speedy = "0.8.3"
 include_dir = "0.7.2"
 
 [build-dependencies]
-dreamfield_system = { path = "dreamfield_system" }
+dreamfield_system = { path = "dreamfield_engine/dreamfield_system" }
 speedy = "0.8.3"
