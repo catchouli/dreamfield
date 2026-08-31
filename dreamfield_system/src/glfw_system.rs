@@ -20,6 +20,8 @@ impl GlfwWindow {
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
         glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+        // Required on macOS to create a 3.2+ core context; ignored on other platforms
+        glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
 
         // Get the initial window size
         let (width, height) = size.unwrap_or_else(|| {
@@ -92,6 +94,12 @@ impl GlfwWindow {
     fn set_debug_log_level(debug_log_level: u32) {
         unsafe {
             if debug_log_level != 0 {
+                // Debug output requires GL 4.3+, unavailable on some platforms (eg. macOS)
+                if !gl::DebugMessageCallback::is_loaded() {
+                    log::info!("GL debug output not supported on this platform");
+                    return;
+                }
+
                 gl::Enable(gl::DEBUG_OUTPUT);
                 gl::DebugMessageCallback(Some(GlfwWindow::handle_debug_message), debug_log_level as *const GLvoid);
             }
