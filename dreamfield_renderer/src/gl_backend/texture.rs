@@ -101,7 +101,11 @@ impl Texture {
 
     /// Generate mipmaps
     pub fn gen_mipmaps(&self) {
-        unsafe { gl::GenerateTextureMipmap(self.id) }
+        // Bind-based rather than the DSA GenerateTextureMipmap, for macOS compatibility
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, self.id);
+            gl::GenerateMipmap(gl::TEXTURE_2D)
+        }
     }
 
     /// Bind texture

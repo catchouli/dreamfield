@@ -20,7 +20,8 @@ impl<T: Default + UniformSetters> UniformBuffer<T> {
         let mut ubo: u32 = 0;
         
         unsafe {
-            gl::CreateBuffers(1, &mut ubo);
+            // Note: GenBuffers rather than the DSA CreateBuffers, for macOS compatibility
+            gl::GenBuffers(1, &mut ubo);
             gl::BindBuffer(gl::UNIFORM_BUFFER, ubo);
             gl::BufferData(gl::UNIFORM_BUFFER,
                            std::mem::size_of::<T>() as isize,
