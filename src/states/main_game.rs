@@ -1,8 +1,9 @@
 use bevy_ecs::prelude::*;
 use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, Vector3, Vector2};
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime};
-use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius, resources::{InputState, InputName}};
-use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel}};
+use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius,
+    resources::{InputState, InputName}, intersection::{Collider, Shape}};
+use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel, Gremlin, Health}};
 
 /// The player position entering the village
 const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, -0.5));
@@ -18,6 +19,9 @@ const _LOOKING_AT_TORCH: (Vector3<f32>, Vector2<f32>) = (vec3(-33.04357, 4.42999
 
 /// Looking at corridor
 const _LOOKING_AT_CORRIDOR: (Vector3<f32>, Vector2<f32>) = (vec3(5.2, 0.8, 12.8), vec2(0.03, 2.0));
+
+/// Offset from the village entrance where the gremlin spawns
+const GREMLIN_SPAWN_OFFSET: Vector3<f32> = vec3(4.0, 0.0, -4.0);
 
 /// Main game resource
 pub struct MainGameResource {
@@ -67,6 +71,16 @@ fn enter_main_game(mut commands: Commands) {
         .insert(Transform::new(initial_pos, Matrix3::identity()))
         .insert(Visual::new("sword", "ps1", false, None))
         .insert(SwordViewmodel);
+
+    // Create gremlin
+    let gremlin_pos = initial_pos + GREMLIN_SPAWN_OFFSET;
+    commands.spawn()
+        .insert(EntityName::new("Gremlin"))
+        .insert(Transform::new(gremlin_pos, Matrix3::identity()))
+        .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 0.25, 0.0), vec3(0.3, 0.25, 0.3))))
+        .insert(Health::new(60.0))
+        .insert(Gremlin::new())
+        .insert(Visual::new("gremlin", "ps1", false, None));
 
     // Create fire orb
     commands.spawn()
