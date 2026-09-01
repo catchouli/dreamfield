@@ -16,6 +16,7 @@ Derived from the existing codebase.
 - `else` goes on its own line after the closing brace (`}\nelse {`).
 - When a fn signature wraps to multiple lines, put the opening brace on its own line.
 - Aim for a ~100 character line limit; a few pre-existing exceptions exist.
+- Parenthesize compound expressions when assigning them (e.g. `x = (a == b);`).
 
 ### Comments & docs
 - `///` doc comments on most items, including consts and private fns. Short, descriptive phrases.
