@@ -1,7 +1,8 @@
 pub mod player_movement;
 pub mod ball;
 pub mod attack;
-pub mod gremlin;
+pub mod goblin;
+pub mod ground_movement;
 mod health;
 mod entity_spawner;
 mod minecart;
@@ -12,7 +13,8 @@ use bevy_ecs::schedule::SystemSet;
 pub use player_movement::{PlayerMovement, PlayerMovementMode};
 pub use ball::Ball;
 pub use attack::{PlayerAttack, SwordViewmodel};
-pub use gremlin::Gremlin;
+pub use goblin::Goblin;
+pub use goblin::PLAYER_MAX_HEALTH;
 pub use health::Health;
 
 /// Sim systems
@@ -21,7 +23,7 @@ pub fn systems() -> SystemSet {
         .label("sim")
         .with_system(player_movement::player_update)
         .with_system(attack::attack_update)
-        .with_system(gremlin::gremlin_update)
+        .with_system(goblin::goblin_update)
         .with_system(ball::ball_update)
         .with_system(entity_spawner::entity_spawner)
         .with_system(minecart::update_minecart)
