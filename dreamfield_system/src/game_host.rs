@@ -136,10 +136,14 @@ impl GameHost {
             glfw::WindowEvent::FramebufferSize(width, height) => {
                 renderer_settings.window_size = (width, height);
             }
-            glfw::WindowEvent::MouseButton(_, Action::Press, _) => {
-                if !window.is_mouse_captured() {
+            glfw::WindowEvent::MouseButton(glfw::MouseButton::Button1, action, _) => {
+                // Clicking captures the cursor; once captured, left click is the attack input
+                if action == Action::Press && !window.is_mouse_captured() {
                     window.set_mouse_captured(true);
                     input_state.cursor_captured = true;
+                }
+                else {
+                    input_state.inputs[InputName::Attack as usize] = (action == Action::Press);
                 }
             }
             glfw::WindowEvent::Key(Key::LeftAlt, _, Action::Press, _) | glfw::WindowEvent::Focus(false) => {
