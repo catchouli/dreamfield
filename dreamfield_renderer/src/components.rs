@@ -229,3 +229,7 @@ impl TextBox {
 /// A tag component for the debug diagnostics
 #[derive(Component)]
 pub struct DiagnosticsTextBox;
+
+/// A tag component for the player health bar
+#[derive(Component)]
+pub struct HealthBar;
