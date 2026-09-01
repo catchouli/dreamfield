@@ -2,7 +2,7 @@ mod intersection_tests;
 
 use std::collections::HashSet;
 
-use bevy_ecs::{prelude::{Component, Entity}, system::{ResMut, Query}, query::Changed};
+use bevy_ecs::{prelude::{Component, Entity}, system::{RemovedComponents, ResMut, Query}, query::Changed};
 use cgmath::Vector3;
 
 pub use intersection_tests::*;
@@ -43,5 +43,14 @@ pub fn update_world_chunks_system(mut world: ResMut<WorldChunkManager>,
 {
     for (e, transform, mut collider, name) in query.iter_mut() {
         world.update_entity_location(e, transform, &mut collider, name);
+    }
+}
+
+/// A system for removing despawned entities from the world
+pub fn remove_despawned_entities_system(mut world: ResMut<WorldChunkManager>,
+    mut removed: RemovedComponents<Transform>)
+{
+    for e in removed.iter() {
+        world.remove_entity_location(e);
     }
 }

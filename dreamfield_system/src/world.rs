@@ -136,6 +136,15 @@ impl WorldChunkManager {
         }
     }
 
+    /// Remove a despawned entity's location from the world, for collision purposes
+    pub fn remove_entity_location(&mut self, entity_id: Entity) {
+        self.entity_locations.remove(&entity_id);
+
+        for chunk_entities in self.chunk_entities.values_mut() {
+            chunk_entities.remove(&entity_id);
+        }
+    }
+
     /// Add an entity to a chunk
     fn add_entity_to_chunk(&mut self, entity_id: Entity, chunk: ChunkIndex) {
         let chunk_entities = self.chunk_entities
