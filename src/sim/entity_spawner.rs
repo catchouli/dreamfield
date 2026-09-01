@@ -4,6 +4,7 @@ use dreamfield_renderer::components::{Visual, Animation};
 use dreamfield_system::{systems::entity_spawner::EntitySpawnEvent, components::{Transform, EntityName}, intersection::{Collider, Shape}};
 
 use super::minecart::Minecart;
+use super::health::Health;
 
 /// The entity spawner
 pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpawnEvent>) {
@@ -15,6 +16,7 @@ pub fn entity_spawner(mut commands: Commands, mut reader: EventReader<EntitySpaw
                     .insert(Transform::new(pos, rot))
                     .insert(EntityName::new("Elf"))
                     .insert(Collider::new(Shape::BoundingSpheroid(vec3(0.0, 1.0, 0.0), vec3(0.25, 1.0, 0.25))))
+                    .insert(Health::new(100.0))
                     .insert(Visual::new("elf", "ps1", false, Some(Animation::Loop("Idle".to_string()))));
             },
             "Minecart" => {

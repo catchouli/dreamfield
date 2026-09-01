@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, Vector3, Vector2};
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime};
 use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius, resources::{InputState, InputName}};
-use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball}};
+use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel}};
 
 /// The player position entering the village
 const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, -0.5));
@@ -57,8 +57,16 @@ fn enter_main_game(mut commands: Commands) {
         .insert(Transform::new(initial_pos, Matrix3::identity()))
         .insert(PlayerMovement::new_pos_look(PlayerMovementMode::Normal, initial_rot))
         .insert(PlayerMovement::collider())
+        .insert(PlayerAttack::new())
         .insert(create_player_camera())
         .insert(EntitySpawnRadius::new(10.0));
+
+    // Create sword viewmodel
+    commands.spawn()
+        .insert(EntityName::new("Sword"))
+        .insert(Transform::new(initial_pos, Matrix3::identity()))
+        .insert(Visual::new("sword", "ps1", false, None))
+        .insert(SwordViewmodel);
 
     // Create fire orb
     commands.spawn()
