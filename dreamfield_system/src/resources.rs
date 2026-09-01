@@ -27,6 +27,7 @@ pub struct Diagnostics {
     pub player_pitch_yaw: Vector2<f32>,
     pub player_health: f32,
     pub player_max_health: f32,
+    pub damage_flash: f32,
 }
 
 impl Default for Diagnostics {
@@ -38,6 +39,7 @@ impl Default for Diagnostics {
             player_pitch_yaw: vec2(0.0, 0.0),
             player_health: 0.0,
             player_max_health: 1.0,
+            damage_flash: 0.0,
         }
     }
 }

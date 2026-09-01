@@ -6,9 +6,10 @@ use cgmath::{Vector3, vec3, InnerSpace, Zero, Matrix3, Rad, SquareMatrix};
 
 use dreamfield_system::components::Transform;
 use dreamfield_system::intersection::{Collider, Shape};
-use dreamfield_system::resources::SimTime;
+use dreamfield_system::resources::{Diagnostics, SimTime};
 use dreamfield_system::world::{WorldChunkManager, world_collision::WorldCollision};
 
+use super::damage_flash::FLASH_TRIGGER_INTENSITY;
 use super::ground_movement::move_on_ground;
 use super::health::Health;
 use super::player_movement::PlayerMovement;
@@ -99,6 +100,7 @@ impl Goblin {
 pub fn goblin_update(sim_time: Res<SimTime>,
                      mut collision: ResMut<WorldCollision>,
                      mut world: ResMut<WorldChunkManager>,
+                     mut diagnostics: ResMut<Diagnostics>,
                      mut param_set: ParamSet<(
                          Query<(&mut Transform, &mut Health, &PlayerMovement), Without<Goblin>>,
                          Query<(Entity, &mut Goblin, &mut Transform)>)>)
@@ -186,6 +188,8 @@ pub fn goblin_update(sim_time: Res<SimTime>,
 
     // Apply strike damage to the player, respawning them if they died
     if player_damage > 0.0 {
+        diagnostics.damage_flash = FLASH_TRIGGER_INTENSITY;
+
         let mut p0 = param_set.p0();
         let (mut transform, mut health, _) = p0.single_mut();
 

@@ -2,6 +2,7 @@ pub mod player_movement;
 pub mod ball;
 pub mod attack;
 pub mod goblin;
+pub mod damage_flash;
 pub mod ground_movement;
 mod health;
 mod entity_spawner;
@@ -24,6 +25,7 @@ pub fn systems() -> SystemSet {
         .with_system(player_movement::player_update)
         .with_system(attack::attack_update)
         .with_system(goblin::goblin_update)
+        .with_system(damage_flash::damage_flash_update)
         .with_system(ball::ball_update)
         .with_system(entity_spawner::entity_spawner)
         .with_system(minecart::update_minecart)
