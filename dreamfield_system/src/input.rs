@@ -20,6 +20,7 @@ pub enum InputName {
     Run,
     Jump,
     Use,
+    Attack,
     Debug,
     Pause,
     EnableDiagnostics,

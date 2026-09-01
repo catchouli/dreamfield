@@ -35,16 +35,16 @@ const GRAVITY_ACCELERATION: f32 = 9.8;
 
 /// The character eye level. According to a cursory google, this is on average 4.5" below the top
 /// of your head, which is just over 10cm
-const CHAR_EYE_LEVEL: f32 = CHAR_HEIGHT - 0.10;
+pub const CHAR_EYE_LEVEL: f32 = CHAR_HEIGHT - 0.10;
 
 /// The world forward direction
-const WORLD_FORWARD: Vector3<f32> = vec3(0.0, 0.0, -1.0);
+pub const WORLD_FORWARD: Vector3<f32> = vec3(0.0, 0.0, -1.0);
 
 /// The world up direction
-const WORLD_UP: Vector3<f32> = vec3(0.0, 1.0, 0.0);
+pub const WORLD_UP: Vector3<f32> = vec3(0.0, 1.0, 0.0);
 
 /// The world right direction
-const WORLD_RIGHT: Vector3<f32> = vec3(1.0, 0.0, 0.0);
+pub const WORLD_RIGHT: Vector3<f32> = vec3(1.0, 0.0, 0.0);
 
 /// The acceleration when on the ground
 const ACCELERATE: f32 = 20.0;
