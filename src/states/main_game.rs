@@ -3,7 +3,7 @@ use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, Vecto
 use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime, HealthBar};
 use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius,
     resources::{InputState, InputName}};
-use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel, Goblin, Health, PLAYER_MAX_HEALTH}};
+use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel, MeleeEnemy, Goblin, Rat, Health, PLAYER_MAX_HEALTH}};
 
 /// The player position entering the village
 const _VILLAGE_ENTRANCE: (Vector3<f32>, Vector2<f32>) = (vec3(-125.1, 5.8, 123.8), vec2(0.063, -0.5));
@@ -33,6 +33,18 @@ const GOBLIN_SPAWN_POSITIONS: [Vector3<f32>; 5] = [
 
 /// How far above their listed position goblins spawn, so they fall to the terrain
 const GOBLIN_SPAWN_DROP_HEIGHT: f32 = 1.0;
+
+/// Positions where giant rats spawn around the village, near known walkable spots. Heights
+/// don't need to be exact, as enemies fall to the terrain on their first update.
+const RAT_SPAWN_POSITIONS: [Vector3<f32>; 4] = [
+    vec3(-119.0, 5.8, 122.0),
+    vec3(-123.0, 5.8, 118.0),
+    vec3(-114.0, 5.8, 120.5),
+    vec3(-101.0, 6.567, 82.0),
+];
+
+/// How far above their listed position rats spawn, so they fall to the terrain
+const RAT_SPAWN_DROP_HEIGHT: f32 = 1.0;
 
 /// Main game resource
 pub struct MainGameResource {
@@ -96,8 +108,22 @@ fn enter_main_game(mut commands: Commands) {
             .insert(Transform::new(goblin_pos, Matrix3::identity()))
             .insert(Goblin::collider())
             .insert(Health::new(60.0))
-            .insert(Goblin::new())
+            .insert(Goblin)
+            .insert(MeleeEnemy::new(Goblin::params()))
             .insert(Visual::new("goblin", "ps1", false, None));
+    }
+
+    // Create giant rats around the village
+    for pos in RAT_SPAWN_POSITIONS {
+        let rat_pos = pos + vec3(0.0, RAT_SPAWN_DROP_HEIGHT, 0.0);
+        commands.spawn()
+            .insert(EntityName::new("Rat"))
+            .insert(Transform::new(rat_pos, Matrix3::identity()))
+            .insert(Rat::collider())
+            .insert(Health::new(50.0))
+            .insert(Rat)
+            .insert(MeleeEnemy::new(Rat::params()))
+            .insert(Visual::new("rat", "ps1", false, None));
     }
 
     // Create fire orb
