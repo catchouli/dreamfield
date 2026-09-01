@@ -36,5 +36,6 @@ pub fn systems() -> SystemSet {
     SystemSet::new()
         .with_system(systems::entity_spawner::entity_spawner_system)
         .with_system(intersection::update_world_chunks_system)
+        .with_system(intersection::remove_despawned_entities_system)
 }
 
