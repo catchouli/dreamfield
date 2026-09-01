@@ -11,7 +11,7 @@ use renderer_resources::RendererResources;
 use crate::gl_backend::*;
 use crate::gl_backend::bindings::AttribBinding;
 use crate::resources::{ModelManager, TextureManager, ShaderManager, FontManager};
-use crate::components::{PlayerCamera, Visual, ScreenEffect, RunTime, TextBox, DiagnosticsTextBox};
+use crate::components::{PlayerCamera, Visual, ScreenEffect, RunTime, TextBox, DiagnosticsTextBox, HealthBar};
 use dreamfield_system::WindowSettings;
 use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_chunk::{WorldChunk, WorldChunkMesh, ChunkIndex};
@@ -26,12 +26,14 @@ pub fn renderer_system(
     mut textures: ResMut<TextureManager>,
     mut world: ResMut<WorldChunkManager>,
     mut shaders: ResMut<ShaderManager>,
+    diagnostics: Res<Diagnostics>,
     window_settings: Res<WindowSettings>,
     sim_time: Res<SimTime>,
     models: Res<ModelManager>,
     fonts: Res<FontManager>,
     player_query: Query<&PlayerCamera>,
     text_query: Query<&TextBox, Without<Disabled>>,
+    health_bar_query: Query<&HealthBar>,
     mut effect_query: Query<&mut ScreenEffect>,
     mut object_paramset: ParamSet<(
         Query<(&Transform, &mut Visual), Without<Disabled>>,
@@ -139,6 +141,19 @@ pub fn renderer_system(
 
     // Render post-scene effects
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
+
+    // Draw the health bar, if there is one
+    if !health_bar_query.is_empty() {
+        if let Ok(shader) = shaders.get("health_bar") {
+            unsafe {
+                gl::Disable(gl::DEPTH_TEST);
+                shader.use_program();
+                gl::Uniform1f(shader.get_loc("health_fraction"),
+                    (diagnostics.player_health / diagnostics.player_max_health).clamp(0.0, 1.0));
+                local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+            }
+        }
+    }
 
     // Render text
     unsafe { gl::Enable(gl::SCISSOR_TEST); }
