@@ -13,6 +13,7 @@ use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_collision::{WorldCollision, SpherecastResult};
 
 use super::health::Health;
+use super::goblin::PLAYER_MAX_HEALTH;
 
 /// The character's height
 const CHAR_HEIGHT: f32 = 1.8;
@@ -160,6 +161,7 @@ pub fn player_update(mut collision: ResMut<WorldCollision>,
         diagnostics.player_pos = player_transform.pos;
         diagnostics.player_pitch_yaw = player_movement.pitch_yaw;
         diagnostics.player_health = health.health;
+        diagnostics.player_max_health = PLAYER_MAX_HEALTH;
     }
 }
 
