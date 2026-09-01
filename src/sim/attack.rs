@@ -74,7 +74,7 @@ pub fn attack_update(sim_time: Res<SimTime>,
                          Query<(&Transform, &PlayerMovement, &mut PlayerAttack), Without<SwordViewmodel>>,
                          Query<&mut Transform, With<SwordViewmodel>>,
                          Query<(Entity, &Transform, &Collider, &mut Health, Option<&EntityName>),
-                               Without<SwordViewmodel>>)>)
+                               (Without<SwordViewmodel>, Without<PlayerAttack>)>)>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 

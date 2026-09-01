@@ -12,6 +12,8 @@ use dreamfield_system::resources::{SimTime, InputName, InputState, Diagnostics};
 use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_collision::{WorldCollision, SpherecastResult};
 
+use super::health::Health;
+
 /// The character's height
 const CHAR_HEIGHT: f32 = 1.8;
 
@@ -133,11 +135,11 @@ pub fn player_update(mut collision: ResMut<WorldCollision>,
                      mut world: ResMut<WorldChunkManager>,
                      mut diagnostics: ResMut<Diagnostics>,
                      input_state: Res<InputState>, sim_time: Res<SimTime>,
-                     mut query: Query<(Entity, &mut Transform, &mut PlayerCamera, &mut PlayerMovement, &Collider)>)
+                     mut query: Query<(Entity, &mut Transform, &mut PlayerCamera, &mut PlayerMovement, &Collider, &Health)>)
 {
     let time_delta = sim_time.sim_time_delta as f32;
 
-    for (entity_id, mut player_transform, mut cam, mut player_movement, collider) in query.iter_mut() {
+    for (entity_id, mut player_transform, mut cam, mut player_movement, collider, health) in query.iter_mut() {
         // Now move the player
         player_move(collision.as_mut(), world.as_mut(), &mut player_transform, &mut player_movement, collider,
             &input_state, entity_id, time_delta);
@@ -151,6 +153,7 @@ pub fn player_update(mut collision: ResMut<WorldCollision>,
         // Update diagnostics
         diagnostics.player_pos = player_transform.pos;
         diagnostics.player_pitch_yaw = player_movement.pitch_yaw;
+        diagnostics.player_health = health.health;
     }
 }
 
