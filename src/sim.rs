@@ -2,6 +2,8 @@ pub mod player_movement;
 pub mod ball;
 pub mod attack;
 pub mod goblin;
+pub mod rat;
+pub mod melee_enemy;
 pub mod damage_flash;
 pub mod ground_movement;
 mod health;
@@ -15,7 +17,8 @@ pub use player_movement::{PlayerMovement, PlayerMovementMode};
 pub use ball::Ball;
 pub use attack::{PlayerAttack, SwordViewmodel};
 pub use goblin::Goblin;
-pub use goblin::PLAYER_MAX_HEALTH;
+pub use rat::Rat;
+pub use melee_enemy::{MeleeEnemy, PLAYER_MAX_HEALTH};
 pub use health::Health;
 
 /// Sim systems
@@ -24,7 +27,7 @@ pub fn systems() -> SystemSet {
         .label("sim")
         .with_system(player_movement::player_update)
         .with_system(attack::attack_update)
-        .with_system(goblin::goblin_update)
+        .with_system(melee_enemy::melee_enemy_update)
         .with_system(damage_flash::damage_flash_update)
         .with_system(ball::ball_update)
         .with_system(entity_spawner::entity_spawner)
