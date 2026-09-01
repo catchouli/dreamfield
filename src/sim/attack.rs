@@ -99,7 +99,7 @@ pub fn attack_update(sim_time: Res<SimTime>,
         };
 
         // Deal damage partway through the swing
-        let swing_damage = swing_progress >= SWING_DAMAGE_FRACTION && !attack.damage_dealt;
+        let swing_damage = (swing_progress >= SWING_DAMAGE_FRACTION) && !attack.damage_dealt;
         if swing_damage {
             attack.damage_dealt = true;
         }

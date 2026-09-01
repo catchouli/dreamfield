@@ -143,7 +143,7 @@ impl GameHost {
                     input_state.cursor_captured = true;
                 }
                 else {
-                    input_state.inputs[InputName::Attack as usize] = action == Action::Press;
+                    input_state.inputs[InputName::Attack as usize] = (action == Action::Press);
                 }
             }
             glfw::WindowEvent::Key(Key::LeftAlt, _, Action::Press, _) | glfw::WindowEvent::Focus(false) => {
