@@ -142,6 +142,23 @@ pub fn renderer_system(
     // Render post-scene effects
     render_screen_effects(RunTime::PostScene, local, &mut textures, &mut shaders, &mut effect_query);
 
+    // Draw the damage flash, if there is one
+    if diagnostics.damage_flash > 0.001 {
+        if let Ok(shader) = shaders.get("damage_flash") {
+            unsafe {
+                gl::Disable(gl::DEPTH_TEST);
+                gl::Enable(gl::BLEND);
+                gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+                gl::DepthMask(gl::FALSE);
+                shader.use_program();
+                gl::Uniform1f(shader.get_loc("flash_intensity"), diagnostics.damage_flash);
+                local.full_screen_rect.draw_indexed(gl::TRIANGLES, 6);
+                gl::Disable(gl::BLEND);
+                gl::DepthMask(gl::TRUE);
+            }
+        }
+    }
+
     // Draw the health bar, if there is one
     if !health_bar_query.is_empty() {
         if let Ok(shader) = shaders.get("health_bar") {
