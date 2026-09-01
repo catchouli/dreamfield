@@ -45,6 +45,7 @@ pub fn create_model_manager() -> ModelManager {
         ("minecart", include_bytes!("../resources/models/minecart.glb")),
         ("capsule", include_bytes!("../resources/models/capsule.glb")),
         ("sword", include_bytes!("../resources/models/sword.glb")),
+        ("gremlin", include_bytes!("../resources/models/gremlin.glb")),
     ])
 }
 
