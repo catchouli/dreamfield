@@ -36,9 +36,10 @@ void main() {
     }
 
     // Border, empty slot, and health fill
-    bool in_border = rel.x < BORDER_WIDTH || rel.y < BORDER_WIDTH
-        || rel.x > BAR_SIZE.x - BORDER_WIDTH || rel.y > BAR_SIZE.y - BORDER_WIDTH;
-    bool in_fill = !in_border && rel.x < (BAR_SIZE.x - BORDER_WIDTH * 2.0) * health_fraction + BORDER_WIDTH;
+    bool in_border = (rel.x < BORDER_WIDTH || rel.y < BORDER_WIDTH
+        || rel.x > BAR_SIZE.x - BORDER_WIDTH || rel.y > BAR_SIZE.y - BORDER_WIDTH);
+    bool in_fill = (!in_border
+        && rel.x < (BAR_SIZE.x - BORDER_WIDTH * 2.0) * health_fraction + BORDER_WIDTH);
 
     vec3 color = in_border ? vec3(0.75, 0.6, 0.3) : vec3(0.05, 0.05, 0.05);
     if (in_fill) {
