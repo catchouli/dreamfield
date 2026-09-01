@@ -13,10 +13,6 @@ pub enum InputName {
     CamBackwards,
     CamStrafeLeft,
     CamStrafeRight,
-    CamLookUp,
-    CamLookLeft,
-    CamLookDown,
-    CamLookRight,
     Run,
     Jump,
     Use,
@@ -66,32 +62,6 @@ impl InputState {
     /// Clear whether just pressed or released
     pub fn clear_just_pressed(&mut self, name: InputName) {
         self.last_inputs[name as usize] = self.inputs[name as usize];
-    }
-
-    // Get the look input as a normalized float from 1 to -1. The first element is the left/right
-    // look input, where positive is movement to the right, and the second element is up/down
-    // movement, where positive is movement up.
-    pub fn get_look_input(&self) -> (f32, f32) {
-        let inputs = &self.inputs;
-
-        let cam_look_up = inputs[InputName::CamLookUp as usize];
-        let cam_look_down = inputs[InputName::CamLookDown as usize];
-        let cam_look_left = inputs[InputName::CamLookLeft as usize];
-        let cam_look_right = inputs[InputName::CamLookRight as usize];
-
-        let cam_look_vertical = match (cam_look_up, cam_look_down) {
-            (true, false) => 1.0,
-            (false, true) => -1.0,
-            _ => 0.0
-        };
-
-        let cam_look_horizontal = match (cam_look_left, cam_look_right) {
-            (true, false) => 1.0,
-            (false, true) => -1.0,
-            _ => 0.0
-        };
-
-        (cam_look_horizontal, cam_look_vertical)
     }
 
     /// Get the movement input as a normalize float from 1 to -1. The first element is the

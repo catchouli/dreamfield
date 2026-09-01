@@ -24,11 +24,8 @@ const MIN_DISTANCE_FROM_WALLS: f32 = 0.01;
 /// The minimum ground_normal y value to stop you from walking on steep slopes
 const MIN_WALK_NORMAL: f32 = 0.9;
 
-/// The camera look speed
-const CAM_LOOK_SPEED: f32 = 1.0;
-
-/// The camera fast look speed
-const CAM_LOOK_SPEED_FAST: f32 = 1.5;
+/// The camera look sensitivity, in radians per pixel of mouse movement
+const MOUSE_LOOK_SENSITIVITY: f32 = 0.0025;
 
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
@@ -163,7 +160,7 @@ fn player_move(collision: &mut WorldCollision, world: &mut WorldChunkManager, pl
     time_delta: f32)
 {
     // Update view direction
-    update_view_angles(player_movement, input_state, time_delta);
+    update_view_angles(player_movement, input_state);
     player_transform.rot = Matrix3::from(player_movement.orientation());
 
     if !player_movement.enabled {
@@ -351,19 +348,19 @@ fn recursive_slide(collision: &mut WorldCollision, world: &mut WorldChunkManager
     recursive_slide(collision, world, cbm, new_position, new_velocity_vector, ignore_entity, depth + 1)
 }
 
-/// Update the view direction
-fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
-    let (horz_input, vert_input) = input_state.get_look_input();
+/// Update the view direction from mouse movement
+fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState) {
+    // Only look around while the cursor is captured
+    if !input_state.cursor_captured {
+        return;
+    }
 
-    let look_speed = match input_state.is_held(InputName::Run) {
-        false => CAM_LOOK_SPEED,
-        true => CAM_LOOK_SPEED_FAST,
-    };
+    let (mouse_dx, mouse_dy) = input_state.mouse_diff;
 
     let pitch_yaw = &mut player_movement.pitch_yaw;
 
-    pitch_yaw.x = f32::clamp(pitch_yaw.x + vert_input * look_speed * time_delta, PITCH_MIN, PITCH_MAX);
-    pitch_yaw.y = pitch_yaw.y + horz_input * look_speed * time_delta;
+    pitch_yaw.x = f32::clamp(pitch_yaw.x - mouse_dy as f32 * MOUSE_LOOK_SENSITIVITY, PITCH_MIN, PITCH_MAX);
+    pitch_yaw.y -= mouse_dx as f32 * MOUSE_LOOK_SENSITIVITY;
 }
 
 /// Get the movement vector based on the player's input

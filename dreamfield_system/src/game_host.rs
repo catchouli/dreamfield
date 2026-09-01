@@ -62,6 +62,10 @@ impl GameHost {
         // Mouse movement
         let (mut mouse_x, mut mouse_y) = self.window.window.get_cursor_pos();
 
+        // Whether the mouse was captured last frame, so we can discard the delta on the capture
+        // transition
+        let mut mouse_was_captured = self.window.is_mouse_captured();
+
         // Colemak mode for luci (hax) until we support key rebinding
         let mut colemak_mode = false;
 
@@ -79,7 +83,10 @@ impl GameHost {
 
             // Handle mouse movement
             world.resource_scope(|_, mut input_state| {
-                (mouse_x, mouse_y) = Self::handle_mouse_movement(&self.window, (mouse_x, mouse_y), &mut input_state);
+                let captured = self.window.is_mouse_captured();
+                (mouse_x, mouse_y) = Self::handle_mouse_movement(&self.window, (mouse_x, mouse_y),
+                    &mut input_state, captured && mouse_was_captured);
+                mouse_was_captured = captured;
             });
 
             // Update at fixed timestep
@@ -102,11 +109,13 @@ impl GameHost {
                 });
 
                 // Save old input states, we do this after each update so that we don't have a
-                // 'first input' in multiple updates.
+                // 'first input' in multiple updates. Also clear the accumulated mouse delta, so
+                // that each update sees all movement since the last one.
                 world.resource_scope(|_, mut input_state: Mut<InputState>| {
                     for i in 0..input_state.inputs.len() {
                         input_state.last_inputs[i] = input_state.inputs[i];
                     }
+                    input_state.mouse_diff = (0.0, 0.0);
                 });
             }
 
@@ -192,14 +201,6 @@ impl GameHost {
             Key::A => Some(InputName::CamStrafeLeft),
             Key::S => Some(InputName::CamBackwards),
             Key::D => Some(InputName::CamStrafeRight),
-            Key::I => Some(InputName::CamLookUp),
-            Key::J => Some(InputName::CamLookLeft),
-            Key::K => Some(InputName::CamLookDown),
-            Key::L => Some(InputName::CamLookRight),
-            Key::Up => Some(InputName::CamLookUp),
-            Key::Left => Some(InputName::CamLookLeft),
-            Key::Down => Some(InputName::CamLookDown),
-            Key::Right => Some(InputName::CamLookRight),
             Key::LeftShift => Some(InputName::Run),
             Key::E => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
@@ -217,14 +218,6 @@ impl GameHost {
             Key::A => Some(InputName::CamStrafeLeft),
             Key::R => Some(InputName::CamBackwards),
             Key::S => Some(InputName::CamStrafeRight),
-            Key::U => Some(InputName::CamLookUp),
-            Key::N => Some(InputName::CamLookLeft),
-            Key::E => Some(InputName::CamLookDown),
-            Key::I => Some(InputName::CamLookRight),
-            Key::Up => Some(InputName::CamLookUp),
-            Key::Left => Some(InputName::CamLookLeft),
-            Key::Down => Some(InputName::CamLookDown),
-            Key::Right => Some(InputName::CamLookRight),
             Key::LeftShift => Some(InputName::Run),
             Key::F => Some(InputName::Use),
             Key::Space => Some(InputName::Jump),
@@ -234,15 +227,17 @@ impl GameHost {
         }
     }
 
-    /// Handle mouse movement
+    /// Handle mouse movement, accumulating the cursor delta while the cursor stays captured
     fn handle_mouse_movement(window: &GlfwWindow, (old_mouse_x, old_mouse_y): (f64, f64),
-                             input_state: &mut InputState) -> (f64, f64)
+                             input_state: &mut InputState, accumulate: bool) -> (f64, f64)
     {
         let (mouse_x, mouse_y) = window.window.get_cursor_pos();
         
-        let (mouse_dx, mouse_dy) = (mouse_x - old_mouse_x, mouse_y - old_mouse_y);
-
-        input_state.mouse_diff = (mouse_dx, mouse_dy);
+        // Accumulate the cursor delta, so fixed updates can see all movement since the last one
+        if accumulate {
+            input_state.mouse_diff.0 += mouse_x - old_mouse_x;
+            input_state.mouse_diff.1 += mouse_y - old_mouse_y;
+        }
 
         (mouse_x, mouse_y)
     }
