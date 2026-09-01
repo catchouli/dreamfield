@@ -30,6 +30,9 @@ const CAM_LOOK_SPEED: f32 = 1.0;
 /// The camera fast look speed
 const CAM_LOOK_SPEED_FAST: f32 = 1.5;
 
+/// The camera look sensitivity, in radians per pixel of mouse movement
+const MOUSE_LOOK_SENSITIVITY: f32 = 0.0025;
+
 /// The gravity acceleration
 const GRAVITY_ACCELERATION: f32 = 9.8;
 
@@ -351,8 +354,9 @@ fn recursive_slide(collision: &mut WorldCollision, world: &mut WorldChunkManager
     recursive_slide(collision, world, cbm, new_position, new_velocity_vector, ignore_entity, depth + 1)
 }
 
-/// Update the view direction
-fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32) {
+/// Update the view direction from the keyboard look inputs and mouse movement
+fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputState, time_delta: f32)
+{
     let (horz_input, vert_input) = input_state.get_look_input();
 
     let look_speed = match input_state.is_held(InputName::Run) {
@@ -360,10 +364,17 @@ fn update_view_angles(player_movement: &mut PlayerMovement, input_state: &InputS
         true => CAM_LOOK_SPEED_FAST,
     };
 
+    // Only mouse-look while the cursor is captured
+    let (mouse_dx, mouse_dy) = match input_state.cursor_captured {
+        true => input_state.mouse_diff,
+        false => (0.0, 0.0)
+    };
+
     let pitch_yaw = &mut player_movement.pitch_yaw;
 
-    pitch_yaw.x = f32::clamp(pitch_yaw.x + vert_input * look_speed * time_delta, PITCH_MIN, PITCH_MAX);
-    pitch_yaw.y = pitch_yaw.y + horz_input * look_speed * time_delta;
+    pitch_yaw.x = f32::clamp(pitch_yaw.x + vert_input * look_speed * time_delta
+        - mouse_dy as f32 * MOUSE_LOOK_SENSITIVITY, PITCH_MIN, PITCH_MAX);
+    pitch_yaw.y += horz_input * look_speed * time_delta - mouse_dx as f32 * MOUSE_LOOK_SENSITIVITY;
 }
 
 /// Get the movement vector based on the player's input
