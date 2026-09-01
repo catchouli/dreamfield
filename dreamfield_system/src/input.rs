@@ -69,7 +69,7 @@ impl InputState {
     }
 
     // Get the look input as a normalized float from 1 to -1. The first element is the left/right
-    // look input, where positive is movement to the right, and the second element is up/down
+    // look input, where positive is movement to the left, and the second element is up/down
     // movement, where positive is movement up.
     pub fn get_look_input(&self) -> (f32, f32) {
         let inputs = &self.inputs;
