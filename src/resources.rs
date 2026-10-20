@@ -24,6 +24,7 @@ pub fn create_shader_manager() -> ShaderManager {
         ("blit", preprocess_shader_vf!(include_bytes!("../resources/shaders/blit.glsl"))),
         ("text", preprocess_shader_vf!(include_bytes!("../resources/shaders/text.glsl"))),
         ("health_bar", preprocess_shader_vf!(include_bytes!("../resources/shaders/health_bar.glsl"))),
+        ("damage_flash", preprocess_shader_vf!(include_bytes!("../resources/shaders/damage_flash.glsl"))),
     ])
 }
 
