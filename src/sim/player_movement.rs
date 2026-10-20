@@ -13,7 +13,7 @@ use dreamfield_system::world::WorldChunkManager;
 use dreamfield_system::world::world_collision::{WorldCollision, SpherecastResult};
 
 use super::health::Health;
-use super::goblin::PLAYER_MAX_HEALTH;
+use super::melee_enemy::PLAYER_MAX_HEALTH;
 
 /// The character's height
 const CHAR_HEIGHT: f32 = 1.8;
