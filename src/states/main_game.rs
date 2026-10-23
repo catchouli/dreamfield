@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 use cgmath::{vec2, perspective, Deg, Matrix4, vec3, Matrix3, SquareMatrix, Vector3, Vector2};
-use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime};
+use dreamfield_renderer::components::{PlayerCamera, Visual, Animation, DiagnosticsTextBox, TextBox, ScreenEffect, RunTime, HealthBar};
 use dreamfield_system::{components::{Transform, EntityName}, systems::entity_spawner::EntitySpawnRadius,
     resources::{InputState, InputName}};
 use crate::{app_state::AppState, sim::{PlayerMovement, PlayerMovementMode, Ball, PlayerAttack, SwordViewmodel, Goblin, Health, PLAYER_MAX_HEALTH}};
@@ -83,6 +83,10 @@ fn enter_main_game(mut commands: Commands) {
         .insert(Transform::new(initial_pos, Matrix3::identity()))
         .insert(Visual::new("sword", "ps1", false, None))
         .insert(SwordViewmodel);
+
+    // Create health bar
+    commands.spawn()
+        .insert(HealthBar);
 
     // Create goblins around the town and dungeon
     for pos in GOBLIN_SPAWN_POSITIONS {
